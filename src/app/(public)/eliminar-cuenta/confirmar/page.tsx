@@ -25,7 +25,7 @@ export default function ConfirmarEliminacionPage() {
   return (
     <main className="mx-auto min-h-screen max-w-xl px-4 py-16">
       <h1 className="text-h1 text-foreground">Confirma la eliminación</h1>
-      <p className="mt-4 text-muted-foreground">Esta acción elimina tus fichas y cierra el acceso. Los registros contables que deban conservarse por ley quedarán sin vincular a tu perfil.</p>
+      <p className="mt-4 text-muted-foreground">Esta acción elimina tus fichas y cierra el acceso. Los registros contables que deban conservarse por ley quedarán sin vincular a tu perfil. Si verificaste tu identidad, también se borran tu resultado y los datos que guarde nuestro proveedor.</p>
       <button type="button" onClick={confirm} disabled={loading} className="mt-8 rounded-lg bg-destructive px-5 py-3 font-semibold text-white disabled:opacity-60">
         {loading ? 'Eliminando…' : 'Eliminar mi cuenta definitivamente'}
       </button>

@@ -1,12 +1,11 @@
-import Link from 'next/link'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
-import { manifiestoDelDia } from '@/modules/excursiones/checkin/queries'
+import { LIMITE_MANIFIESTO, manifiestoDelDia } from '@/modules/excursiones/checkin/queries'
 import { diaLocal } from '@/modules/excursiones/checkin/nucleo'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 import { CheckinScanner } from '@/components/excursiones/CheckinScanner'
-import { StatusChip } from '@/components/ui/status-chip'
-import { formatDateTime } from '@/lib/format'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { ManifiestoTabla } from '@/components/excursiones/ManifiestoTabla'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Check-in' }
@@ -23,7 +22,7 @@ export default async function CheckinPage({
   const { dia } = await searchParams
   const hoy = diaLocal(new Date())
   const elegido = dia && /^\d{4}-\d{2}-\d{2}$/.test(dia) ? dia : hoy
-  const { filas, resumen } = await manifiestoDelDia(companyId, elegido)
+  const { filas, resumen, totalDelDia, truncado } = await manifiestoDelDia(companyId, elegido)
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
@@ -87,80 +86,17 @@ export default async function CheckinPage({
               </div>
             </dl>
 
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-caption uppercase tracking-wide text-muted-foreground">
-                    <th className="py-2 pr-3">Hora</th>
-                    <th className="py-2 pr-3">Cliente</th>
-                    <th className="py-2 pr-3">Excursión</th>
-                    <th className="py-2 pr-3">Pax</th>
-                    <th className="py-2">Embarque</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filas.map((f) => (
-                    <tr key={f.id} className="border-b border-border last:border-0">
-                      <td className="py-2 pr-3 text-muted-foreground">{f.hora ?? '—'}</td>
-                      <td className="py-2 pr-3">
-                        <Link
-                          href={`/admin/excursiones/reservas/${f.id}`}
-                          className="font-medium text-foreground hover:text-primary hover:underline"
-                        >
-                          {f.cliente}
-                        </Link>
-                        {f.telefono ? (
-                          <span className="block text-caption text-muted-foreground">{f.telefono}</span>
-                        ) : null}
-                      </td>
-                      <td className="py-2 pr-3 text-muted-foreground">{f.excursion}</td>
-                      <td className="py-2 pr-3 text-muted-foreground">
-                        {f.presentes}/{f.totalPasajeros}
-                      </td>
-                      <td className="py-2">
-                        {f.esCombo && f.totalItems > 0 ? (
-                          f.itemsCompletados === 0 ? (
-                            <StatusChip tone="neutral">Sin embarcar (0/{f.totalItems})</StatusChip>
-                          ) : f.itemsCompletados < f.totalItems ? (
-                            <div>
-                              <StatusChip tone="warning">
-                                Parcial ({f.itemsCompletados}/{f.totalItems} acts)
-                              </StatusChip>
-                              {f.checkinAt && (
-                                <span className="block text-caption text-muted-foreground">
-                                  {formatDateTime(f.checkinAt)}
-                                </span>
-                              )}
-                            </div>
-                          ) : (
-                            <div>
-                              <StatusChip tone="success">
-                                Completo ({f.itemsCompletados}/{f.totalItems} acts)
-                              </StatusChip>
-                              {f.checkinAt && (
-                                <span className="block text-caption text-muted-foreground">
-                                  {formatDateTime(f.checkinAt)}
-                                </span>
-                              )}
-                            </div>
-                          )
-                        ) : f.checkinAt ? (
-                          <div>
-                            <StatusChip tone={f.presentes === f.totalPasajeros ? 'success' : 'warning'}>
-                              {f.presentes === f.totalPasajeros ? 'Completo' : 'Parcial'}
-                            </StatusChip>
-                            <span className="block text-caption text-muted-foreground">
-                              {formatDateTime(f.checkinAt)}
-                            </span>
-                          </div>
-                        ) : (
-                          <StatusChip tone="neutral">Sin embarcar</StatusChip>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            {truncado ? (
+              <Alert className="mt-4" role="status">
+                <AlertDescription>
+                  Este día tiene {totalDelDia.toLocaleString('es-DO')} salidas y aquí se muestran las primeras {LIMITE_MANIFIESTO}, por hora.
+                  Los totales de arriba cuentan solo esas.
+                </AlertDescription>
+              </Alert>
+            ) : null}
+
+            <div className="mt-4">
+              <ManifiestoTabla filas={filas} dia={elegido} />
             </div>
           </>
         )}

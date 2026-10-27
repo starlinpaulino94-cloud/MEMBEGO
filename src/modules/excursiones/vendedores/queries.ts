@@ -1,5 +1,8 @@
 import { conEmpresa } from '@/lib/tenant'
 import { normalizarBusqueda } from '@/modules/busqueda/normalizar'
+import type { Prisma } from '@prisma/client'
+import type { Paginacion } from '@/lib/paginacion'
+import { condicionDeEstadoVendedores, condicionesDeCaptados, type FiltrosCaptados, type VerVendedores } from './lista'
 
 /** Listado del equipo comercial con su embudo (captados = atribuciones). */
 export async function listadoVendedores(companyId: string) {
@@ -19,6 +22,46 @@ export async function listadoVendedores(companyId: string) {
       },
     })
   )
+}
+
+/**
+ * El equipo comercial PAGINADO por el servidor (06 · T-04): el estado, la búsqueda y la página los resuelve la base y devuelve el
+ * total real. Antes se traían todos los vendedores y se filtraban en el navegador.
+ */
+export async function listarVendedores(
+  companyId: string,
+  opciones: { q?: string; ver?: VerVendedores; paginacion: Pick<Paginacion, 'saltar' | 'tomar'> }
+) {
+  const { q = '', ver = 'activos', paginacion } = opciones
+  const like = { contains: q, mode: 'insensitive' as const }
+  const where: Prisma.VendedorWhereInput = {
+    companyId,
+    ...condicionDeEstadoVendedores(ver),
+    ...(q ? { OR: [{ nombre: like }, { apellido: like }, { codigo: like }, { tipo: like }, { telefono: { contains: q } }] } : {}),
+  }
+  return conEmpresa(companyId, async (tx) => {
+    const [filas, total] = await Promise.all([
+      tx.vendedor.findMany({
+        where,
+        orderBy: [{ estado: 'asc' }, { nombre: 'asc' }],
+        skip: paginacion.saltar,
+        take: paginacion.tomar,
+        select: {
+          id: true,
+          nombre: true,
+          apellido: true,
+          codigo: true,
+          tipo: true,
+          telefono: true,
+          estado: true,
+          _count: { select: { atribuciones: true } },
+        },
+      }),
+      tx.vendedor.count({ where }),
+    ])
+    const hayAlgunoSinFiltro = filas.length === 0 ? (await tx.vendedor.count({ where: { companyId } })) > 0 : true
+    return { filas, total, hayAlgunoSinFiltro }
+  })
 }
 
 /** Perfil completo: datos + enlace + embudo real por etapa. */
@@ -75,104 +118,53 @@ export async function vendedoresParaSupervisor(companyId: string) {
   )
 }
 
-export interface ClientesCaptadosFiltros {
-  q?: string
-  etapa?: string
-  canal?: string
-  desde?: string
-  hasta?: string
-  page?: number
-  limit?: number
-}
-
-export interface ClientesCaptadosResultado {
-  items: {
-    id: string
-    etapa: string
-    canal: string | null
-    createdAt: Date
-    nombre: string
-    telefono: string | null
-    email?: string | null
-  }[]
-  total: number
-  totalPages: number
-  currentPage: number
-}
-
 /**
- * Últimos clientes captados por el vendedor: quién entró por su enlace, en qué
- * etapa y cuándo con soporte para filtros multicriterio y paginación.
+ * Una página de los clientes que entraron por el enlace del vendedor: quién, en qué etapa del embudo, por qué canal y cuándo.
+ *
+ * Los filtros y la página los resuelve la base (`total` es el de los filtros). `hayAlguna` distingue «este vendedor todavía no
+ * ha captado a nadie» de «ningún captado coincide con el filtro».
  */
 export async function clientesCaptados(
   companyId: string,
   vendedorId: string,
-  filtros: ClientesCaptadosFiltros = {}
-): Promise<ClientesCaptadosResultado> {
-  const page = Math.max(1, Number(filtros.page) || 1)
-  const limit = Math.max(1, Math.min(100, Number(filtros.limit) || 15))
-  const skip = (page - 1) * limit
+  opciones: { filtros: FiltrosCaptados; paginacion: Pick<Paginacion, 'saltar' | 'tomar'> }
+) {
+  const { filtros, paginacion } = opciones
 
   return conEmpresa(companyId, async (tx) => {
-    let clienteIdsFiltrados: string[] | undefined = undefined
+    const base: Prisma.VendedorAtribucionWhereInput = { companyId, vendedorId, clienteId: { not: null } }
+    const condiciones = condicionesDeCaptados(filtros)
 
-    // Si hay búsqueda por texto (nombre, teléfono o email)
-    if (filtros.q && filtros.q.trim()) {
-      const qClean = filtros.q.trim()
-      const clientesCoincidentes = await tx.cliente.findMany({
+    if (filtros.q) {
+      const qLimpia = normalizarBusqueda(filtros.q)
+      const coincidentes = await tx.cliente.findMany({
         where: {
           companyId,
           OR: [
-            { nombreBusqueda: { contains: normalizarBusqueda(qClean) } },
-            { telefono: { contains: qClean } },
-            { email: { contains: qClean, mode: 'insensitive' } },
+            { nombreBusqueda: { contains: qLimpia } },
+            { telefono: { contains: filtros.q } },
+            { email: { contains: filtros.q, mode: 'insensitive' } },
           ],
         },
         select: { id: true },
       })
-      clienteIdsFiltrados = clientesCoincidentes.map((c) => c.id)
-      if (clienteIdsFiltrados.length === 0) {
-        return { items: [], total: 0, totalPages: 1, currentPage: page }
-      }
+      condiciones.push({ clienteId: { in: coincidentes.map((c) => c.id) } })
     }
-
-    // Armar condiciones de fecha
-    const dateFilter: { gte?: Date; lte?: Date } = {}
-    if (filtros.desde) {
-      const d = new Date(filtros.desde)
-      if (!isNaN(d.getTime())) dateFilter.gte = d
-    }
-    if (filtros.hasta) {
-      const h = new Date(filtros.hasta)
-      if (!isNaN(h.getTime())) {
-        h.setHours(23, 59, 59, 999)
-        dateFilter.lte = h
-      }
-    }
-
-    const whereClause = {
-      companyId,
-      vendedorId,
-      clienteId: clienteIdsFiltrados ? { in: clienteIdsFiltrados } : { not: null },
-      ...(filtros.etapa && filtros.etapa !== 'TODAS' ? { etapa: filtros.etapa } : {}),
-      ...(filtros.canal && filtros.canal !== 'TODOS' ? { canal: filtros.canal } : {}),
-      ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {}),
-    }
+    const where: Prisma.VendedorAtribucionWhereInput = { ...base, AND: condiciones }
 
     const [total, filas] = await Promise.all([
-      tx.vendedorAtribucion.count({ where: whereClause }),
+      tx.vendedorAtribucion.count({ where }),
       tx.vendedorAtribucion.findMany({
-        where: whereClause,
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: limit,
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: paginacion.saltar,
+        take: paginacion.tomar,
         select: { id: true, clienteId: true, etapa: true, canal: true, createdAt: true },
       }),
     ])
-
-    if (filas.length === 0) {
-      return { items: [], total, totalPages: Math.max(1, Math.ceil(total / limit)), currentPage: page }
-    }
+    // Solo si no salió nada: ¿es que no ha captado a nadie, o es que el filtro los esconde? La pantalla dice cosas distintas.
+    const hayAlguna = filas.length === 0 ? (await tx.vendedorAtribucion.count({ where: base })) > 0 : true
+    if (filas.length === 0) return { filas: [], total, hayAlguna }
 
     const ids = [...new Set(filas.map((f) => f.clienteId!))]
     const clientes = await tx.cliente.findMany({
@@ -181,21 +173,18 @@ export async function clientesCaptados(
     })
     const porId = new Map(clientes.map((c) => [c.id, c]))
 
-    const items = filas.map((f) => ({
-      id: f.id,
-      etapa: f.etapa,
-      canal: f.canal,
-      createdAt: f.createdAt,
-      nombre: porId.get(f.clienteId!)?.nombre ?? 'Cliente',
-      telefono: porId.get(f.clienteId!)?.telefono ?? null,
-      email: porId.get(f.clienteId!)?.email ?? null,
-    }))
-
     return {
-      items,
+      filas: filas.map((f) => ({
+        id: f.id,
+        etapa: f.etapa,
+        canal: f.canal,
+        createdAt: f.createdAt,
+        nombre: porId.get(f.clienteId!)?.nombre ?? 'Cliente',
+        telefono: porId.get(f.clienteId!)?.telefono ?? null,
+        email: porId.get(f.clienteId!)?.email ?? null,
+      })),
       total,
-      totalPages: Math.max(1, Math.ceil(total / limit)),
-      currentPage: page,
+      hayAlguna,
     }
   })
 }

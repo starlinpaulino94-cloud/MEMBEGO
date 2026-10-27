@@ -190,7 +190,8 @@ export async function publicarMiEmpresa(
     if (!onboarding) return { error: 'Empresa no encontrada.' }
     if (onboarding.publicado) return { error: 'Tu empresa ya está publicada.' }
     if (!onboarding.listoParaPublicar) {
-      const faltan = onboarding.items.filter((i) => !i.done).map((i) => i.label)
+      // Solo lo que BLOQUEA publicar: los pasos recomendados (horario, cobro, catálogo…) no son una puerta y no van en este aviso.
+      const faltan = onboarding.items.filter((i) => i.requeridoParaPublicar && !i.done).map((i) => i.label)
       return { error: `Completa antes: ${faltan.join(', ')}.` }
     }
 

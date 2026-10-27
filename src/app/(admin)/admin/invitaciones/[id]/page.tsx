@@ -29,6 +29,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { CampanaEstadoButton } from '@/components/invitaciones/CampanaEstadoButton'
 import { CampanaEliminarButton } from '@/components/invitaciones/CampanaEliminarButton'
+import { Tabla } from '@/components/ui/tabla'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Detalle de campaña' }
@@ -165,28 +166,19 @@ export default async function CampanaDetallePage({
             <CardTitle className="text-base">Top compartidores</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-muted-foreground">
-                    <th className="pb-2 font-medium">#</th>
-                    <th className="pb-2 font-medium">Cliente</th>
-                    <th className="pb-2 text-right font-medium">Compartidas</th>
-                    <th className="pb-2 text-right font-medium">Registros</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {topCompartidores.map((t, i) => (
-                    <tr key={i} className="border-b last:border-0">
-                      <td className="py-2 text-muted-foreground">{i + 1}</td>
-                      <td className="py-2 font-medium text-foreground">{t.nombre}</td>
-                      <td className="py-2 text-right tabular-nums">{t.compartidas}</td>
-                      <td className="py-2 text-right tabular-nums">{t.registros}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <Tabla
+              caption="Quienes más comparten"
+              claveDe={(t) => String(t.puesto)}
+              filas={topCompartidores.map((t, i) => ({ ...t, puesto: i + 1 }))}
+              columnaIdentificadora="cliente"
+              className="border-0 shadow-none"
+              columnas={[
+                { clave: 'puesto', encabezado: '#', celda: (t) => <span className="text-muted-foreground">{t.puesto}</span> },
+                { clave: 'cliente', encabezado: 'Cliente', valor: (t) => t.nombre },
+                { clave: 'compartidas', encabezado: 'Compartidas', tipo: 'numero', valor: (t) => t.compartidas },
+                { clave: 'registros', encabezado: 'Registros', tipo: 'numero', valor: (t) => t.registros },
+              ]}
+            />
           </CardContent>
         </Card>
       )}

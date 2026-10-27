@@ -9,6 +9,7 @@ import {
 } from '../src/modules/capacidades/catalogo'
 import { ADMIN_SECTIONS, adminSectionForPath, seccionPermitida } from '../src/lib/auth/permissions'
 import { FUNCIONES_POR_SECCION } from '../src/lib/auth/funciones'
+import { GRUPOS_HUB_ADMIN, rutasOfrecidas } from '../src/components/layout/nav-config'
 import { FUNCIONES_EMPRESA } from '../src/modules/plataforma/conceptos'
 
 /**
@@ -209,7 +210,12 @@ test('las pantallas de /admin/catalogo se guardan por sección en el layout y po
 test('la entrada de menú existe, detrás de la capacidad, y abre el grupo Comercio del hub', () => {
   const nav = readFileSync('src/components/layout/nav-config.ts', 'utf8')
   assert.match(nav, /href: '\/admin\/catalogo',[\s\S]{0,400}capacidad: 'CATALOGO_UNIFICADO'/)
-  assert.match(nav, /id: 'comercio',\s*label: 'Comercio',\s*items: deAdmin\(\s*'\/admin\/catalogo',/)
+  // Fase 6: «Catálogo» es el PRIMER módulo del grupo Comercio (con Inventario como pestaña) y se apaga con su capacidad.
+  const comercio = GRUPOS_HUB_ADMIN.find((g) => g.id === 'comercio')
+  assert.equal(comercio?.label, 'Comercio')
+  assert.equal(comercio?.items[0]?.href, '/admin/catalogo')
+  assert.ok(rutasOfrecidas({ role: 'ADMINISTRADOR', scope: 'COMPANY', capacidades: ['CATALOGO_UNIFICADO'] }).includes('/admin/catalogo'))
+  assert.ok(!rutasOfrecidas({ role: 'ADMINISTRADOR', scope: 'COMPANY', capacidades: [] }).includes('/admin/catalogo'))
   const ctxNav = readFileSync('src/modules/navegacion/contexto.ts', 'utf8')
   assert.match(ctxNav, /'CATALOGO_UNIFICADO'/)
 })

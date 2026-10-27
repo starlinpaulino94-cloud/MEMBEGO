@@ -70,7 +70,8 @@ export default function PrivacyPage() {
               Cuando eliminas tu cuenta, borramos tus fichas de cliente y sus
               datos operativos. Se conserva el historial de transacciones para
               mantener la contabilidad de las empresas y se desvincula de tu
-              perfil.
+              perfil. Si verificaste tu identidad, también borramos tu resultado
+              de verificación y los datos que tenga el proveedor (sección 7).
             </p>
           </div>
 
@@ -207,6 +208,88 @@ export default function PrivacyPage() {
               . Verificaremos que controlas el correo de la cuenta y eliminaremos
               tus fichas y datos asociados. Los registros contables que deban
               conservarse por obligación legal quedarán desvinculados de tu perfil.
+            </p>
+          </div>
+
+          {/* LA VERIFICACIÓN DE IDENTIDAD, COMPLETA.
+              Los textos de los tres permisos que la persona marca antes de empezar son cortos a
+              propósito y remiten a esta sección (docs/identidad/AUDITORIA-VERIFICACION-IDENTIDAD.md).
+              Por eso esto tiene que decir TODO lo que el sistema hace —y nada que no haga—: el plazo
+              («3 años») es el de POLITICA_IDENTIDAD, y una prueba obliga a que coincidan
+              (tests/politicas-identidad.test.ts). RUTA_POLITICA_IDENTIDAD apunta al id de abajo. */}
+          <div id="verificacion-identidad">
+            <h2 className="text-h2 text-foreground">7. Verificación de identidad</h2>
+            <p className="mt-2">
+              Verificar tu identidad es <strong className="font-semibold">opcional</strong>: no hace
+              falta para comprar ni para usar tus membresías, y solo pueden hacerlo personas mayores
+              de 18 años. Si decides hacerlo, esto es lo que ocurre con tus datos.
+            </p>
+            <p className="mt-2">
+              Hay un solo caso en el que MembeGo puede pedírtelo: si aceptaste el contrato de un
+              proveedor de Membego Supply, podemos pedirte que verifiques tu identidad antes de
+              pagarle a ese proveedor. Sigue siendo tu decisión (si no lo haces, ese pago queda a la
+              espera) y nunca se pide para comprar, reservar, renovar ni entrar con tu QR.
+            </p>
+
+            <h3 className="mt-5 text-base font-semibold text-foreground">7.1 Qué datos se usan y para qué</h3>
+            <p className="mt-2">
+              Fotografías tu cédula y te tomas una selfie con una prueba de vida. A partir de esas
+              imágenes se generan datos biométricos de tu rostro para compararlo con el del documento.
+              Se usan únicamente para comprobar que eres el titular del documento y prevenir el fraude
+              y el robo de identidad. No se usan para publicidad ni para ninguna otra cosa.
+            </p>
+
+            <h3 className="mt-5 text-base font-semibold text-foreground">7.2 Quién los procesa</h3>
+            <p className="mt-2">
+              Los procesa Didit, nuestro proveedor de verificación, por cuenta de MembeGo y bajo un
+              contrato que le exige seguridad, secreto y borrado. Didit procesa los datos en la Unión
+              Europea, es decir, fuera de la República Dominicana, y por eso te pedimos un permiso
+              específico para esa transferencia.
+            </p>
+
+            <h3 className="mt-5 text-base font-semibold text-foreground">7.3 Qué conservamos y por cuánto tiempo</h3>
+            <p className="mt-2">
+              Didit elimina las imágenes y los datos biométricos al concluir la verificación. MembeGo
+              conserva solo el resultado: si estás verificado, el nivel y la fecha, junto con una
+              referencia cifrada a la sesión y un código que permite detectar que un mismo documento
+              no se use en dos cuentas (con ese código no se puede recuperar tu número de cédula).
+              Conservamos el resultado durante 3 años, hasta que debas volver a verificarte, o hasta
+              que nos pidas borrarlo, lo que ocurra primero.
+            </p>
+
+            <h3 className="mt-5 text-base font-semibold text-foreground">7.4 Quién ve el resultado</h3>
+            <p className="mt-2">
+              El resultado lo guarda y lo controla MembeGo. Los negocios donde eres cliente solo ven
+              que estás verificado y desde cuándo, y únicamente si tú lo permites. Nunca ven tu cédula,
+              tu selfie ni tu número de documento, y ningún negocio puede descargar tus documentos.
+            </p>
+
+            <h3 className="mt-5 text-base font-semibold text-foreground">7.5 Tus permisos</h3>
+            <p className="mt-2">
+              Antes de empezar te pedimos tres permisos, cada uno con su casilla y ninguna marcada de
+              antemano: (1) capturar tu cédula y tu selfie y generar los datos biométricos, (2) que
+              Didit los procese en la Unión Europea y (3), opcional, que los negocios vean que estás
+              verificado. Puedes retirar cualquiera cuando quieras desde la pantalla de verificación de
+              tu perfil. Si retiras el primero, se cancela la verificación en curso.
+            </p>
+
+            <h3 className="mt-5 text-base font-semibold text-foreground">7.6 Borrar tus datos de verificación</h3>
+            <p className="mt-2">
+              Puedes pedir que borremos tus datos de verificación en cualquier momento desde la
+              pantalla de verificación de tu perfil. Primero se borran en Didit y, cuando lo confirma,
+              en MembeGo. Si eliminas tu cuenta, tus datos de verificación también se borran, en
+              MembeGo y en Didit.
+            </p>
+
+            <h3 className="mt-5 text-base font-semibold text-foreground">7.7 Si no se puede verificar</h3>
+            <p className="mt-2">
+              Si la verificación no se completa, te lo decimos y, cuando es posible, cómo intentarlo
+              de nuevo. En algunos casos, por seguridad, no detallamos el motivo. Si crees que el
+              resultado es un error, cuéntanoslo desde tu perfil o en{' '}
+              <a href="mailto:contacto@membego.com" className="text-primary hover:underline">
+                contacto@membego.com
+              </a>{' '}
+              y lo revisa una persona.
             </p>
           </div>
         </section>

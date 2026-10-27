@@ -8,6 +8,8 @@ import { ensureCodigoCorto } from '@/lib/referidos'
 import { ChangePasswordForm } from '@/components/cliente/ChangePasswordForm'
 import { UbicacionViviendaForm } from '@/components/cliente/UbicacionViviendaForm'
 import { LocationService } from '@/modules/geo/ubicaciones/service'
+import { ResumenIdentidad } from '@/components/cliente/identidad/ResumenIdentidad'
+import { leerPanelDeIdentidad } from '@/modules/identidad/identidadPuerta'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
@@ -67,11 +69,13 @@ export default async function AjustesPage() {
 
   const isCarwash = cliente.company.type === 'carwash'
 
-  const [ubicacion, idMembego] = await Promise.all([
+  const [ubicacion, idMembego, panelDeIdentidad] = await Promise.all([
     user.metadata.dbUserId
       ? LocationService.primaria(user.metadata.dbUserId).catch(() => null)
       : Promise.resolve(null),
     ensureCodigoCorto(cliente.id).catch(() => null),
+    // La verificación de identidad es de la persona y opcional: si no se puede leer, Configuración sigue sin ella.
+    user.metadata.dbUserId ? leerPanelDeIdentidad(user.metadata.dbUserId).catch(() => null) : Promise.resolve(null),
   ])
   const zonaActual = ubicacion?.sector?.name ?? ubicacion?.city?.name ?? null
 
@@ -194,6 +198,7 @@ export default async function AjustesPage() {
           </CardContent>
         </Card>
       )}
+      <ResumenIdentidad panel={panelDeIdentidad} />
       <Card className="border-border/60 shadow-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-h4">

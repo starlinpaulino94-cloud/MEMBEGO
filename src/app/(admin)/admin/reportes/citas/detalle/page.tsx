@@ -19,7 +19,7 @@ import {
   siguienteDireccion,
   type CampoOrden,
 } from '@/modules/reportes/orden-detalle'
-import { ThOrden } from '@/components/reportes/ThOrden'
+import { TablaDetalle } from '@/components/reportes/TablaDetalle'
 import { ABIERTOS } from '@/modules/reportes/citas'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -395,109 +395,51 @@ export default async function DetalleCitasPage({
           }
         />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border">
-          <table className="w-full text-small">
-            <thead>
-              <tr className="border-b border-border text-left">
-                <ThOrden
-                  campo="cuando"
-                  activo={orden.clave}
-                  direccion={orden.direccion}
-                  href={enlaceOrden('cuando')}
-                >
-                  Cuándo era
-                </ThOrden>
-                <ThOrden
-                  campo="reservada"
-                  activo={orden.clave}
-                  direccion={orden.direccion}
-                  href={enlaceOrden('reservada')}
-                >
-                  Se reservó
-                </ThOrden>
-                <ThOrden
-                  campo="cliente"
-                  activo={orden.clave}
-                  direccion={orden.direccion}
-                  href={enlaceOrden('cliente')}
-                >
-                  Cliente
-                </ThOrden>
-                <ThOrden
-                  campo="servicio"
-                  activo={orden.clave}
-                  direccion={orden.direccion}
-                  href={enlaceOrden('servicio')}
-                >
-                  Servicio
-                </ThOrden>
-                <ThOrden
-                  campo="sucursal"
-                  activo={orden.clave}
-                  direccion={orden.direccion}
-                  href={enlaceOrden('sucursal')}
-                >
-                  Sucursal
-                </ThOrden>
-                <ThOrden
-                  campo="estado"
-                  activo={orden.clave}
-                  direccion={orden.direccion}
-                  href={enlaceOrden('estado')}
-                >
-                  Estado hoy
-                </ThOrden>
-                {verEmpleados && <th className="px-3 py-2 text-overline">Atendió</th>}
-                {esCanceladas && <th className="px-3 py-2 text-overline">Canceló</th>}
-                {esCanceladas && <th className="px-3 py-2 text-overline">Motivo</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {filas.map((f) => (
-                <tr key={f.id} className="border-b border-border/60">
-                  <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">
-                    {formatDateTime(f.inicio, prefs)}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">
-                    {formatDateTime(f.createdAt, prefs)}
-                  </td>
-                  <td className="px-3 py-2">
-                    <Link
-                      href={`/admin/clientes/${f.cliente.id}`}
-                      className="text-foreground underline-offset-2 hover:underline"
-                    >
-                      {f.cliente.nombre}
-                    </Link>
-                  </td>
-                  <td className="px-3 py-2 text-muted-foreground">
-                    {f.servicio || '(sin especificar)'}
-                  </td>
-                  <td className="px-3 py-2 text-muted-foreground">
-                    {f.sucursal?.nombre ?? '(sin asignar)'}
-                  </td>
-                  <td className="px-3 py-2 text-muted-foreground">
-                    {ESTADO_LABEL[f.estado] ?? f.estado}
-                  </td>
-                  {verEmpleados && (
-                    <td className="px-3 py-2 text-muted-foreground">
-                      {f.atendidaPor?.name ?? '(sin asignar)'}
-                    </td>
-                  )}
-                  {esCanceladas && (
-                    <td className="px-3 py-2 text-muted-foreground">
-                      {f.canceladaPor ? (CANCELADA_POR[f.canceladaPor] ?? f.canceladaPor) : '—'}
-                    </td>
-                  )}
-                  {esCanceladas && (
-                    <td className="px-3 py-2 text-muted-foreground">
-                      {f.motivoCancelacion ?? '—'}
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <TablaDetalle
+          caption={VISTAS[vista]}
+          campos={campos}
+          orden={orden}
+          enlaceOrden={enlaceOrden}
+          filas={filas}
+          claveDe={(f) => f.id}
+          columnas={[
+            {
+              clave: 'cuando',
+              encabezado: 'Cuándo era',
+              celda: (f) => <span className="whitespace-nowrap text-muted-foreground">{formatDateTime(f.inicio, prefs)}</span>,
+            },
+            {
+              clave: 'reservada',
+              encabezado: 'Se reservó',
+              celda: (f) => <span className="whitespace-nowrap text-muted-foreground">{formatDateTime(f.createdAt, prefs)}</span>,
+            },
+            {
+              clave: 'cliente',
+              encabezado: 'Cliente',
+              celda: (f) => (
+                <Link href={`/admin/clientes/${f.cliente.id}`} className="text-foreground underline-offset-2 hover:underline">
+                  {f.cliente.nombre}
+                </Link>
+              ),
+            },
+            { clave: 'servicio', encabezado: 'Servicio', valor: (f) => f.servicio || '(sin especificar)' },
+            { clave: 'sucursal', encabezado: 'Sucursal', valor: (f) => f.sucursal?.nombre ?? '(sin asignar)' },
+            { clave: 'estado', encabezado: 'Estado hoy', valor: (f) => ESTADO_LABEL[f.estado] ?? f.estado },
+            ...(verEmpleados
+              ? [{ clave: 'atendio', encabezado: 'Atendió', valor: (f: (typeof filas)[number]) => f.atendidaPor?.name ?? '(sin asignar)' }]
+              : []),
+            ...(esCanceladas
+              ? [
+                  {
+                    clave: 'cancelo',
+                    encabezado: 'Canceló',
+                    valor: (f: (typeof filas)[number]) => (f.canceladaPor ? (CANCELADA_POR[f.canceladaPor] ?? f.canceladaPor) : null),
+                  },
+                  { clave: 'motivo', encabezado: 'Motivo', valor: (f: (typeof filas)[number]) => f.motivoCancelacion },
+                ]
+              : []),
+          ]}
+        />
       )}
     </div>
   )

@@ -106,6 +106,81 @@ export function faltantesConnectPlataforma(): string[] {
   return faltan
 }
 
+/**
+ * Claves maestras con las que se sella la REFERENCIA DEL PROVEEDOR de identidad
+ * (el id de la sesión de verificación; con él y la llave del proveedor se podrían
+ * descargar los documentos). AES-256-GCM, mismo formato y misma rotación que
+ * `CONNECT_CLAVES_MAESTRAS` (`1:<base64 de 32 bytes>[,2:…]`), pero en una
+ * variable PROPIA: el secreto que protege la identidad de las personas no se
+ * comparte con el de los conectores. Generar con: `openssl rand -base64 32`.
+ *
+ * Ausente devuelve `null` y la verificación FALLA CERRADA: sin clave no se
+ * guarda ninguna referencia, así que no se empieza ninguna verificación.
+ */
+export function getIdentidadClavesMaestras(): string | null {
+  const valor = process.env.IDENTIDAD_CLAVES_MAESTRAS
+  return valor && valor.trim() ? valor.trim() : null
+}
+
+/**
+ * El «pepper» del HMAC que detecta el mismo documento en dos cuentas
+ * (`calcularHashDedupe`). Al menos 32 caracteres, secreto, FUERA de la base:
+ * con él un volcado de `identidad_verificaciones` no permite probar números de
+ * cédula contra los hashes. Generar con: `openssl rand -base64 48`.
+ *
+ * Ausente (o corto) devuelve `null` y la verificación FALLA CERRADA.
+ */
+export function getIdentidadPepper(): string | null {
+  const valor = process.env.IDENTIDAD_PEPPER_DEDUPE?.trim()
+  return valor && valor.length >= 32 ? valor : null
+}
+
+/**
+ * Configuración del proveedor de verificación (Didit). Sin clave o sin flujo
+ * devuelve `null` y la verificación FALLA CERRADA: no se crea ninguna sesión.
+ *
+ *  · `DIDIT_API_KEY`: la clave del servidor (cabecera `x-api-key`). Con los
+ *    permisos `read:sessions` y `delete:sessions`. NUNCA llega a un cliente ni a un log.
+ *  · `DIDIT_WORKFLOW_ID`: el flujo publicado en la consola de Didit. Debe incluir
+ *    documento + prueba de vida + comparación facial (el worker no acepta una
+ *    aprobación sin las tres) y conservar los datos lo mínimo (se borran al concluir).
+ *  · `DIDIT_API_BASE` (opcional): por defecto `https://verification.didit.me`. Solo https.
+ */
+export function getDiditConfig(): { apiKey: string; workflowId: string; apiBase: string } | null {
+  const apiKey = process.env.DIDIT_API_KEY?.trim()
+  const workflowId = process.env.DIDIT_WORKFLOW_ID?.trim()
+  if (!apiKey || !workflowId) return null
+  const base = (process.env.DIDIT_API_BASE?.trim() || 'https://verification.didit.me').replace(/\/+$/, '')
+  if (!base.startsWith('https://')) return null
+  return { apiKey, workflowId, apiBase: base }
+}
+
+/**
+ * Los secretos con los que se verifica la firma de los avisos de Didit
+ * (`secret_shared_key` del destino del webhook). Pueden convivir DOS para
+ * rotar sin perder avisos: el actual y el anterior. Vacío = no se acepta ningún aviso.
+ */
+export function getDiditSecretosDeWebhook(): string[] {
+  return [process.env.DIDIT_WEBHOOK_SECRET, process.env.DIDIT_WEBHOOK_SECRET_ANTERIOR]
+    .map((v) => v?.trim() ?? '')
+    .filter((v) => v.length >= 16)
+}
+
+/**
+ * QUÉ LE FALTA al entorno para verificar identidades. La pantalla de plataforma
+ * lo muestra para decir exactamente qué configurar, en vez de un «no disponible».
+ * Incluye las variables del proveedor y del webhook: sin ellas no se enciende.
+ */
+export function faltantesIdentidad(): string[] {
+  const faltan: string[] = []
+  if (!getIdentidadClavesMaestras()) faltan.push('IDENTIDAD_CLAVES_MAESTRAS')
+  if (!getIdentidadPepper()) faltan.push('IDENTIDAD_PEPPER_DEDUPE')
+  if (!process.env.DIDIT_API_KEY?.trim()) faltan.push('DIDIT_API_KEY')
+  if (!process.env.DIDIT_WORKFLOW_ID?.trim()) faltan.push('DIDIT_WORKFLOW_ID')
+  if (getDiditSecretosDeWebhook().length === 0) faltan.push('DIDIT_WEBHOOK_SECRET')
+  return faltan
+}
+
 /** Returns the list of missing required public env vars (for diagnostics). */
 export function missingPublicEnv(): string[] {
   return REQUIRED_PUBLIC.filter((k) => !process.env[k])

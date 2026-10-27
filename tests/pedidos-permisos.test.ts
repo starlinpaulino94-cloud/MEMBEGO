@@ -4,6 +4,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { CAPACIDAD_DE_SECCION, CAPACIDADES, CAPACIDADES_BASE, SECCIONES_POR_CAPACIDAD } from '../src/modules/capacidades/catalogo'
 import { ADMIN_SECTIONS, adminSectionForPath, seccionPermitida } from '../src/lib/auth/permissions'
 import { FUNCIONES_POR_SECCION } from '../src/lib/auth/funciones'
+import { GRUPOS_HUB_ADMIN, rutasOfrecidas } from '../src/components/layout/nav-config'
 import { FUNCIONES_EMPRESA } from '../src/modules/plataforma/conceptos'
 
 /**
@@ -128,7 +129,11 @@ const limpio = (f: string) => leer(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/
 test('las entradas de menú existen: «Pedidos Membego» detrás de su capacidad (y en el hub de Comercio) y «Mis pedidos» para el cliente', () => {
   const nav = leer('src/components/layout/nav-config.ts')
   assert.match(nav, /href: '\/admin\/pedidos-membego',[\s\S]{0,600}capacidad: 'PEDIDOS_MEMBEGO'/)
-  assert.match(nav, /deAdmin\(\s*'\/admin\/catalogo', '\/admin\/inventario', '\/admin\/pedidos-membego', '\/admin\/deals'/)
+  // Fase 6: es el segundo módulo del grupo Comercio (tras el catálogo), con su capacidad.
+  const comercio = GRUPOS_HUB_ADMIN.find((g) => g.id === 'comercio')
+  assert.deepEqual(comercio?.items.slice(0, 2).map((i) => i.href), ['/admin/catalogo', '/admin/pedidos-membego'])
+  assert.ok(rutasOfrecidas({ role: 'ADMINISTRADOR', scope: 'COMPANY', capacidades: ['PEDIDOS_MEMBEGO'] }).includes('/admin/pedidos-membego'))
+  assert.ok(!rutasOfrecidas({ role: 'ADMINISTRADOR', scope: 'COMPANY', capacidades: [] }).includes('/admin/pedidos-membego'))
   assert.match(nav, /href: '\/cliente\/pedidos',\s*label: 'Mis pedidos'/)
   assert.match(leer('src/modules/navegacion/contexto.ts'), /'PEDIDOS_MEMBEGO'/)
   // «Mis pedidos» se oculta mientras ni la empresa recibe pedidos ni la persona tiene alguno.

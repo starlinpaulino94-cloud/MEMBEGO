@@ -23,6 +23,7 @@ import { datosDeCambioDePlan } from '@/modules/membresia/cambio-plan-aplicar'
 import { motivoCambioDirectoBloqueado } from '@/modules/membresia/cambio-plan-pendiente'
 import { explicarNoRenovable, motivoNoRenovable } from '@/modules/membresia/renovacion'
 import { puedeOperarEnEmpresa } from '@/lib/auth/empresa-de-la-sesion'
+import { bloqueoPorIdentidadPendiente } from '@/modules/identidad/supresion'
 
 /**
  * Ensure the membership belongs to the admin's company (superadmin = any).
@@ -1362,6 +1363,10 @@ export async function eliminarEmpleado(
     }
     const companyId = empleado.companyId
     if (!companyId) return { error: 'Miembro del equipo sin empresa.' }
+
+    // Los datos de verificación de identidad que el proveedor tenga de esta persona se borran ANTES de eliminarla.
+    const bloqueoIdentidad = await bloqueoPorIdentidadPendiente(empleado.id)
+    if (bloqueoIdentidad) return { error: bloqueoIdentidad }
 
     const supabase = createAdminClient()
     const { error: delError } = await supabase.auth.admin.deleteUser(

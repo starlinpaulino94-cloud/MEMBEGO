@@ -49,6 +49,7 @@ export type DominioEvento =
   | 'sistema'
   | 'pedido'
   | 'facturacion'
+  | 'navegacion'
 
 /** Valores admitidos en `extra`. Ver la cabecera: no hay cadenas libres. */
 export type ValorEtiqueta = number | boolean | string

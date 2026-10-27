@@ -439,7 +439,7 @@ test('la columna se llama «Usos», no «Lavados»', () => {
   // Esta pantalla cruza empresas que no lavan carros, y el plan ya dice
   // «usos incluidos».
   assert.ok(!/>Lavados</.test(PAGE))
-  assert.match(PAGE, />Usos</)
+  assert.match(PAGE, /encabezado: 'Usos'/)
 })
 
 test('nada de «resultado(s)»', () => {

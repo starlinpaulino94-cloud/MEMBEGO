@@ -23,6 +23,7 @@ import { getUser } from '@/lib/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getRequestMeta } from '@/lib/server-utils'
 import { sinEmpresa } from '@/lib/tenant'
+import { bloqueoPorIdentidadPendiente, bloqueoPorIdentidadPendientePorSupabaseId } from '@/modules/identidad/supresion'
 import { purgarClienteRow } from '@/modules/superadmin/purgar'
 
 export interface EliminarState {
@@ -110,6 +111,16 @@ export async function eliminarClienteGlobal(
     )
     if (!cliente) return { error: 'Cliente no encontrado.' }
 
+    // Si esta es la ÚLTIMA ficha de la persona, su cuenta se elimina también: antes de borrar nada, los
+    // datos de identidad en el proveedor (después ya no habría manera de saber qué sesiones quedaban).
+    const fichasDeLaPersona = await sinEmpresa('superadmin: contar fichas de la persona antes de eliminar', (tx) =>
+      tx.cliente.count({ where: { supabaseId: cliente.supabaseId } })
+    )
+    if (fichasDeLaPersona <= 1) {
+      const bloqueo = await bloqueoPorIdentidadPendientePorSupabaseId(cliente.supabaseId)
+      if (bloqueo) return { error: bloqueo }
+    }
+
     const conteos = await purgarClienteRow(cliente.id)
 
     // Si la persona ya no es cliente de NINGUNA empresa, se elimina también
@@ -181,6 +192,9 @@ export async function eliminarUsuarioGlobal(
     if (objetivo.role === 'SUPERADMIN') {
       return { error: 'Las cuentas SUPERADMIN no se eliminan desde aquí.' }
     }
+
+    const bloqueoIdentidad = await bloqueoPorIdentidadPendiente(objetivo.id)
+    if (bloqueoIdentidad) return { error: bloqueoIdentidad }
 
     if (objetivo.role === 'CLIENTE') {
       const fichas = await sinEmpresa('superadmin: fichas de cliente del usuario', (tx) =>

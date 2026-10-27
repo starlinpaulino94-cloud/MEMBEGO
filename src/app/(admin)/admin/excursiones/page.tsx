@@ -6,6 +6,7 @@ import { resumenDelPeriodo, rankingVendedores } from '@/modules/excursiones/metr
 import { rangoDelPanel, RANGOS_PANEL } from '@/modules/excursiones/metricas/nucleo'
 import { getExcursionesConfig } from '@/modules/excursiones/config'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
+import { RankingEquipoTabla } from '@/components/excursiones/RankingEquipoTabla'
 import { formatMoney } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
@@ -150,41 +151,8 @@ export default async function ExcursionesPanelPage({
       {ranking.length > 0 ? (
         <section className="rounded-2xl border border-border bg-card p-5">
           <h2 className="text-h3 text-foreground">El equipo en este período</h2>
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-caption uppercase tracking-wide text-muted-foreground">
-                  <th className="py-2 pr-3">Vendedor</th>
-                  <th className="py-2 pr-3">Captados</th>
-                  <th className="py-2 pr-3">Ventas</th>
-                  <th className="py-2 pr-3">Pasajeros</th>
-                  <th className="py-2 text-right">Ingresos ({config.monedaDefecto})</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ranking.map((v) => (
-                  <tr key={v.id} className="border-b border-border last:border-0">
-                    <td className="py-2 pr-3">
-                      <Link
-                        href={`/admin/excursiones/vendedores/${v.id}`}
-                        className="font-medium text-foreground hover:text-primary hover:underline"
-                      >
-                        {v.nombre}
-                      </Link>
-                      <span className="ml-1 font-mono text-caption text-muted-foreground">
-                        {v.codigo}
-                      </span>
-                    </td>
-                    <td className="py-2 pr-3 text-muted-foreground">{v.captados}</td>
-                    <td className="py-2 pr-3 text-muted-foreground">{v.ventas}</td>
-                    <td className="py-2 pr-3 text-muted-foreground">{v.pasajeros}</td>
-                    <td className="py-2 text-right font-medium text-foreground">
-                      {formatMoney(v.ingresos, { moneda: v.moneda }, 2)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="mt-3">
+            <RankingEquipoTabla filas={ranking} monedaDefecto={config.monedaDefecto} />
           </div>
         </section>
       ) : null}

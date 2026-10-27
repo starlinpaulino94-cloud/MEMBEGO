@@ -11,6 +11,7 @@ import { AdminCompanySwitcher } from '@/components/admin/AdminCompanySwitcher'
 import { SentryUserSync } from '@/components/SentryUserSync'
 import { getUnreadCount } from '@/modules/notificaciones/actions'
 import { BannerDemo } from '@/components/system/BannerDemo'
+import { RetornoAlAsistente } from '@/components/onboarding/RetornoAlAsistente'
 import { nombreSiEsDemo } from '@/modules/demo'
 import { sistemasParaLanzador } from '@/modules/integraciones/sso'
 import { contextoDeNavegacion } from '@/modules/navegacion/contexto'
@@ -185,6 +186,8 @@ export default async function AdminLayout({
       {/* Antes que nada: si esta empresa es de práctica, que se sepa desde el
           primer vistazo y en todas las pantallas del panel. */}
       {demo && <BannerDemo nombreEmpresa={demo} />}
+      {/* Viniste de un paso del asistente de configuración: el camino de vuelta (7.5). */}
+      <RetornoAlAsistente />
       {children}
     </AppShell>
   )

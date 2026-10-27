@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prototipos del panel · Fase 3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/estilos.css">
+</head>
+<body>
+<div class="aviso-proto"><strong>PROTOTIPO</strong><span>Datos de ejemplo · no es la aplicación · no toca el código del producto</span></div>
+<div class="indice">
+  <header style="display:grid;gap:8px">
+    <p class="t-rotulo">Auditoría del panel administrativo · fase 3</p>
+    <h1 class="t-pagina">Prototipos navegables de las cinco pantallas</h1>
+    <p class="t-sec" style="max-width:68ch">Son HTML estático con los <strong>colores y estados reales</strong> del producto (<code>globals.css</code>) y la <strong>tipografía propuesta</strong> en el documento 10 (Inter, base 14/20, títulos en 600, cifras tabulares). Sirven para decidir la dirección visual antes de construir nada: <strong>aprueba o corrige lo que ves</strong>, no el código.</p>
+  </header>
+
+  <section aria-labelledby="h-pant" style="display:grid;gap:12px">
+    <h2 class="t-seccion" id="h-pant">Las cinco pantallas de validación</h2>
+    <div class="rejilla-pantallas">
+      <a class="tarjeta pantalla-card" href="resumen.html?rol=administrador"><span class="chip chip--info">Tipo · Resumen</span><strong class="t-tarjeta">Resumen</strong><span class="t-sec">Hoy lo que exige acción, este mes en cuatro cifras con su ventana y una gráfica con eje. Cámbialo de rol arriba a la derecha.</span></a>
+      <a class="tarjeta pantalla-card" href="pagos.html?rol=administrador"><span class="chip chip--info">Tipo · Lista</span><strong class="t-tarjeta">Pagos</strong><span class="t-sec">Cinco colas, filtros en la URL, tabla con acciones y la hoja lateral del comprobante. Aprobar y rechazar funcionan.</span></a>
+      <a class="tarjeta pantalla-card" href="cliente.html?rol=administrador&id=c1"><span class="chip chip--info">Tipo · Detalle</span><strong class="t-tarjeta">Ficha de cliente</strong><span class="t-sec">Cabecera con estado y acciones, pestañas, bloque principal y lateral de 320 px. Se entra desde Clientes.</span></a>
+      <a class="tarjeta pantalla-card" href="beneficio-nuevo.html?rol=administrador"><span class="chip chip--info">Tipo · Formulario</span><strong class="t-tarjeta">Crear beneficio</strong><span class="t-sec">Un solo punto de entrada para los cuatro tipos; tres secciones a la vista y el resto en «Opciones avanzadas».</span></a>
+      <a class="tarjeta pantalla-card" href="empresa.html?rol=administrador"><span class="chip chip--info">Tipo · Configuración</span><strong class="t-tarjeta">Empresa</strong><span class="t-sec">Navegación interna y guardado por sección; selector de color con paleta cerrada y control de contraste.</span></a>
+      <div class="tarjeta pantalla-card" style="cursor:default"><span class="chip chip--pendiente">De apoyo</span><strong class="t-tarjeta">Clientes y Beneficios</strong><span class="t-sec">Las dos listas por las que se llega a la ficha y al formulario: <a href="clientes.html?rol=administrador">Clientes</a> · <a href="beneficios.html?rol=administrador">Beneficios</a>.</span></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-roles" class="tarjeta tarjeta--pad" style="display:grid;gap:10px">
+    <h2 class="t-seccion" id="h-roles">Ver como otro rol</h2>
+    <p class="t-sec">El menú propuesto tiene <strong>21 entradas</strong> para el administrador; cada rol ve solo las suyas (documento 03 · C.3). El Resumen cambia de contenido por rol:</p>
+    <div class="tabla-caja"><table class="tabla-simple"><thead><tr><th scope="col">Rol</th><th scope="col">Entradas</th><th scope="col">Resumen</th></tr></thead><tbody>
+      <tr><td><a href="resumen.html?rol=administrador">Administrador</a></td><td>21</td><td>Pagos por validar, vencimientos, caja y citas · ingresos, membresías, canjes, clientes nuevos</td></tr>
+      <tr><td><a href="resumen.html?rol=supervisor">Supervisor</a></td><td>8</td><td>Pagos, vencimientos, canjes por empleado · mismas cifras del mes (tiene permiso financiero de serie)</td></tr>
+      <tr><td><a href="resumen.html?rol=marketing">Marketing</a></td><td>6</td><td>Clientes en riesgo, beneficios por vencer · sin dinero ni atajos a lo que no puede abrir</td></tr>
+    </tbody></table></div>
+  </section>
+
+  <section aria-labelledby="h-tareas" class="tarjeta tarjeta--pad" style="display:grid;gap:10px">
+    <h2 class="t-seccion" id="h-tareas">Las tres tareas de prueba y cómo usar el «Modo de prueba»</h2>
+    <ol style="margin:0;padding-left:20px;display:grid;gap:6px">
+      <li><strong>Aprobar una transferencia.</strong> «Aprueba la transferencia de Inversiones Turísticas del Atlántico.»</li>
+      <li><strong>Crear una promoción 2×1.</strong> «Crea y publica “Pasadía 2×1 entre semana”.»</li>
+      <li><strong>Saber cuánto se vendió este mes</strong> y cuántas membresías se perdieron.</li>
+    </ol>
+    <p class="t-sec" style="max-width:72ch">En cada pantalla hay un panel negro abajo a la derecha, <strong>«Modo de prueba»</strong>, para el observador: elige la tarea, pulsa <em>Iniciar</em> (vuelve al Resumen) y deja que la persona la haga sola. Cuenta <strong>clics, pantallas y segundos</strong>; al terminar pulsa <em>Terminé</em> y anota qué dijo o dónde dudó. <em>Resultados</em> junta todas las sesiones en texto para copiar. Los datos se guardan solo en este navegador.</p>
+    <p class="t-sec" style="max-width:72ch"><strong>Protocolo mínimo:</strong> tres personas (una dueña de negocio, un cajero, un supervisor); no expliques la pantalla; no ayudes; si dice «no sé» anótalo y pasa a la siguiente. Una pantalla = una ruta distinta (cambiar de cola o de pestaña dentro de la misma no cuenta).</p>
+  </section>
+
+  <section aria-labelledby="h-nosim" class="tarjeta tarjeta--pad" style="display:grid;gap:8px">
+    <h2 class="t-seccion" id="h-nosim">Lo que este prototipo NO es</h2>
+    <ul style="margin:0;padding-left:20px;display:grid;gap:4px" class="t-sec">
+      <li>No guarda nada y no se conecta a ninguna base: todo reinicia al recargar.</li>
+      <li>Las entradas del menú sin pantalla avisan «no está en este prototipo».</li>
+      <li>Solo tema claro. El modo oscuro se conserva tal cual en la aplicación y no se rediseña en este ciclo.</li>
+      <li>Necesita internet para cargar Inter y los iconos; sin ella se ve con la fuente del sistema y sin iconos.</li>
+      <li>Las cifras son inventadas para el ejemplo y son coherentes entre pantallas; en el producto, una cifra sin fuente no se pinta.</li>
+    </ul>
+  </section>
+</div>
+</body>
+</html>

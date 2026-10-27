@@ -22,6 +22,9 @@ const statusChipVariants = cva(
         danger: 'border-destructive/20 bg-destructive/10 text-destructive',
         info: 'border-info/20 bg-info/10 text-info',
         neutral: 'border-border bg-muted text-muted-foreground',
+        /* Fase 4 · «Pendiente» del sistema de diseño del panel (`--pending`, docs/auditoria-admin/10 §3). Sobre `bg-card`, NO
+           sobre `bg-muted`: `scripts/contraste.mjs` midió `text-pending` sobre `--muted` en 4,42:1 en el tema claro (< 4,5). */
+        pending: 'border-border bg-card text-pending',
       },
     },
     defaultVariants: { tone: 'neutral' },
@@ -34,6 +37,7 @@ const DOT: Record<NonNullable<VariantProps<typeof statusChipVariants>['tone']>, 
   danger: 'bg-destructive',
   info: 'bg-info',
   neutral: 'bg-muted-foreground',
+  pending: 'bg-pending',
 }
 
 function StatusChip({

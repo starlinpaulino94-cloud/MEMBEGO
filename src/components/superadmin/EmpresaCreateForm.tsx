@@ -23,6 +23,7 @@ import {
   type CategoryOption,
 } from './CategoryMultiSelect'
 import type { AdminVinculable } from '@/modules/empresas/accesos'
+import type { PrecargaDeEmpresa } from '@/modules/solicitudes/nucleo'
 
 const init: ActionState = {}
 
@@ -88,6 +89,7 @@ export function EmpresaCreateForm({
   verticales,
   admins = [],
   demo = false,
+  inicial,
 }: {
   categories: CategoryOption[]
   /**
@@ -100,6 +102,11 @@ export function EmpresaCreateForm({
   /** Administradores existentes a los que se les puede dar esta empresa. */
   admins?: AdminVinculable[]
   demo?: boolean
+  /**
+   * Una solicitud que precarga el formulario (04 · F-02): lo que el solicitante ya escribió llega escrito y, al crear, la solicitud queda
+   * «Creada». Si el correo del dueño ya es una cuenta de la plataforma, arranca en «Cuenta existente» con ese administrador elegido.
+   */
+  inicial?: PrecargaDeEmpresa & { solicitudId: string; adminExistenteId?: string | null }
 }) {
   const router = useRouter()
   const [state, action] = useActionState(crearEmpresa, init)
@@ -107,7 +114,7 @@ export function EmpresaCreateForm({
   // tiene cuenta: se entra al modo de prueba y se sale, sin una segunda
   // contraseña que aprender. Por eso ahí arranca en "existente".
   const [modo, setModo] = useState<'nuevo' | 'existente'>(
-    demo && admins.length > 0 ? 'existente' : 'nuevo'
+    inicial?.adminExistenteId || (demo && admins.length > 0) ? 'existente' : 'nuevo'
   )
 
   useEffect(() => {
@@ -121,6 +128,7 @@ export function EmpresaCreateForm({
   return (
     <form action={action} className="space-y-8">
       {demo && <input type="hidden" name="esDemo" value="1" />}
+      {inicial && <input type="hidden" name="solicitudId" value={inicial.solicitudId} />}
 
       {/* Datos de la empresa */}
       <div className="space-y-4">
@@ -128,12 +136,12 @@ export function EmpresaCreateForm({
         <div className="grid gap-6 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="name">Nombre de la empresa *</Label>
-            <Input id="name" name="name" required placeholder="Ej: CarTown Wash" />
+            <Input id="name" name="name" required defaultValue={inicial?.name} placeholder="Ej: CarTown Wash" />
           </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="type">Tipo</Label>
-            <Select name="type" defaultValue={verticales[0]?.codigo}>
+            <Select name="type" defaultValue={inicial?.type ?? verticales[0]?.codigo}>
               <SelectTrigger id="type">
                 <SelectValue />
               </SelectTrigger>
@@ -154,32 +162,32 @@ export function EmpresaCreateForm({
 
           <div className="space-y-1.5">
             <Label htmlFor="email">Correo de la empresa</Label>
-            <Input id="email" name="email" type="email" placeholder="contacto@empresa.com" />
+            <Input id="email" name="email" type="email" defaultValue={inicial?.email} placeholder="contacto@empresa.com" />
           </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="telefono">Teléfono</Label>
-            <Input id="telefono" name="telefono" placeholder="+1 809 000 0000" />
+            <Input id="telefono" name="telefono" defaultValue={inicial?.telefono} placeholder="+1 809 000 0000" />
           </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="ciudad">Ciudad</Label>
-            <Input id="ciudad" name="ciudad" placeholder="Santo Domingo" />
+            <Input id="ciudad" name="ciudad" defaultValue={inicial?.ciudad} placeholder="Santo Domingo" />
           </div>
 
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="direccion">Dirección</Label>
-            <Input id="direccion" name="direccion" placeholder="Calle, número, sector…" />
+            <Input id="direccion" name="direccion" defaultValue={inicial?.direccion} placeholder="Calle, número, sector…" />
           </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="website">Sitio web</Label>
-            <Input id="website" name="website" type="url" placeholder="https://…" />
+            <Input id="website" name="website" type="url" defaultValue={inicial?.website} placeholder="https://…" />
           </div>
 
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="description">Descripción</Label>
-            <Textarea id="description" name="description" rows={3} placeholder="Breve descripción de la empresa…" />
+            <Textarea id="description" name="description" rows={3} defaultValue={inicial?.description} placeholder="Breve descripción de la empresa…" />
           </div>
 
           <div className="space-y-1.5 sm:col-span-2">
@@ -235,7 +243,7 @@ export function EmpresaCreateForm({
               id="adminExistenteId"
               name="adminExistenteId"
               required
-              defaultValue=""
+              defaultValue={inicial?.adminExistenteId ?? ''}
               className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
             >
               <option value="" disabled>
@@ -264,12 +272,12 @@ export function EmpresaCreateForm({
             <div className="grid gap-6 sm:grid-cols-2">
               <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor="adminNombre">Nombre del administrador *</Label>
-                <Input id="adminNombre" name="adminNombre" required placeholder="Nombre y apellido" />
+                <Input id="adminNombre" name="adminNombre" required defaultValue={inicial?.adminNombre} placeholder="Nombre y apellido" />
               </div>
 
               <div className="space-y-1.5">
                 <Label htmlFor="adminEmail">Correo de acceso *</Label>
-                <Input id="adminEmail" name="adminEmail" type="email" required placeholder="admin@empresa.com" />
+                <Input id="adminEmail" name="adminEmail" type="email" required defaultValue={inicial?.adminEmail} placeholder="admin@empresa.com" />
               </div>
 
               <div className="space-y-1.5">

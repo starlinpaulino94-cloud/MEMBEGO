@@ -221,14 +221,17 @@ export function AppHeader({
       {/* Migas: espacio › dominio › módulo › subpágina.
           En móvil se reducen a la última —el contexto es útil en escritorio,
           pero ahí compite con el buscador por un espacio que no hay—. */}
-      <nav aria-label="Ruta de navegación" className="hidden min-w-0 items-center gap-1.5 md:flex">
+      {/* `overflow-hidden`: con cuatro migas («Empresa › Operaciones › Pagos › Conciliación») ya no caben junto al buscador y, sin
+          recorte, se pisaban unas a otras (se veía a 1 280 px desde antes de las pestañas). Solo la última cede ancho y se trunca;
+          las anteriores conservan el suyo y es la derecha la que se recorta. */}
+      <nav aria-label="Ruta de navegación" className="hidden min-w-0 items-center gap-1.5 overflow-hidden md:flex">
         {migas.length === 0 ? (
           <span className="truncate text-h4 text-foreground">{title}</span>
         ) : (
           migas.map((miga, i) => {
             const ultima = i === migas.length - 1
             return (
-              <span key={`${miga.label}-${i}`} className="flex min-w-0 items-center gap-1.5">
+              <span key={`${miga.label}-${i}`} className={`flex items-center gap-1.5 ${ultima ? 'min-w-0' : 'shrink-0'}`}>
                 {i > 0 && (
                   <ChevronRight
                     className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60"

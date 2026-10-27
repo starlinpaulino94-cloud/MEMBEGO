@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { conEmpresa } from '@/lib/tenant'
 import { requireCompanyContext } from '@/lib/auth/company-context'
@@ -5,6 +6,7 @@ import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
 import { rutaPublicaPromo } from '@/modules/promociones/slug'
 import { PromocionForm } from '@/components/admin/PromocionForm'
+import { PageHeader } from '@/components/ui/page-header'
 import { SharePreviewCard } from '@/components/share/SharePreviewCard'
 
 export default async function EditarPromocionPage({
@@ -47,9 +49,15 @@ export default async function EditarPromocionPage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Editar promoción</h1>
-      </div>
+      <PageHeader
+        className="mb-0 sm:mb-0"
+        back={
+          <Link href="/admin/promociones" className="text-muted-foreground hover:text-foreground">
+            ‹ Promociones
+          </Link>
+        }
+        title="Editar promoción"
+      />
       <PromocionForm
         existing={{ ...promo, precio: promo.precio != null ? Number(promo.precio) : null }}
         campanas={campanas}

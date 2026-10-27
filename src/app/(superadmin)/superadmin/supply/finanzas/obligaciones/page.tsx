@@ -7,12 +7,11 @@ import { Card, CardContent } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Label } from '@/components/ui/label'
 import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
-import { formatDate } from '@/lib/format'
 import { leerPaginacion } from '@/lib/paginacion'
 import { NavSupplyV2 } from '@/components/supply-v2/nav'
-import { ChipObligacion } from '@/components/supply-v2/finanzas/chips'
+import { TablaObligaciones } from '@/components/supply-v2/finanzas/tablas'
 import { listarObligaciones, proveedoresParaFinanzas } from '@/modules/supply-v2/finance/queries'
-import { dineroSupplyV2, OBLIGATION_STATUS_LABELS, RECOGNITION_BASIS_LABELS, RUTA_FINANZAS } from '@/modules/supply-v2/core/catalogo'
+import { OBLIGATION_STATUS_LABELS, RUTA_FINANZAS } from '@/modules/supply-v2/core/catalogo'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Obligaciones · Supply' }
@@ -49,29 +48,7 @@ export default async function ObligacionesPage({ searchParams }: { searchParams:
       {filas.length === 0 ? (
         <EmptyState variant="card" title="Sin obligaciones" description={estado === 'VIVAS' ? 'No se debe nada a proveedores con este filtro.' : 'Ninguna obligación cumple el filtro.'} />
       ) : (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm" data-testid="tabla-obligaciones">
-                <thead className="text-left text-caption text-muted-foreground"><tr><th className="py-1 pr-3">Proveedor</th><th className="py-1 pr-3">Origen</th><th className="py-1 pr-3 text-right">Monto</th><th className="py-1 pr-3 text-right">Pagado</th><th className="py-1 pr-3 text-right">Pendiente</th><th className="py-1 pr-3">Vence</th><th className="py-1">Estado</th></tr></thead>
-                <tbody>
-                  {filas.map((o) => (
-                    <tr key={o.id} className="border-t border-border" data-testid="obligacion">
-                      <td className="py-2 pr-3 font-medium"><Link href={`/superadmin/supply/proveedores/${o.proveedorId}`} className="underline-offset-4 hover:underline">{o.proveedor}</Link><span className="block text-caption text-muted-foreground">{o.number}</span></td>
-                      <td className="py-2 pr-3">{o.invoice ? <Link href={`${RUTA_FINANZAS}/facturas/${o.invoice.id}`} className="underline-offset-4 hover:underline">{o.origen}</Link> : o.origen}<span className="block text-caption text-muted-foreground">{RECOGNITION_BASIS_LABELS[o.recognitionBasis as keyof typeof RECOGNITION_BASIS_LABELS]}{o.purchaseOrder ? ` · ${o.purchaseOrder.number}` : ''}</span></td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(o.grossAmount, o.currency)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">{dineroSupplyV2(o.paidAmount, o.currency)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums" data-testid="obligacion-pendiente">{dineroSupplyV2(o.outstandingAmount, o.currency)}</td>
-                      <td className="py-2 pr-3">{o.dueAt ? formatDate(o.dueAt) : '—'}</td>
-                      <td className="py-2"><ChipObligacion estado={o.status} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <TablaPaginacion paginacion={paginacion} total={total} params={sp} etiqueta="obligaciones" />
-          </CardContent>
-        </Card>
+        <TablaObligaciones filas={filas} pie={<TablaPaginacion paginacion={paginacion} total={total} params={sp} etiqueta="obligaciones" />} />
       )}
     </div>
   )

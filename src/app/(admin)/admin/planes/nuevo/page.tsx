@@ -3,7 +3,9 @@ import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
 import { requireCompanyContext } from '@/lib/auth/company-context'
 import { planPrefill } from '@/modules/admin/plantillas'
-import { NuevoPlanForm } from '@/components/admin/NuevoPlanForm'
+import { PlanForm } from '@/components/admin/PlanForm'
+import { PageHeader } from '@/components/ui/page-header'
+import { valoresDePlanNuevo, valoresDePlantilla } from '@/modules/planes/formulario'
 import { LayoutTemplate } from 'lucide-react'
 
 export default async function NuevoPlanEmpresaPage({
@@ -22,14 +24,18 @@ export default async function NuevoPlanEmpresaPage({
   const prefill = plantilla ? planPrefill(plantilla) : null
 
   return (
-    <div className="max-w-xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Nuevo plan</h1>
-        <p className="text-muted-foreground">
-          Define un plan de membresía para tus clientes (ej. Silver, Gold,
-          Premium, VIP).
-        </p>
-      </div>
+    <div className="mx-auto w-full max-w-[720px] space-y-6">
+      <PageHeader
+        variant="formulario"
+        className="mb-0 sm:mb-0"
+        back={
+          <Link href="/admin/planes" className="text-muted-foreground hover:text-foreground">
+            ‹ Planes
+          </Link>
+        }
+        title="Nuevo plan"
+        description="Define un plan de membresía para tus clientes (ej. Silver, Gold, Premium, VIP)."
+      />
 
       {prefill && (
         <div className="flex items-start gap-3 rounded-xl border border-info/30 bg-info/10 p-4 text-sm">
@@ -49,10 +55,11 @@ export default async function NuevoPlanEmpresaPage({
         </div>
       )}
 
-      <NuevoPlanForm
+      <PlanForm
+        modo="crear"
         redirectTo="/admin/planes"
         companyId={companyId}
-        prefill={prefill ?? undefined}
+        inicial={prefill ? valoresDePlantilla(prefill) : valoresDePlanNuevo()}
       />
     </div>
   )

@@ -25,9 +25,12 @@ import { AjustarVencimiento } from '@/components/superadmin/AjustarVencimiento'
 import { EliminarCuentaButton } from '@/components/superadmin/EliminarCuentaButton'
 import { FileText, MessageCircle, Mail, QrCode, StickyNote } from 'lucide-react'
 import { PageHeader } from '@/components/ui/page-header'
+import { PanelDs } from '@/components/layout/PanelDs'
 import { TabsNav } from '@/components/ui/tabs-nav'
 import { BotonConfirmado } from '@/components/ui/boton-confirmado'
 import { SemaforoCliente } from '@/components/admin/SemaforoCliente'
+import { IdentidadVerificadaBadge } from '@/components/admin/IdentidadVerificadaBadge'
+import { tieneCapacidad } from '@/modules/capacidades/resolver'
 import { HistorialCliente } from '@/components/admin/HistorialCliente'
 import { getHistorialCliente } from '@/modules/cliente/historial'
 import { getCobrosConTarjetaDeCliente } from '@/modules/pagos/cobros-en-linea'
@@ -123,6 +126,8 @@ export default async function ClienteDetailPage({
   if (companyId && cliente.companyId !== companyId) notFound()
 
   const prefs = await getRegionalPrefs(cliente.companyId)
+  // La insignia de identidad: solo «verificada» (la proyección ya viene filtrada por el permiso de la persona) y solo si la empresa tiene la capacidad.
+  const veIdentidad = cliente.identidadEstado === 'verificada' && (await tieneCapacidad(cliente.companyId, 'VERIFICACION_IDENTIDAD'))
 
   // El semáforo se calcula en el servidor con los umbrales de ESTA empresa,
   // igual que en la tabla: dos pantallas no pueden llegar a conclusiones
@@ -174,7 +179,7 @@ export default async function ClienteDetailPage({
       membership.lavadosRestantes + membership.lavadosBonoRestantes > 0)
 
   return (
-    <div className="space-y-6">
+    <PanelDs className="space-y-6">
       <PageHeader
         eyebrow={
           <Link href="/admin/clientes" className="hover:underline">
@@ -204,6 +209,7 @@ export default async function ClienteDetailPage({
               </a>
             )}
             {membership && <EstadoBadge estado={membership.estado as MembershipEstado} />}
+            {veIdentidad && <IdentidadVerificadaBadge desde={cliente.identidadVerificadaEn ? formatDate(cliente.identidadVerificadaEn, prefs) : null} />}
             {/* El semáforo va junto al estado de la membresía a propósito:
                 dicen cosas distintas y verlos juntos es lo que evita
                 confundirlos. «Activa» habla del contrato; «en riesgo», de la
@@ -578,7 +584,7 @@ export default async function ClienteDetailPage({
           />
         </div>
       )}
-    </div>
+    </PanelDs>
   )
 }
 

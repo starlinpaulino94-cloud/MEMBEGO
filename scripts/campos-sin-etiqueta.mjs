@@ -11,7 +11,8 @@
  *    solo está asociado a la vista. Para el navegador son dos cosas sueltas.
  *
  * Vale con cualquiera de estos: `aria-label`, `aria-labelledby`, un `<Label
- * htmlFor>` que apunte a su `id`, o estar dentro de un `<label>`.
+ * htmlFor>` que apunte a su `id`, estar dentro de un `<label>`, o recibir `{...control}` dentro de un `<Campo>` (que pinta su
+ * propio `<label htmlFor>`).
  *
  * El recorrido de atributos NO usa una regex de un solo paso: `className={cn(
  * a > b)}` o una función flecha meten `>` dentro del propio elemento y cortan
@@ -68,6 +69,10 @@ export function camposSinNombre(raiz = 'src') {
       if (fin === -1) continue
       const attrs = src.slice(m.index, fin)
       if (/aria-label|aria-labelledby/.test(attrs)) continue
+      // Dentro de un `<Campo>` (fase 7): el control recibe `{...control}`, que le trae el `id` y el `aria-describedby`, y el propio
+      // `Campo` pinta el `<label htmlFor>` que apunta a ese `id`. Es el contrato de la pieza (docs/auditoria-admin/04 · F-01), no un
+      // atajo: un campo con `{...control}` FUERA de un `Campo` no tendría etiqueta, y por eso se exige además que el archivo use `Campo`.
+      if (/\{\.\.\.control\}/.test(attrs) && /<Campo\b/.test(src)) continue
       const idTexto = attrs.match(/\bid="([^"]+)"/)
       if (idTexto && htmlFor.has(idTexto[1])) continue
       const idExpr = attrs.match(/\bid=\{([^}]*(?:\{[^}]*\}[^}]*)*)\}/)

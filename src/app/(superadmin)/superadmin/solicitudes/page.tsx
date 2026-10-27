@@ -10,6 +10,7 @@ import {
 } from '@/modules/solicitudes/nucleo'
 import { StatusChip } from '@/components/ui/status-chip'
 import { formatDate } from '@/lib/format'
+import { Tabla } from '@/components/ui/tabla'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Solicitudes de empresa' }
@@ -95,44 +96,35 @@ export default async function SolicitudesPage({
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-border">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="px-4 py-3">Negocio</th>
-                <th className="px-4 py-3">Tipo</th>
-                <th className="px-4 py-3">Contacto</th>
-                <th className="px-4 py-3">Recibida</th>
-                <th className="px-4 py-3">Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {solicitudes.map((s) => (
-                <tr key={s.id} className="border-b border-border last:border-0 hover:bg-muted/40">
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/superadmin/solicitudes/${s.id}`}
-                      className="font-semibold text-foreground hover:text-primary hover:underline"
-                    >
-                      {s.nombreNegocio}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">{s.tipoNegocio}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{s.contactoCorreo}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{formatDate(s.createdAt)}</td>
-                  <td className="px-4 py-3">
-                    <StatusChip
-                      tone={TONO_SOLICITUD[s.estado as EstadoSolicitud]}
-                      pulso={s.estado === 'NUEVA'}
-                    >
-                      {ESTADO_SOLICITUD_LABEL[s.estado as EstadoSolicitud]}
-                    </StatusChip>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Tabla
+          caption="Solicitudes de negocios"
+          claveDe={(s) => s.id}
+          filas={solicitudes}
+          filaNavegable
+          columnas={[
+            {
+              clave: 'negocio',
+              encabezado: 'Negocio',
+              celda: (s) => (
+                <Link href={`/superadmin/solicitudes/${s.id}`} className="font-semibold text-foreground hover:text-primary hover:underline">
+                  {s.nombreNegocio}
+                </Link>
+              ),
+            },
+            { clave: 'tipo', encabezado: 'Tipo', prioridad: 2, valor: (s) => s.tipoNegocio },
+            { clave: 'contacto', encabezado: 'Contacto', prioridad: 2, valor: (s) => s.contactoCorreo },
+            { clave: 'recibida', encabezado: 'Recibida', prioridad: 3, celda: (s) => formatDate(s.createdAt) },
+            {
+              clave: 'estado',
+              encabezado: 'Estado',
+              celda: (s) => (
+                <StatusChip tone={TONO_SOLICITUD[s.estado as EstadoSolicitud]} pulso={s.estado === 'NUEVA'}>
+                  {ESTADO_SOLICITUD_LABEL[s.estado as EstadoSolicitud]}
+                </StatusChip>
+              ),
+            },
+          ]}
+        />
       )}
     </div>
   )

@@ -7,7 +7,7 @@ import { resolveCompanyId } from '@/lib/auth/company-context'
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { slugDisponible } from '@/modules/promociones/slug'
 import { notificarSeguidoresEmpresa } from '@/modules/notificaciones/service'
-import { esTipoValido, esVisibilidadValida } from '@/lib/promociones'
+import { leerPromocionDeFormulario, type ErroresPromocion, type ValoresPromocion } from '@/modules/promociones/formulario'
 import {
   syncCreate, syncUpdate, syncStatusChange, syncDelete, syncDuplicate,
   type LegacyPromoData,
@@ -15,147 +15,11 @@ import {
 
 export interface PromocionState {
   error?: string
+  /** Qué campo falló y qué se le dice: el formulario lo enlaza con su campo (`aria-describedby`). */
+  campos?: ErroresPromocion
+  /** Lo que se había escrito, para no vaciar el formulario al fallar. */
+  valores?: ValoresPromocion
   success?: boolean
-}
-
-/** Campos de Promociones 2.0 compartidos entre crear y actualizar. */
-function parsePromocion(formData: FormData): { error: string } | {
-  // Share Engine: textos propios al compartir (persistidos aparte).
-  share: { shareTitulo: string | null; shareDescripcion: string | null }
-  data: {
-    titulo: string
-    descripcion: string
-    imagenUrl: string | null
-    tipo: string
-    descuento: number | null
-    codigo: string | null
-    visibilidad: string
-    vigenciaDesde: Date
-    vigenciaHasta: Date | null
-    maxCanjes: number | null
-    prioridad: number
-    campanaId: string | null
-    // Fase E5: venta como producto comercial
-    esComprable: boolean
-    precio: number | null
-    usosPorCompra: number
-    limitePorCliente: number | null
-    beneficioVigenciaDias: number | null
-    beneficioVigenciaHasta: Date | null
-    diasPermitidos: number[]
-    horaDesde: string | null
-    horaHasta: string | null
-  }
-} {
-  const titulo = String(formData.get('titulo') ?? '').trim()
-  const descripcion = String(formData.get('descripcion') ?? '').trim()
-  const imagenUrl = String(formData.get('imagenUrl') ?? '').trim() || null
-  const tipo = String(formData.get('tipo') ?? 'general').trim()
-  const codigo = String(formData.get('codigo') ?? '').trim() || null
-  // Share Engine: textos propios al compartir (vacío = usar título/descripción).
-  const shareTitulo = String(formData.get('shareTitulo') ?? '').trim().slice(0, 120) || null
-  const shareDescripcion = String(formData.get('shareDescripcion') ?? '').trim().slice(0, 200) || null
-  const visibilidad = String(formData.get('visibilidad') ?? 'publica').trim()
-  const campanaRaw = String(formData.get('campanaId') ?? '').trim()
-  const campanaId = campanaRaw && campanaRaw !== 'none' ? campanaRaw : null
-
-  const descuentoRaw = String(formData.get('descuento') ?? '').trim()
-  const descuento = descuentoRaw ? Number(descuentoRaw) : null
-  const maxCanjesRaw = String(formData.get('maxCanjes') ?? '').trim()
-  const maxCanjes = maxCanjesRaw ? Number(maxCanjesRaw) : null
-  const prioridadRaw = String(formData.get('prioridad') ?? '').trim()
-  const prioridad = prioridadRaw ? Number(prioridadRaw) : 0
-
-  const desdeRaw = String(formData.get('vigenciaDesde') ?? '').trim()
-  const hastaRaw = String(formData.get('vigenciaHasta') ?? '').trim()
-  const vigenciaDesde = desdeRaw ? new Date(desdeRaw) : new Date()
-  const vigenciaHasta = hastaRaw ? new Date(hastaRaw) : null
-
-  if (!titulo || !descripcion) {
-    return { error: 'Título y descripción son obligatorios.' }
-  }
-  if (!esTipoValido(tipo)) return { error: 'Tipo de promoción inválido.' }
-  if (!esVisibilidadValida(visibilidad)) return { error: 'Visibilidad inválida.' }
-  if (descuento != null && (Number.isNaN(descuento) || descuento < 0)) {
-    return { error: 'El descuento no es válido.' }
-  }
-  if (maxCanjes != null && (Number.isNaN(maxCanjes) || maxCanjes < 1)) {
-    return { error: 'El límite de canjes debe ser mayor a 0.' }
-  }
-  if (Number.isNaN(prioridad)) return { error: 'La prioridad no es válida.' }
-  if (vigenciaHasta && vigenciaHasta <= vigenciaDesde) {
-    return { error: 'La fecha de fin debe ser posterior a la de inicio.' }
-  }
-
-  // ── Fase E5: venta como producto comercial ─────────────────────────────────
-  const esComprable = String(formData.get('esComprable') ?? 'false') === 'true'
-  const precioRaw = String(formData.get('precio') ?? '').trim()
-  const precio = precioRaw ? Number(precioRaw) : null
-  const usosRaw = String(formData.get('usosPorCompra') ?? '').trim()
-  const usosPorCompra = usosRaw ? Number(usosRaw) : 1
-  const limiteClienteRaw = String(formData.get('limitePorCliente') ?? '').trim()
-  const limitePorCliente = limiteClienteRaw ? Number(limiteClienteRaw) : null
-  const benefDiasRaw = String(formData.get('beneficioVigenciaDias') ?? '').trim()
-  const beneficioVigenciaDias = benefDiasRaw ? Number(benefDiasRaw) : null
-  const benefHastaRaw = String(formData.get('beneficioVigenciaHasta') ?? '').trim()
-  const beneficioVigenciaHasta = benefHastaRaw ? new Date(benefHastaRaw) : null
-  const diasPermitidos = formData
-    .getAll('diasPermitidos')
-    .map((d) => Number(d))
-    .filter((d) => Number.isInteger(d) && d >= 0 && d <= 6)
-  const horaRe = /^([01]\d|2[0-3]):[0-5]\d$/
-  const horaDesdeRaw = String(formData.get('horaDesde') ?? '').trim()
-  const horaHastaRaw = String(formData.get('horaHasta') ?? '').trim()
-  const horaDesde = horaRe.test(horaDesdeRaw) ? horaDesdeRaw : null
-  const horaHasta = horaRe.test(horaHastaRaw) ? horaHastaRaw : null
-
-  if (esComprable) {
-    if (precio == null || Number.isNaN(precio) || precio < 0) {
-      return { error: 'Indica el precio de venta (0 = gratis).' }
-    }
-    if (Number.isNaN(usosPorCompra) || usosPorCompra < 1) {
-      return { error: 'Los usos por compra deben ser al menos 1.' }
-    }
-    if (limitePorCliente != null && (Number.isNaN(limitePorCliente) || limitePorCliente < 1)) {
-      return { error: 'El límite por cliente debe ser al menos 1 (o vacío para sin límite).' }
-    }
-    if (beneficioVigenciaDias != null && (Number.isNaN(beneficioVigenciaDias) || beneficioVigenciaDias < 1)) {
-      return { error: 'La vigencia del beneficio debe ser al menos 1 día.' }
-    }
-    if (beneficioVigenciaHasta && Number.isNaN(beneficioVigenciaHasta.getTime())) {
-      return { error: 'La fecha fija de vigencia no es válida.' }
-    }
-    if (horaDesde && horaHasta && horaHasta <= horaDesde) {
-      return { error: 'El horario "hasta" debe ser posterior al "desde".' }
-    }
-  }
-
-  return {
-    share: { shareTitulo, shareDescripcion },
-    data: {
-      titulo,
-      descripcion,
-      imagenUrl,
-      tipo,
-      descuento,
-      codigo,
-      visibilidad,
-      vigenciaDesde,
-      vigenciaHasta,
-      maxCanjes,
-      prioridad,
-      campanaId,
-      esComprable,
-      precio: esComprable ? precio : null,
-      usosPorCompra: esComprable ? usosPorCompra : 1,
-      limitePorCliente: esComprable ? limitePorCliente : null,
-      beneficioVigenciaDias: esComprable ? beneficioVigenciaDias : null,
-      beneficioVigenciaHasta: esComprable ? beneficioVigenciaHasta : null,
-      diasPermitidos: esComprable ? diasPermitidos : [],
-      horaDesde: esComprable ? horaDesde : null,
-      horaHasta: esComprable ? horaHasta : null,
-    },
-  }
 }
 
 function toBridgeData(d: {
@@ -281,11 +145,12 @@ export async function crearPromocion(
     (await resolveCompanyId(user, formData)) ?? ''
   if (!companyId) return { error: 'Empresa requerida.' }
 
-  const parsed = parsePromocion(formData)
-  if ('error' in parsed) return { error: parsed.error }
+  const leido = leerPromocionDeFormulario(formData)
+  if (!leido.ok) return { error: leido.error, campos: leido.campos, valores: leido.valores }
+  const parsed = leido
 
   const campanaError = await validarCampana(parsed.data.campanaId, companyId)
-  if (campanaError) return { error: campanaError }
+  if (campanaError) return { error: campanaError, campos: { campanaId: campanaError } }
 
   try {
     // Carrera posible: dos personas creando la misma promoción a la vez leen
@@ -341,8 +206,9 @@ export async function actualizarPromocion(
   const id = String(formData.get('id') ?? '').trim()
   if (!id) return { error: 'Promoción no especificada.' }
 
-  const parsed = parsePromocion(formData)
-  if ('error' in parsed) return { error: parsed.error }
+  const leido = leerPromocionDeFormulario(formData)
+  if (!leido.ok) return { error: leido.error, campos: leido.campos, valores: leido.valores }
+  const parsed = leido
 
   const activo = formData.get('activo') !== 'false'
 
@@ -351,7 +217,7 @@ export async function actualizarPromocion(
     if (!promo) return { error: 'Promoción no encontrada.' }
 
     const campanaError = await validarCampana(parsed.data.campanaId, promo.companyId)
-    if (campanaError) return { error: campanaError }
+    if (campanaError) return { error: campanaError, campos: { campanaId: campanaError } }
 
     // El slug NO se recalcula con el título: solo se rellena si la promoción
     // viene de antes de los enlaces con nombre y aún no tiene uno.

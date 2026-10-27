@@ -28,6 +28,7 @@ import {
 } from '@/modules/membresias/filtros'
 import type { MembershipEstado } from '@/types'
 import { BotonExportar } from '@/components/ui/boton-exportar'
+import { Tabla } from '@/components/ui/tabla'
 
 export const metadata = { title: 'Membresías' }
 
@@ -244,121 +245,110 @@ export default async function SuperadminMembresiasPage({
         {plural(d.total, 'resultado', 'resultados')}
       </p>
 
-      <div className="overflow-x-auto rounded-xl border bg-card">
-        <table className="w-full text-sm">
-          <thead className="border-b bg-muted text-caption text-muted-foreground">
-            <tr>
-              <th className="px-4 py-3 text-left">Cliente</th>
-              <th className="px-4 py-3 text-left">Empresa</th>
-              <th className="px-4 py-3 text-left">Plan</th>
-              {/* «Usos», no «Lavados»: esta pantalla cruza empresas que no
-                  lavan carros, y el plan ya dice «usos incluidos». */}
-              <th className="px-4 py-3 text-left">Usos</th>
-              <th className="px-4 py-3 text-left">Estado</th>
-              <th className="px-4 py-3 text-left">Inicio</th>
-              <th className="px-4 py-3 text-left">Vencimiento</th>
-              <th className="px-4 py-3 text-left">Acciones</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border/60">
-            {d.filas.map((m) => (
-              <tr key={m.id} className="hover:bg-muted">
-                <td className="px-4 py-3 font-medium text-foreground">
-                  {/* La ficha del cliente es de /admin, que opera UNA empresa: la
-                      ACTIVA de la sesión. El enlace solo funciona si esa es la
-                      empresa de esta membresía; con otra (o con ninguna) llevaba
-                      a «no encontrado» o de vuelta a Empresas (auditoría admin ·
-                      1.9). Si no coincide se enseña el nombre sin enlace. */}
-                  {m.empresaId === empresaActiva ? (
-                    <Link
-                      href={`/admin/clientes/${m.clienteId}`}
-                      className="hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      {m.clienteNombre}
-                    </Link>
-                  ) : (
-                    <span title="La ficha del cliente se abre desde la empresa: entra a ella primero.">
-                      {m.clienteNombre}
-                    </span>
-                  )}
-                  <div className="text-caption text-muted-foreground">{m.clienteEmail}</div>
-                </td>
-                <td className="px-4 py-3 text-muted-foreground">
-                  {m.empresaNombre}
-                  {m.empresaEsDemo && (
-                    <span className="ml-1 text-caption font-medium text-warning">· práctica</span>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-muted-foreground">{m.planNombre}</td>
-                <td className="whitespace-nowrap px-4 py-3">
-                  <AjustarLavados
+      <Tabla
+        caption="Membresías de todas las empresas"
+        claveDe={(m) => m.id}
+        filas={d.filas}
+        hayFiltros={hayFiltro(f)}
+        vacio={{ titulo: 'No hay membresías' }}
+        sinResultados={{
+          titulo: 'Sin resultados con estos filtros',
+          accion: (
+            <Link href={BASE} className="text-primary hover:underline">
+              Limpiar
+            </Link>
+          ),
+        }}
+        columnaIdentificadora="cliente"
+        columnas={[
+          {
+            clave: 'cliente',
+            encabezado: 'Cliente',
+            celda: (m) => (
+              <>
+                {/* La ficha del cliente es de /admin, que opera UNA empresa: la ACTIVA de la sesión. El enlace solo funciona si esa es la
+                    empresa de esta membresía; con otra (o con ninguna) llevaba a «no encontrado» o de vuelta a Empresas (auditoría admin ·
+                    1.9). Si no coincide se enseña el nombre sin enlace. */}
+                {m.empresaId === empresaActiva ? (
+                  <Link
+                    href={`/admin/clientes/${m.clienteId}`}
+                    className="hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {m.clienteNombre}
+                  </Link>
+                ) : (
+                  <span title="La ficha del cliente se abre desde la empresa: entra a ella primero.">{m.clienteNombre}</span>
+                )}
+                <span className="block text-caption font-normal text-muted-foreground">{m.clienteEmail}</span>
+              </>
+            ),
+          },
+          {
+            clave: 'empresa',
+            encabezado: 'Empresa',
+            prioridad: 2,
+            celda: (m) => (
+              <>
+                {m.empresaNombre}
+                {m.empresaEsDemo && <span className="ml-1 text-caption font-medium text-warning">· práctica</span>}
+              </>
+            ),
+          },
+          { clave: 'plan', encabezado: 'Plan', prioridad: 3, valor: (m) => m.planNombre },
+          {
+            // «Usos», no «Lavados»: esta pantalla cruza empresas que no lavan carros, y el plan ya dice «usos incluidos».
+            clave: 'usos',
+            encabezado: 'Usos',
+            celda: (m) => (
+              <span className="whitespace-nowrap">
+                <AjustarLavados membershipId={m.id} lavados={m.usosRestantes} esIlimitado={m.planEsIlimitado} />
+              </span>
+            ),
+          },
+          { clave: 'estado', encabezado: 'Estado', celda: (m) => <EstadoConVigencia fila={m} /> },
+          { clave: 'inicio', encabezado: 'Inicio', prioridad: 3, celda: (m) => fmtDate(m.fechaInicio) },
+          {
+            clave: 'vencimiento',
+            encabezado: 'Vencimiento',
+            prioridad: 2,
+            celda: (m) => <AjustarVencimiento membershipId={m.id} fecha={fmtDate(m.fechaVencimiento)} fechaInput={fechaInputLocal(m.fechaVencimiento)} />,
+          },
+          {
+            clave: 'acciones',
+            encabezado: 'Acciones',
+            celda: (m) => (
+              <>
+                <MembershipAdminActions
+                  membershipId={m.id}
+                  estado={m.estado as MembershipEstado}
+                  renovacion={{
+                    clienteId: m.clienteId,
+                    clienteNombre: m.clienteNombre,
+                    planNombre: m.planNombre,
+                    precioTexto: formatPrice(m.planPrecio, {}),
+                    lavadosPlan: m.planLavadosIncluidos,
+                    lavadosRegalo: m.usosRegaloRestantes,
+                    vigenciaDias: m.planVigenciaDias,
+                    vence: m.fechaVencimiento?.toISOString() ?? null,
+                    lavadosRestantes: m.usosRestantes,
+                  }}
+                />
+                {/* Borrar solo aparece habilitado para las membresías que nunca llegaron a usarse. Se pinta siempre —y no solo cuando
+                    procede— para que el motivo de por qué NO se puede esté a la vista en vez de ser un botón ausente que nadie sabe que
+                    existió. */}
+                <div className="mt-2">
+                  <DeleteMembresiaButton
                     membershipId={m.id}
-                    lavados={m.usosRestantes}
-                    esIlimitado={m.planEsIlimitado}
+                    visitas={m.visitas}
+                    comprobantes={m.comprobantes}
+                    pagosConfirmados={m.pagosConfirmados}
                   />
-                </td>
-                <td className="px-4 py-3">
-                  <EstadoConVigencia fila={m} />
-                </td>
-                <td className="px-4 py-3 text-muted-foreground">{fmtDate(m.fechaInicio)}</td>
-                <td className="px-4 py-3 text-muted-foreground">
-                  <AjustarVencimiento
-                    membershipId={m.id}
-                    fecha={fmtDate(m.fechaVencimiento)}
-                    fechaInput={fechaInputLocal(m.fechaVencimiento)}
-                  />
-                </td>
-                <td className="px-4 py-3">
-                  <MembershipAdminActions
-                    membershipId={m.id}
-                    estado={m.estado as MembershipEstado}
-                    renovacion={{
-                      clienteId: m.clienteId,
-                      clienteNombre: m.clienteNombre,
-                      planNombre: m.planNombre,
-                      precioTexto: formatPrice(m.planPrecio, {}),
-                      lavadosPlan: m.planLavadosIncluidos,
-                      lavadosRegalo: m.usosRegaloRestantes,
-                      vigenciaDias: m.planVigenciaDias,
-                      vence: m.fechaVencimiento?.toISOString() ?? null,
-                      lavadosRestantes: m.usosRestantes,
-                    }}
-                  />
-                  {/* Borrar solo aparece habilitado para las membresías que
-                      nunca llegaron a usarse. Se pinta siempre —y no solo
-                      cuando procede— para que el motivo de por qué NO se puede
-                      esté a la vista en vez de ser un botón ausente que nadie
-                      sabe que existió. */}
-                  <div className="mt-2">
-                    <DeleteMembresiaButton
-                      membershipId={m.id}
-                      visitas={m.visitas}
-                      comprobantes={m.comprobantes}
-                      pagosConfirmados={m.pagosConfirmados}
-                    />
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {d.filas.length === 0 && (
-              <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
-                  {hayFiltro(f) ? (
-                    <>
-                      Sin resultados con estos filtros.{' '}
-                      <Link href={BASE} className="text-primary hover:underline">
-                        Limpiar
-                      </Link>
-                    </>
-                  ) : (
-                    'No hay membresías.'
-                  )}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                </div>
+              </>
+            ),
+          },
+        ]}
+      />
 
       {d.filas.length > 0 && (
         <TablaPaginacion

@@ -1,5 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { basename, join } from 'node:path'
 import { camposSinNombre } from '../scripts/campos-sin-etiqueta.mjs'
 
 /**
@@ -22,12 +25,12 @@ import { camposSinNombre } from '../scripts/campos-sin-etiqueta.mjs'
  *  · Donde entran CLIENTES y EMPLEADOS: cero. No es negociable — es gente que
  *    no eligió esta herramienta y que puede necesitar un lector de pantalla.
  *  · En el panel interno: un techo que solo baja, como la deuda tipográfica.
- *    Son 94 campos repartidos por formularios de administración; migrarlos de
+ *    Son 77 campos (94 antes de la fase 7) repartidos por formularios de administración; migrarlos de
  *    una barrida sin poder mirar ninguna pantalla sería peor que la deuda.
  */
 
 /** Techo del panel interno. Bajarlo conforme se salde; nunca subirlo. */
-const TECHO = 94
+const TECHO = 77
 
 /** Áreas donde interactúa alguien que no es personal de oficina. */
 const CARA_AL_USUARIO = /(?:components\/(?:cliente|auth|public|scanner|caja|geo|marketplace|membresia)|app\/\((?:cliente|public|empleado|auth)\))/
@@ -61,4 +64,22 @@ test('el detector reconoce las formas válidas de nombrar (prueba de la prueba)'
     `el detector marcó ${total} campos: está contando de más, revisa el reconocimiento ` +
       'de `htmlFor={…}` con plantilla y de los campos envueltos en <label>'
   )
+})
+
+test('un campo dentro de `<Campo>` con `{...control}` está nombrado; el mismo campo suelto, no (prueba de la prueba)', () => {
+  // El detector acepta `{...control}` SOLO si el archivo usa `Campo`, porque es `Campo` quien pinta la etiqueta que apunta al id.
+  // Sin esta guardia, bastaría escribir `{...control}` en cualquier sitio para silenciar al detector.
+  const raiz = mkdtempSync(join(tmpdir(), 'campos-'))
+  try {
+    writeFileSync(
+      join(raiz, 'con-campo.tsx'),
+      `export const A = () => <Campo id="n" etiqueta="Nombre">{(control) => <Input name="n" {...control} />}</Campo>`
+    )
+    writeFileSync(join(raiz, 'sin-campo.tsx'), `export const B = (control: object) => <Input name="n" {...control} />`)
+    writeFileSync(join(raiz, 'sin-nombre.tsx'), `export const C = () => <Input name="n" placeholder="Nombre" />`)
+    const sinNombre = camposSinNombre(raiz).map((r: string) => basename(r.slice(0, r.lastIndexOf(':'))))
+    assert.deepEqual(sinNombre.sort(), ['sin-campo.tsx', 'sin-nombre.tsx'])
+  } finally {
+    rmSync(raiz, { recursive: true, force: true })
+  }
 })

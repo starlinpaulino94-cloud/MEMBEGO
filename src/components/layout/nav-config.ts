@@ -42,6 +42,7 @@ import {
   Scale,
   ListChecks,
   ShieldAlert,
+  ShieldCheck,
   Share2,
   SlidersHorizontal,
   TextSearch,
@@ -63,6 +64,7 @@ import {
 import { ADMIN_ROLES, FULL_ADMIN_ROLES, type AppRole } from '@/types'
 import {
   adminSectionForPath,
+  funcionPermitida,
   seccionPermitida,
   type PermisosUsuario,
 } from '@/lib/auth/permissions'
@@ -169,6 +171,34 @@ export const CLAVES_BADGE = [
 ] as const
 export type ClaveBadge = (typeof CLAVES_BADGE)[number]
 
+/**
+ * UNA PESTAÑA DE MÓDULO (auditoría admin · fase 6, 03 · C.2).
+ *
+ * El módulo es la entrada del menú; cada pestaña es una RUTA REAL con su propia sección de permisos. Fusionar «Pagos»,
+ * «Registros», «Comprobantes» y «Conciliación» en una entrada no mueve ninguna ruta ni cambia ninguna sección: solo cambia
+ * dónde se ofrece cada una. Por eso la pestaña declara lo mismo que declaraba su entrada de menú (capacidad, vertical,
+ * palabras clave) y la sección sale de su ruta, como siempre (`adminSectionForPath`).
+ */
+export interface NavPestana {
+  /** La ruta de la pestaña: la que se abre al pulsarla. La sección de permisos se deriva de ella. */
+  href: string
+  label: string
+  description?: string
+  /** Capacidad contratada que enciende ESTA pestaña. Ausente = siempre encendida. */
+  capacidad?: CapacidadNav
+  /** Verticales donde tiene sentido. Ausente = todas. */
+  tiposEmpresa?: readonly TipoEmpresaNav[]
+  /**
+   * Función fina que la pantalla exige además de la sección (`reportes › ver_financieros`). La pestaña no se ofrece a quien no
+   * la tiene: una pestaña que solo lleva a «no autorizado» no es un permiso, es un tropiezo.
+   */
+  funcion?: string
+  /** Palabras clave del buscador: lo que la gente escribe para llegar a esta pestaña. */
+  keywords?: readonly string[]
+  /** Rutas que también pertenecen a esta pestaña (históricas o hijas que no cuelgan de `href`). */
+  prefijos?: readonly string[]
+}
+
 export interface NavLink {
   href: string
   /** Nombre corto: es el que se pinta en el panel y tiene que caber. */
@@ -201,6 +231,18 @@ export interface NavLink {
    * antiguo compartido por WhatsApp sigue resolviendo su espacio y sus migas.
    */
   prefijos?: readonly string[]
+  /**
+   * Las pestañas del módulo, en el orden en que se ofrecen; la primera es la entrada misma (su `href` es el de la primera).
+   *
+   * Una entrada con pestañas se muestra si le queda AL MENOS UNA visible y aterriza en la primera visible (03 · C.3): es la misma
+   * regla que ya aplica `visibleGroups` a los grupos. Cada pestaña se filtra por su sección, su capacidad y su función.
+   */
+  pestanas?: readonly NavPestana[]
+  /**
+   * La pantalla ya pinta sus propias pestañas (Prospectos, Parques y Tours, el selector de tipo de Beneficios): no se dibuja la
+   * barra del módulo encima. Las pestañas siguen sirviendo para decidir qué se ofrece y a dónde aterriza.
+   */
+  sinBarra?: boolean
 }
 
 export interface NavGroup {
@@ -903,6 +945,101 @@ function deAdmin(...hrefs: readonly string[]): NavLink[] {
   })
 }
 
+// ── El hub administrativo: módulos con pestañas (auditoría admin · fase 6) ───
+//
+// DE CUARENTA Y CINCO DESTINOS A UN MENÚ QUE SE LEE (03 · C.2).
+//
+// El panel de empresa llegó a 45 destinos siempre visibles: la auditoría contó 37 y después nacieron el catálogo, el inventario,
+// los pedidos, las ofertas con presupuesto, «Mi cuenta Membego», «Resultados» y las entregas del proveedor. Pintados a la vez
+// son un inventario, no un menú: nada dice dónde mirar, y cuatro entradas seguidas (Pagos, Comprobantes, Registros,
+// Conciliación) son UNA tarea.
+//
+// LO QUE CAMBIA Y LO QUE NO. Cambia dónde se OFRECE cada pantalla: pares como Pagos/Registros/Comprobantes/Conciliación pasan a
+// ser pestañas de un solo módulo. NO cambia ninguna ruta, ninguna sección de permisos, ninguna capacidad ni ninguna pantalla:
+// cada pestaña es la misma ruta de siempre, con la misma guardia. Solo se fusionan puertas de entrada, no modelos de datos.
+//
+// CÓMO SE DECLARA. El catálogo de destinos (`ENLACES_ADMIN`, arriba) sigue siendo la fuente de la etiqueta, la capacidad y las
+// palabras clave de cada RUTA; aquí solo se dice qué rutas son pestañas de qué módulo. `modulo()` falla si una pestaña no existe
+// en el catálogo ni trae etiqueta, y una prueba comprueba que ningún destino del catálogo se queda sin entrada ni pestaña.
+//
+// POR QUÉ NO SE SIGUE EL «21» AL PIE DE LA LETRA. El diseño aprobado (03 · C.2, prototipos de la fase 3) tenía 21 entradas
+// para el menú de entonces. Las ofertas de Membego no existían: Catálogo (con Inventario) y Pedidos Membego (con Mi cuenta y
+// Resultados) entran como dos módulos nuevos y las entregas del proveedor siguen siendo una entrada que solo ven las empresas
+// proveedoras. Una empresa con todo encendido ve 24 entradas; la que no vende en Membego, 21–22.
+
+type DeclaracionPestana =
+  | string
+  | {
+      href: string
+      label?: string
+      description?: string
+      capacidad?: CapacidadNav
+      funcion?: string
+      keywords?: readonly string[]
+      prefijos?: readonly string[]
+    }
+
+/** La pestaña a partir del catálogo de destinos: lo que no se declara aquí se hereda de la entrada de menú que era. */
+function comoPestana(decl: DeclaracionPestana, capacidadDelModulo?: CapacidadNav): NavPestana {
+  const d = typeof decl === 'string' ? { href: decl } : decl
+  const base = ENLACES_ADMIN.find((i) => i.href === d.href)
+  const label = d.label ?? base?.label
+  if (!label) {
+    throw new Error(`Navegación: la pestaña ${d.href} no está en el catálogo y no declara etiqueta.`)
+  }
+  return {
+    href: d.href,
+    label,
+    description: d.description ?? base?.description,
+    capacidad: d.capacidad ?? base?.capacidad ?? capacidadDelModulo,
+    tiposEmpresa: base?.tiposEmpresa,
+    funcion: d.funcion,
+    // Si la pestaña cambia el nombre que tenía como entrada de menú («Métodos de pago» → «Cobros»), el nombre de antes sigue
+    // siendo una palabra clave: quien lo escribía para llegar sigue llegando.
+    keywords: [
+      ...(base?.keywords ?? []),
+      ...(base && d.label && d.label !== base.label ? [base.label.toLowerCase()] : []),
+      ...(d.keywords ?? []),
+    ],
+    prefijos: d.prefijos,
+  }
+}
+
+/**
+ * UNA ENTRADA DEL MENÚ CON PESTAÑAS. Su `href` es el de la primera pestaña (a donde aterriza quien lo ve todo). Quien escribía
+ * «conciliación» para llegar a Conciliación sigue llegando, y ahora el buscador le ofrece «Pagos › Conciliación» directamente.
+ */
+function modulo(def: {
+  label: string
+  icon: LucideIcon
+  description: string
+  pestanas: readonly DeclaracionPestana[]
+  /** Capacidad que enciende todas las pestañas que no declaren la suya. */
+  capacidad?: CapacidadNav
+  sinBarra?: boolean
+  principal?: boolean
+  badge?: ClaveBadge
+  keywords?: readonly string[]
+}): NavLink {
+  const pestanas = def.pestanas.map((d) => comoPestana(d, def.capacidad))
+  const primera = pestanas[0]
+  if (!primera) throw new Error(`Navegación: el módulo ${def.label} no tiene pestañas.`)
+  // Solo las de la PRIMERA pestaña, que es la entrada misma. Las demás se buscan por su propio destino (`destinosDe`: «Pagos ›
+  // Conciliación»): si la entrada heredara sus palabras, empataría con ellas y el buscador llevaría a la entrada y no a la pantalla.
+  const palabras = [...(def.keywords ?? []), primera.label.toLowerCase(), ...(primera.keywords ?? [])]
+  return {
+    href: primera.href,
+    label: def.label,
+    icon: def.icon,
+    description: def.description,
+    principal: def.principal,
+    badge: def.badge,
+    sinBarra: def.sinBarra,
+    pestanas,
+    keywords: [...new Set(palabras)],
+  }
+}
+
 const HUB_PRINCIPAL: NavGroup = {
   id: 'principal',
   label: 'Principal',
@@ -911,77 +1048,234 @@ const HUB_PRINCIPAL: NavGroup = {
 
 const HUB_EXPERIENCIA: NavGroup = {
   id: 'experiencia-cliente',
-  label: 'Experiencia cliente',
-  items: deAdmin('/admin/personalizacion', '/admin/sinonimos'),
+  label: 'App del cliente',
+  items: [
+    modulo({
+      label: 'Editor de inicio',
+      icon: Palette,
+      description: 'Cómo se ve tu empresa en la app de tus clientes y cómo te encuentran al buscar.',
+      pestanas: [{ href: '/admin/personalizacion', label: 'Inicio' }, '/admin/sinonimos'],
+      keywords: ['editor', 'inicio', 'home', 'app'],
+    }),
+  ],
 }
 
 /**
- * COMERCIO (experiencia comercial, 2026-10-08). El grupo «Catálogo» del diseño
- * pasa a leerse como lo que una empresa VENDE y OPERA en Membego, en el orden
- * en que se usa: qué vendo (Catálogo) → cuánto tengo y dónde (Inventario) →
- * qué me piden (Pedidos) → qué incentivo aplico sobre esos mismos productos
- * (Ofertas y Promociones) → beneficios sin producto (legacy) → membresías →
- * excursiones. Los pedidos salen de «Operaciones» para que la cadena
- * Catálogo → Inventario → Ofertas → Pedidos se vea entera en un solo sitio.
+ * COMERCIO (experiencia comercial, 2026-10-08). Lo que una empresa VENDE y OPERA en Membego, en el orden en que se usa: qué vendo
+ * (Catálogo, con su inventario) → qué me piden (Pedidos, con lo que debo a Membego y lo que me produjo) → qué incentivo aplico
+ * (Beneficios y regalos) → membresías → excursiones.
  */
 const HUB_COMERCIO: NavGroup = {
   id: 'comercio',
   label: 'Comercio',
-  items: deAdmin(
-    '/admin/catalogo', '/admin/inventario', '/admin/pedidos-membego', '/admin/deals',
-    '/admin/ofertas', '/admin/planes', '/admin/excursiones'
-  ),
+  items: [
+    modulo({
+      label: 'Catálogo',
+      icon: Package,
+      description: 'Productos y servicios con sus variantes, precios y existencias.',
+      pestanas: [{ href: '/admin/catalogo', label: 'Productos y servicios' }, '/admin/inventario'],
+    }),
+    modulo({
+      label: 'Pedidos Membego',
+      icon: ShoppingBag,
+      description: 'Pedidos del marketplace, lo que debes a Membego y lo que Membego te produjo.',
+      pestanas: [
+        { href: '/admin/pedidos-membego', label: 'Pedidos' },
+        { href: '/admin/facturacion-membego', label: 'Mi cuenta' },
+        { href: '/admin/resultados-membego', label: 'Resultados' },
+      ],
+    }),
+    modulo({
+      label: 'Beneficios y regalos',
+      icon: Tag,
+      description: 'Promociones públicas, ofertas relámpago, regalos VIP y ofertas sobre tu catálogo.',
+      // La pantalla ya trae su selector de tipo (fase 5 · 5.4): la barra del módulo duplicaría las pestañas.
+      sinBarra: true,
+      pestanas: [
+        '/admin/ofertas',
+        { href: '/admin/promociones', label: 'Promociones públicas' },
+        { href: '/admin/marketing', label: 'Ofertas relámpago' },
+        { href: '/admin/deals', label: 'Ofertas sobre productos' },
+      ],
+    }),
+    modulo({
+      label: 'Planes',
+      icon: Package,
+      description: 'Productos de membresía que vende la empresa.',
+      badge: 'planesActivos',
+      pestanas: ['/admin/planes', { href: '/admin/planes/plantillas', label: 'Plantillas' }],
+    }),
+    ...deAdmin('/admin/excursiones'),
+  ],
 }
 
 const HUB_OPERACIONES: NavGroup = {
   id: 'operaciones',
   label: 'Operaciones',
-  items: deAdmin(
-    '/admin/scanner', '/admin/citas', '/admin/pagos', '/admin/facturacion-membego', '/admin/resultados-membego', '/admin/facturas',
-    '/admin/conciliacion', '/admin/metodos-pago', '/admin/registros', '/admin/actividad'
-  ),
+  items: [
+    // Una sola pantalla, compartida con el mostrador: sin pestañas. «Escanear QR» sigue siendo una palabra clave.
+    {
+      ...deAdmin('/admin/scanner')[0]!,
+      label: 'Canjes y QR',
+      keywords: [...(deAdmin('/admin/scanner')[0]!.keywords ?? []), 'escanear qr'],
+    },
+    modulo({
+      label: 'Citas',
+      icon: CalendarDays,
+      description: 'La agenda de la empresa y su configuración.',
+      capacidad: 'CITAS',
+      pestanas: [{ href: '/admin/citas', label: 'Agenda' }, { href: '/admin/citas/configuracion', label: 'Configuración' }],
+    }),
+    modulo({
+      label: 'Pagos',
+      icon: Wallet,
+      description: 'Validar cobros, ver los movimientos y los comprobantes, y cuadrar la caja.',
+      pestanas: [
+        { href: '/admin/pagos', label: 'Por validar' },
+        { href: '/admin/registros', label: 'Movimientos' },
+        { href: '/admin/facturas', label: 'Comprobantes' },
+        '/admin/conciliacion',
+      ],
+    }),
+    {
+      // Caja vive en el mostrador (`/empleado/caja`, solo roles de mostrador): D-09, adoptada. Se ofrece solo a quien puede
+      // abrirla; a Marketing y Supervisión, que rebotarían, no se les enseña.
+      href: '/empleado/caja',
+      label: 'Caja',
+      icon: Banknote,
+      description: 'Cobrar en el mostrador. Se abre en la pantalla de mostrador.',
+      capacidad: 'POS_CAJA',
+      roles: ['SUPERADMIN', 'ADMINISTRADOR', 'ADMIN_EMPRESA', 'GERENTE', 'CAJERO'],
+      keywords: ['caja', 'cobrar', 'pos', 'punto de venta', 'turno'],
+    },
+  ],
 }
 
 const HUB_CLIENTES: NavGroup = {
   id: 'clientes',
   label: 'Clientes',
-  items: deAdmin(
-    '/admin/clientes', '/admin/membresias', '/admin/audiencia/segmentos', '/admin/riesgo',
-    '/admin/retencion', '/admin/seguimiento', '/admin/crm', '/admin/tickets',
-    '/admin/comunicacion'
-  ),
+  items: [
+    modulo({
+      label: 'Clientes',
+      icon: Users,
+      description: 'El directorio, sus membresías, quién está por irse y los grupos de clientes.',
+      principal: true,
+      pestanas: [
+        { href: '/admin/clientes', label: 'Directorio' },
+        '/admin/membresias',
+        '/admin/riesgo',
+        '/admin/audiencia/segmentos',
+      ],
+    }),
+    // El CRM trae sus propias pestañas (`crm/layout.tsx`): no se les pone una barra encima.
+    ...deAdmin('/admin/crm'),
+    modulo({
+      label: 'Soporte',
+      icon: LifeBuoy,
+      description: 'Casos de soporte y canales de contacto de la empresa.',
+      badge: 'companyOpenTickets',
+      pestanas: ['/admin/tickets', '/admin/comunicacion'],
+    }),
+  ],
 }
 
 const HUB_MARKETING: NavGroup = {
   id: 'marketing',
   label: 'Marketing',
-  items: deAdmin(
-    '/admin/campanas', '/admin/publicaciones', '/admin/notificaciones',
-    '/admin/automatizaciones', '/admin/gamificacion', '/admin/invitaciones',
-    '/admin/crecimiento', '/admin/regalos'
-  ),
+  items: [
+    modulo({
+      label: 'Comunicaciones',
+      icon: Megaphone,
+      description: 'Avisos y campañas a tus clientes, y las reglas que los envían solos.',
+      pestanas: [
+        '/admin/notificaciones',
+        '/admin/automatizaciones',
+        {
+          href: '/admin/audiencia/campanas',
+          label: 'Campañas segmentadas',
+          description: 'Campañas dirigidas a grupos de clientes.',
+          keywords: ['campanas', 'dirigidas', 'segmentadas', 'audiencia'],
+        },
+        '/admin/campanas',
+      ],
+    }),
+    ...deAdmin('/admin/publicaciones'),
+    modulo({
+      label: 'Fidelización',
+      icon: HeartHandshake,
+      description: 'Programas para que tus clientes vuelvan y traigan a otros.',
+      pestanas: [
+        { href: '/admin/invitaciones', label: 'Invita y Gana', prefijos: ['/admin/referidos'] },
+        { href: '/admin/gamificacion', label: 'Ruleta' },
+        { href: '/admin/regalos', label: 'Regalos' },
+        { href: '/admin/crecimiento', label: 'Recompensas' },
+        '/admin/seguimiento',
+      ],
+    }),
+  ],
 }
 
 const HUB_ANALITICA: NavGroup = {
   id: 'analitica',
   label: 'Analítica',
-  items: deAdmin('/admin/reportes', '/admin/audiencia', '/admin/adquisicion'),
+  items: [
+    modulo({
+      label: 'Reportes',
+      icon: BarChart3,
+      description: 'Resultados, finanzas, membresías, operación, retención, audiencia y origen de los clientes.',
+      principal: true,
+      pestanas: [
+        { href: '/admin/reportes', label: 'Resumen' },
+        {
+          href: '/admin/reportes/finanzas',
+          label: 'Finanzas',
+          description: 'Ingresos, cobros y comisiones.',
+          // La pantalla entera exige `reportes › ver_financieros`: sin ella, la pestaña solo llevaría a «no autorizado».
+          funcion: 'ver_financieros',
+          keywords: ['finanzas', 'ingresos', 'dinero', 'ventas', 'cobros'],
+        },
+        { href: '/admin/reportes/membresias', label: 'Membresías', keywords: ['membresias', 'altas', 'bajas'] },
+        { href: '/admin/reportes/operacion', label: 'Operación', keywords: ['operacion', 'visitas', 'canjes'] },
+        '/admin/retencion',
+        '/admin/audiencia',
+        '/admin/adquisicion',
+      ],
+    }),
+    ...deAdmin('/admin/actividad'),
+  ],
 }
 
 const HUB_AJUSTES: NavGroup = {
   id: 'ajustes',
   label: 'Ajustes',
-  // `/admin/supply` va aquí, junto a integraciones, y no en Catálogo ni en
-  // Operaciones: no es lo que la empresa vende, es su relación contractual con
-  // la plataforma. Detrás de la capacidad MEMBEGO_SUPPLIER, así que solo
-  // aparece en las empresas que de verdad le venden supply a Membego.
-  items: deAdmin(
-    '/admin/perfil',
-    '/admin/sucursales',
-    '/admin/empleados',
-    '/admin/integraciones',
-    '/admin/supply'
-  ),
+  // `/admin/supply` va aquí, junto a integraciones, y no en Comercio ni en Operaciones: no es lo que la empresa vende, es su
+  // relación contractual con la plataforma. Detrás de la capacidad MEMBEGO_SUPPLIER, así que solo aparece en las empresas que de
+  // verdad le venden supply a Membego.
+  items: [
+    modulo({
+      label: 'Empresa',
+      icon: Store,
+      description: 'El perfil público del negocio y sus formas de cobro.',
+      principal: true,
+      pestanas: ['/admin/perfil', { href: '/admin/metodos-pago', label: 'Cobros' }],
+    }),
+    ...deAdmin('/admin/sucursales'),
+    modulo({
+      label: 'Equipo',
+      icon: UserCog,
+      description: 'Las personas de tu equipo, sus roles y lo que puede abrir cada una.',
+      pestanas: [
+        { href: '/admin/empleados', label: 'Personas' },
+        {
+          href: '/admin/empleados/accesos',
+          label: 'Accesos',
+          description: 'Qué puede abrir cada persona del equipo.',
+          keywords: ['accesos', 'permisos', 'roles'],
+        },
+      ],
+    }),
+    ...deAdmin('/admin/integraciones', '/admin/supply'),
+  ],
 }
 
 export const GRUPOS_HUB_ADMIN: readonly NavGroup[] = [
@@ -1374,6 +1668,13 @@ const G_SA_NEGOCIO: NavGroup = {
       keywords: ['usuarios', 'cuentas', 'personas'],
     },
     {
+      href: '/superadmin/identidad',
+      label: 'Identidad',
+      icon: ShieldCheck,
+      description: 'Verificación de identidad: casos, incidencias y estado.',
+      keywords: ['identidad', 'verificacion', 'cedula', 'kyc', 'selfie', 'incidencias'],
+    },
+    {
       href: '/superadmin/planes',
       label: 'Planes',
       icon: Package,
@@ -1702,8 +2003,51 @@ function tipoVisible(
   return tipos.includes(ctx.tipoEmpresa)
 }
 
-/** ¿Se le ofrece este módulo a esta persona? */
+/** ¿Se le ofrece esta pestaña a esta persona? Su sección, su capacidad, su vertical y, si la pantalla la pide, su función. */
+function pestanaVisible(p: NavPestana, ctx: ContextoNav): boolean {
+  if (ctx.ocultas?.includes(p.href)) return false
+  if (!capacidadVisible(p.capacidad, ctx)) return false
+  if (!tipoVisible(p.tiposEmpresa, ctx)) return false
+  if (!seccionVisible(p.href, ctx)) return false
+  if (p.funcion) {
+    const seccion = adminSectionForPath(p.href)
+    if (seccion && !funcionPermitida(ctx.role, seccion, p.funcion, ctx.permisos)) return false
+  }
+  return true
+}
+
+/**
+ * LA ENTRADA TAL COMO LA VE ESTA PERSONA, o null si no ve ninguna parte de ella.
+ *
+ * Sin pestañas es lo de siempre (`canSeeItem`). Con pestañas, la entrada se queda con las que SÍ ve y aterriza en la primera
+ * (03 · C.3): su `href` pasa a ser el de esa pestaña, y los de todas las demás se suman a sus prefijos para que migas y
+ * resaltado sigan resolviendo la ruta. Es la misma regla con la que `visibleGroups` ya trataba a los grupos: lo que queda
+ * vacío no se pinta. La visibilidad es cosmética; la barrera de cada ruta sigue siendo su guardia de servidor.
+ */
+function entradaVisible(item: NavLink, ctx: ContextoNav): NavLink | null {
+  if (!item.pestanas) return canSeeItem(item, ctx) ? item : null
+  if (item.roles && !item.roles.includes(ctx.role)) return null
+  if (item.rangoMinimo !== undefined && rankOf(ctx.role) < item.rangoMinimo) return null
+  if (!capacidadVisible(item.capacidad, ctx)) return null
+  if (!tipoVisible(item.tiposEmpresa, ctx)) return null
+  const visibles = item.pestanas.filter((p) => pestanaVisible(p, ctx))
+  const primera = visibles[0]
+  if (!primera) return null
+  return {
+    ...item,
+    href: primera.href,
+    pestanas: visibles,
+    prefijos: [
+      ...(item.prefijos ?? []),
+      item.href,
+      ...visibles.flatMap((p) => [p.href, ...(p.prefijos ?? [])]),
+    ],
+  }
+}
+
+/** ¿Se le ofrece este módulo a esta persona? Con pestañas, basta con que vea una. */
 export function canSeeItem(item: NavLink, ctx: ContextoNav): boolean {
+  if (item.pestanas) return entradaVisible(item, ctx) !== null
   if (item.roles && !item.roles.includes(ctx.role)) return false
   if (item.rangoMinimo !== undefined && rankOf(ctx.role) < item.rangoMinimo) return false
   if (ctx.ocultas?.includes(item.href)) return false
@@ -1712,10 +2056,10 @@ export function canSeeItem(item: NavLink, ctx: ContextoNav): boolean {
   return seccionVisible(item.href, ctx)
 }
 
-/** Los grupos del espacio que quedan con al menos un módulo visible. */
+/** Los grupos del espacio que quedan con al menos un módulo visible, con cada módulo ya resuelto para esta persona. */
 export function visibleGroups(workspace: Workspace, ctx: ContextoNav): NavGroup[] {
   return workspace.groups
-    .map((g) => ({ ...g, items: g.items.filter((it) => canSeeItem(it, ctx)) }))
+    .map((g) => ({ ...g, items: g.items.flatMap((it) => entradaVisible(it, ctx) ?? []) }))
     .filter((g) => g.items.length > 0)
 }
 
@@ -1926,6 +2270,76 @@ export function workspaceLanding(
   return groups[0]?.items[0]?.href ?? null
 }
 
+// ── Pestañas de módulo ──────────────────────────────────────────────────────
+
+/** La pestaña de un módulo a la que pertenece una ruta: la de prefijo más largo. */
+function pestanaDeRuta(item: NavLink, pathname: string): NavPestana | null {
+  let mejor: NavPestana | null = null
+  let largo = -1
+  for (const p of item.pestanas ?? []) {
+    for (const prefijo of [p.href, ...(p.prefijos ?? [])]) {
+      if (casaPrefijo(pathname, prefijo) && prefijo.length > largo) {
+        mejor = p
+        largo = prefijo.length
+      }
+    }
+  }
+  return mejor
+}
+
+/** Una pestaña ya resuelta para pintar la barra del módulo. */
+export interface PestanaPintable {
+  label: string
+  href: string
+  activa: boolean
+}
+
+export interface BarraDeModulo {
+  /** El módulo al que pertenece la ruta («Pagos»). */
+  modulo: string
+  pestanas: PestanaPintable[]
+}
+
+/**
+ * LA BARRA DE PESTAÑAS QUE LE TOCA A UNA RUTA, o null si no le toca ninguna.
+ *
+ * No hay una barra por módulo escrita en cada layout: las pestañas de un módulo viven en carpetas distintas (`/admin/pagos`,
+ * `/admin/registros`, `/admin/conciliacion`…), así que ningún layout las envolvería a todas. La carcasa pregunta aquí por la
+ * ruta actual y pinta lo que le digan; quien añade una pestaña la declara en el módulo y aparece en todas sus pantallas.
+ *
+ * Solo se pinta con DOS o más pestañas visibles (una sola no es una barra), y no si la pantalla trae las suyas (`sinBarra`).
+ * Las pestañas ya llegan filtradas por sección, capacidad y función: lo que no se puede abrir no se ofrece.
+ */
+export function pestanasDeModulo(pathname: string, ctx: ContextoNav): BarraDeModulo | null {
+  const m = mejorCoincidencia(pathname, ctx)
+  const item = m?.item
+  if (!item || !item.pestanas || item.sinBarra || item.pestanas.length < 2) return null
+  const actual = pestanaDeRuta(item, pathname)
+  if (!actual) return null
+  return {
+    modulo: item.label,
+    pestanas: item.pestanas.map((p) => ({ label: p.label, href: p.href, activa: p === actual })),
+  }
+}
+
+/**
+ * Los destinos que ofrece una entrada: ella misma y cada una de sus otras pestañas como un destino propio («Pagos › Conciliación»).
+ * Es lo que permite que el buscador y la paleta lleven DIRECTO a una pantalla que ya no tiene entrada de menú.
+ */
+export function destinosDe(item: NavLink): NavLink[] {
+  const otras = (item.pestanas ?? []).slice(1)
+  return [
+    item,
+    ...otras.map<NavLink>((p) => ({
+      href: p.href,
+      label: `${item.label} › ${p.label}`,
+      icon: item.icon,
+      description: p.description ?? item.description,
+      keywords: p.keywords,
+    })),
+  ]
+}
+
 // ── Migas ───────────────────────────────────────────────────────────────────
 
 /** Etiquetas de los sub-segmentos comunes para el último nivel de la miga. */
@@ -1984,6 +2398,9 @@ export function breadcrumbs(pathname: string, ctx: ContextoNav): Miga[] {
   )
   const resto = pathname.slice(prefijo?.length ?? 0).split('/').filter(Boolean)
 
+  // La PESTAÑA no es una miga: la barra del módulo ya dice cuál es la activa, y una cuarta miga («Empresa › Operaciones › Pagos ›
+  // Conciliación») no cabe junto al buscador. Las migas llegan hasta el módulo; la pestaña la marca la barra.
+
   if (resto.length === 0) {
     migas.push({ label: m.item.label })
     return migas
@@ -2008,9 +2425,18 @@ export interface ResultadoBusqueda {
 export function modulosVisibles(ctx: ContextoNav): ResultadoBusqueda[] {
   return visibleWorkspaces(ctx).flatMap((workspace) =>
     workspace.groups.flatMap((group) =>
-      group.items.map((item) => ({ item, workspace, group }))
+      group.items.flatMap(destinosDe).map((item) => ({ item, workspace, group }))
     )
   )
+}
+
+/**
+ * TODAS las rutas que el menú le ofrece a esta persona: cada entrada y cada una de sus pestañas visibles. Es lo que hay que
+ * preguntar para saber si una pantalla «está en el menú»: con módulos de pestañas, el `href` de una entrada solo dice a dónde
+ * aterriza, no todo lo que contiene.
+ */
+export function rutasOfrecidas(ctx: ContextoNav): string[] {
+  return modulosVisibles(ctx).map((r) => r.item.href)
 }
 
 /** Quita tildes y baja a minúsculas: «Analítica» encuentra «analitica». */
@@ -2072,7 +2498,16 @@ export function navForRole(role: AppRole): NavGroup[] {
   // secciones también en la lista plana: es lo que consumían la paleta de
   // comandos y el buscador antes de esta fase.
   return grupos
-    .map((g) => ({ ...g, items: g.items.filter((it) => seccionVisible(it.href, ctx)) }))
+    .map((g) => ({
+      ...g,
+      items: g.items.flatMap((it) =>
+        it.pestanas
+          ? (entradaVisible(it, ctx) ?? [])
+          : (!it.roles || it.roles.includes(role)) && seccionVisible(it.href, ctx)
+            ? [it]
+            : []
+      ),
+    }))
     .filter((g) => g.items.length > 0)
 }
 

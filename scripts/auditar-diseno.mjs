@@ -95,12 +95,56 @@ const SIN_VARIABLES_CSS = (ruta) =>
   EXENTOS_EXACTOS.has(ruta.split(sep).join('/')) ||
   /opengraph-image|\/og\/|share\/og|correo|email|reporte-imprimible/i.test(ruta.split(sep).join('/'))
 const sinComentarios = (s) => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1')
+const normalizar = (ruta) => ruta.split(sep).join('/')
+
+/** Cada archivo se lee y se limpia una sola vez, aunque lo miren quince medidas. */
+const FUENTES = new Map()
+const fuenteSinComentarios = (ruta) => {
+  if (!FUENTES.has(ruta)) FUENTES.set(ruta, sinComentarios(readFileSync(ruta, 'utf8')))
+  return FUENTES.get(ruta)
+}
+
+/**
+ * EL PANEL, para las medidas que solo le tocan a él.
+ *
+ * Las páginas de los cinco grupos de rutas de personal y los componentes propios de administración y de plataforma. El cliente final
+ * (`(cliente)`, `(public)`) queda fuera A PROPÓSITO: usa `<button>`, `<h1>` y tablas legítimamente, y la auditoría del panel
+ * (`docs/auditoria-admin`) lo declaró fuera de alcance. Los componentes que comparten panel y cliente (`src/components/crm`, `scanner`…)
+ * tampoco entran: no hay forma de decir de quién son sin mirar quién los importa, y una medida que cuenta lo que no es suyo no mide.
+ */
+const PREFIJOS_DE_PANEL = [
+  'src/app/(admin)/',
+  'src/app/(superadmin)/',
+  'src/app/(empleado)/',
+  'src/app/(vendedor)/',
+  'src/app/(onboarding)/',
+  'src/components/admin/',
+  'src/components/superadmin/',
+]
+const enPanel = (_m, ruta) => PREFIJOS_DE_PANEL.some((p) => normalizar(ruta).startsWith(p))
+
+/**
+ * Carpetas de componentes que son listados DE PERSONAL de un módulo pero no están bajo `components/admin` (fase 7). Se listan una a
+ * una, a propósito: no se amplía `PREFIJOS_DE_PANEL` porque eso cambiaría todas las demás medidas y la razón de dejarlas fuera
+ * (compartidas con el cliente) sigue valiendo para `crm` o `scanner`. Aquí solo hay tablas, y las de estas carpetas son de personal.
+ */
+const CARPETAS_DE_MODULOS = [
+  'src/components/excursiones/',
+  'src/components/carwash/',
+  'src/components/inventario/',
+  'src/components/reportes/',
+  'src/components/facturas/',
+  'src/components/conciliacion/',
+  'src/components/billing/',
+  'src/components/auditoria/',
+  'src/components/supply-v2/',
+]
 
 export const cuenta = (re, filtro = () => true) => {
   const porArchivo = {}, valores = {}
   let total = 0
   for (const a of TODOS) {
-    const src = sinComentarios(readFileSync(a, 'utf8'))
+    const src = fuenteSinComentarios(a)
     for (const m of src.matchAll(re)) {
       if (!filtro(m, a)) continue
       total++
@@ -118,6 +162,71 @@ const top = (o, n = 12) =>
     .slice(0, n)
     .map(([k, v]) => `${k}:${v}`)
     .join('  ')
+
+/**
+ * Variables CSS con un hex literal en `globals.css`.
+ *
+ * El auditor cuenta hex en TSX y NO veía estas: los temas `retail`, `vibe` y `theme-landing` nacieron pegados al `@theme` global con
+ * el hexadecimal escrito, y cada uno es un azul (u otro color) más que no sale de la escala. Se cuenta la declaración
+ * `--nombre: #hex;`, no cada hex suelto, para que un degradado con dos paradas no pese doble.
+ */
+const contarVariablesHexEnGlobalsCss = () => {
+  const css = readFileSync(join('src', 'app', 'globals.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+  return [...css.matchAll(/--[\w-]+\s*:\s*#[0-9a-fA-F]{3,8}\s*;/g)].length
+}
+
+/**
+ * Mapas «estado → clases de color» escritos a mano.
+ *
+ * HEURÍSTICA, y se dice: una declaración `const X = { … }` (con o sin tipo `Record<…>`) cuyo nombre o tipo habla de estado, tono,
+ * insignia o variante Y cuyo cuerpo trae clases `bg-`/`text-`/`border-`. Cada una es un contrato «estado → aspecto» propio que debería
+ * salir de `estadoUi`. Se mide en TODO el código (como el informe 07 · FE-03), porque el cliente repite el mismo defecto.
+ */
+const contarMapasDeEstado = () => {
+  let total = 0
+  for (const a of TODOS) {
+    const s = fuenteSinComentarios(a)
+    for (const m of s.matchAll(/\b(?:const|let)\s+([A-Za-z_$][\w$]*)\s*(?::\s*Record<[^=\n]*?>)?\s*=\s*\{/g)) {
+      if (!/estado|status|tone|tono|state|badge|chip|variant/i.test(m[0])) continue
+      let profundidad = 1
+      let i = m.index + m[0].length
+      const inicio = i
+      while (i < s.length && profundidad > 0) {
+        const c = s[i++]
+        if (c === '{') profundidad++
+        else if (c === '}') profundidad--
+      }
+      if (/['"`][^'"`]*\b(?:bg|text|border)-[a-z]/.test(s.slice(inicio, i))) total++
+    }
+  }
+  return total
+}
+
+/**
+ * Componentes de `@membego/ui` que NADIE importa.
+ *
+ * Se importan por `@/components/ui/<nombre>` (alias a `packages/ui/src/ui`), por `@membego/ui/ui/<nombre>` o, dentro del paquete, por
+ * ruta relativa. Un componente sin importadores es mantenimiento sin cliente, y el paquete es lo que un satélite instalaría: se entrega
+ * tal cual. No sigue la cadena (un componente que solo usa otro componente sin uso cuenta como usado): es un suelo, no el total.
+ */
+/**
+ * Primitivas de la fase 4 que ya existen y todavía no tienen consumidor: es lo que la fase pide («primitivas con su ficha y sin
+ * consumidores aún», docs/auditoria-admin/12). Se EXCLUYEN de «sin uso» mientras esperan, para que construirlas no sea subir un
+ * techo. La lista solo puede ENCOGERSE: `tests/deuda-diseno.test.ts` falla si alguna ya tiene importador (hay que quitarla de
+ * aquí) y la fase 8 (`knip`) falla si alguna sigue sin él. HOY ESTÁ VACÍA: `Tabla`, `BarrasSimples` y `NavSeccion` salieron en la fase 5;
+ * `Campo` y `SelectorColor` con el formulario único de plan, y `BarraFiltros` con el listado de reservas de Parques y Tours (fase 7).
+ */
+export const PRIMITIVAS_EN_ESPERA = new Set()
+
+const contarComponentesSinUso = () => {
+  const dir = join('packages', 'ui', 'src', 'ui')
+  const nombres = readdirSync(dir).filter((f) => f.endsWith('.tsx')).map((f) => f.slice(0, -4)).filter((n) => !PRIMITIVAS_EN_ESPERA.has(n))
+  const fuentes = TODOS.map((a) => [normalizar(a), fuenteSinComentarios(a)])
+  return nombres.filter((nombre) => {
+    const re = new RegExp(`['"](?:@/components/ui/|@membego/ui/ui/|\\./|\\.\\./ui/)${nombre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"]`)
+    return !fuentes.some(([ruta, src]) => ruta !== `packages/ui/src/ui/${nombre}.tsx` && re.test(src))
+  }).length
+}
 
 /** Los patrones. Uno por deuda, con lo que significa si sube. */
 export const MEDIDAS = {
@@ -159,13 +268,102 @@ export const MEDIDAS = {
     porque: 'Sin escala, el síntoma es un modal por debajo de un mapa, en producción.',
     re: /\bz-\[[^\]]+\]/g,
   },
+
+  // ── Fase 2 de la auditoría del panel (docs/auditoria-admin · 07). Techos NUEVOS: miden lo que antes nada vigilaba. ──
+  h1Crudo: {
+    que: '`<h1>` escritos a mano en el panel',
+    porque:
+      'La cabecera de página es `PageHeader`. Cada `<h1>` a mano es una variante más de título (FE-02) y, a menudo, una pantalla sin migas ' +
+      'ni descripción.',
+    re: /<h1\b/g,
+    filtro: enPanel,
+  },
+  botonCrudo: {
+    que: '`<button>` crudos en el panel',
+    porque: 'No traen foco, tamaño ni estado de carga del sistema (FE-05); cada uno es un primario con hover propio.',
+    re: /<button\b/g,
+    filtro: enPanel,
+  },
+  titulo2xlBold: {
+    que: '`text-2xl font-bold` en el panel',
+    porque:
+      'Es el título de página escrito a mano: el panel usa `text-h1`. Dos tallas para lo mismo es lo que hace que 17 pantallas se vean ' +
+      'distintas (FE-12).',
+    re: /\b(?:text-2xl font-bold|font-bold text-2xl)\b/g,
+    filtro: enPanel,
+  },
+  tarjetaLocal: {
+    que: 'Funciones LOCALES de tarjeta (`Kpi`, `Tarjeta*`, `Metrica`, `Cifra`, `Dato`) en el panel',
+    porque:
+      'Definidas dentro de una página o de un archivo y NO exportadas, repiten lo que `StatCard` ya hace, con otro tamaño de cifra y otro radio ' +
+      '(FE-04). Una página que se llame `MetricasPage` no es una tarjeta y no cuenta. Una tarjeta EXPORTADA y compartida (`TarjetaAccion` del ' +
+      'Resumen, las tarjetas de pago de Pagos) es el remedio, no el defecto: desde la fase 5 no cuenta (la medida cuenta lo que su nombre ' +
+      'dice, «locales»; el techo se recalcula con esa definición y solo puede bajar).',
+    re: /\bfunction\s+(?:Kpi|Tarjeta|Metrica|Cifra|Dato|StatCard|KpiCard)(?!\w*(?:Page|Layout)\b)\w*\s*\(|\bconst\s+(?:Kpi|Tarjeta|Metrica|Cifra|Dato|StatCard|KpiCard)(?!\w*(?:Page|Layout)\b)\w*\s*=\s*(?:\(|async|function|memo)/g,
+    filtro: (m, a) => enPanel(m, a) && !/\bexport\s+(?:default\s+)?$/.test(m.input.slice(Math.max(0, m.index - 24), m.index)),
+  },
+  tablaCruda: {
+    que: '`<table>` crudas en el panel',
+    porque:
+      'Sin `caption`, sin `scope` y con su propia paginación: 47 tablas que se ven y se leen distinto (06 · T-01, FE-13). La primitiva de ' +
+      'tabla llega en la fase 4.',
+    re: /<table\b/g,
+    filtro: enPanel,
+  },
+  tablaCrudaEnModulos: {
+    que: '`<table>` crudas en los componentes de los módulos del panel',
+    porque:
+      'La misma deuda que `tablaCruda`, en carpetas que `PREFIJOS_DE_PANEL` no recorre (excursiones, carwash, inventario, reportes, facturas, ' +
+      'conciliación, billing, auditoría, supply-v2) y que son listados de personal: un listado sin caption, sin scope y con su propia ' +
+      'paginación (06 · T-01). Sin esta medida, migrar Parques y Tours no bajaba ningún número.',
+    re: /<table\b/g,
+    filtro: (_m, ruta) => CARPETAS_DE_MODULOS.some((p) => normalizar(ruta).startsWith(p)),
+  },
+  variablesHexEnGlobalsCss: {
+    que: 'Variables CSS con hex literal en globals.css',
+    porque:
+      'El auditor de TSX no las veía. Cada una es un color de marca más fuera de la escala (FE-12): el azul de la marca existe varias ' +
+      'veces. Los temas del cliente deben derivarse de la escala, no repetirla.',
+    medir: contarVariablesHexEnGlobalsCss,
+  },
+  mapasDeEstado: {
+    que: 'Mapas «estado → clases de color» escritos a mano',
+    porque: 'Cada uno es un contrato estado→aspecto propio (FE-03). Debe salir de un solo `estadoUi`. Heurística: ver `contarMapasDeEstado`.',
+    medir: contarMapasDeEstado,
+  },
+  componentesSinUso: {
+    que: 'Componentes de @membego/ui que nadie importa',
+    porque: 'Mantenimiento sin cliente, y el paquete se entrega tal cual a cada satélite (FE-14).',
+    medir: contarComponentesSinUso,
+  },
+
+  // ── Fase 4 (tarea 4.10): accesibilidad, medida en el panel. Techos nuevos; antes nada los vigilaba (FE-13). ──
+  botonIconoSinNombre: {
+    que: '`<Button size="icon">` sin `aria-label` ni `title` en el panel',
+    porque:
+      'Un botón que solo trae un icono no tiene nombre para un lector de pantalla: «botón» a secas. Se cuenta como CANDIDATO: un ' +
+      '`{...props}` podría traer el nombre, y aun así conviene que se vea en la etiqueta.',
+    re: /<Button\b(?:=>|[^>])*>/g,
+    filtro: (m, a) => enPanel(m, a) && /\bsize=(?:"icon(?:-sm)?"|\{['"]icon(?:-sm)?['"]\})/.test(m[0]) && !/\baria-label=|\btitle=/.test(m[0]),
+  },
+  outlineSinFoco: {
+    que: 'Líneas con `outline-none` sin `focus-visible` en el panel',
+    porque:
+      'Quitar el contorno sin ofrecer otro deja el foco invisible para quien navega con teclado (WCAG 2.4.7). Se cuenta por línea: ' +
+      'un `focus-visible` en la línea siguiente de la misma `className` sale como candidato.',
+    re: /^[^\n]*\boutline-none\b[^\n]*$/gm,
+    filtro: (m, a) => enPanel(m, a) && !/focus-visible/.test(m[0]),
+  },
 }
+
+/** Cuenta una medida: por expresión regular (con su filtro) o por una función propia cuando no es cuestión de texto. */
+const medida = (m) => (m.medir ? { total: m.medir(), porArchivo: {}, valores: {} } : cuenta(m.re, m.filtro ?? (() => true)))
 
 /** Cuenta todo. Devuelve `{ clave: número }`. */
 export function auditar() {
   const r = {}
   for (const [clave, m] of Object.entries(MEDIDAS)) {
-    r[clave] = cuenta(m.re, m.filtro ?? (() => true)).total
+    r[clave] = medida(m).total
   }
   return r
 }
@@ -184,7 +382,7 @@ export function auditarPaquete() {
 if (process.argv[1]?.endsWith('auditar-diseno.mjs')) {
   console.log(`Archivos analizados: ${TODOS.length}\n`)
   for (const [clave, m] of Object.entries(MEDIDAS)) {
-    const r = cuenta(m.re, m.filtro ?? (() => true))
+    const r = medida(m)
     console.log(`${m.que}: ${r.total}`)
     if (r.total > 0) {
       const arch = Object.entries(r.porArchivo)

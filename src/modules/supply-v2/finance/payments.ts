@@ -1,5 +1,6 @@
 import type { SupplyV2SupplierPaymentMethod } from '@prisma/client'
 import type { Tx } from '@/lib/tenant'
+import { evaluarRequisitoDePagoAProveedor } from '@/modules/identidad/reglas'
 import { auditarEnTx, type ContextoAuditoria } from '../core/auditoria'
 import { decimal, redondear2 } from '../core/dinero'
 import { fallo } from '../core/errores'
@@ -140,6 +141,19 @@ export interface PagoConfirmadoProveedor {
 }
 
 /**
+ * IDENTIDAD DE QUIEN OBLIGA AL PROVEEDOR (verificación de identidad, Fase 5). Si el equipo encendió la regla «pago a un
+ * proveedor», el dinero no sale hasta que la persona que aceptó el contrato del proveedor esté verificada (solo antes del
+ * primer pago confirmado, o en todos, según el alcance). Con la regla apagada —el estado de serie— o con la verificación
+ * apagada, no hace nada. Es la ÚNICA puerta del sistema que consulta una regla de identidad: ninguna compra, promoción,
+ * membresía, renovación ni acceso pasa por aquí.
+ */
+async function exigirIdentidadDelRepresentante(tx: Tx, d: { supplierId: string; paymentId: string; representanteId: string | null }): Promise<void> {
+  const confirmadosAntes = await tx.supplyV2SupplierPayment.count({ where: { supplierId: d.supplierId, status: 'CONFIRMED', id: { not: d.paymentId } } })
+  const decision = await evaluarRequisitoDePagoAProveedor({ representanteId: d.representanteId, esPrimerPago: confirmadosAntes === 0 })
+  if (decision.aplica && !decision.cumple) fallo('IDENTIDAD_DEL_REPRESENTANTE', decision.mensaje)
+}
+
+/**
  * CONFIRMACIÓN (§41): otra persona autorizada vio salir el dinero. En la
  * misma transacción se aplica a lo declarado hasta lo que quepa.
  */
@@ -148,13 +162,14 @@ export async function confirmarPagoProveedorEnTx(tx: Tx, paymentId: string, ctx:
   await bloquearFila(tx, 'supply_v2_supplier_payments', paymentId)
   const p = await tx.supplyV2SupplierPayment.findUnique({
     where: { id: paymentId },
-    select: { id: true, number: true, status: true, amount: true, appliedAmount: true, createdById: true, intendedInvoiceId: true, intendedObligationId: true, intendedSettlementId: true, intendedDeposit: true, supplier: { select: { companyId: true } }, fundedDeposit: { select: { id: true } } },
+    select: { id: true, number: true, status: true, amount: true, appliedAmount: true, createdById: true, intendedInvoiceId: true, intendedObligationId: true, intendedSettlementId: true, intendedDeposit: true, supplierId: true, supplier: { select: { companyId: true, termsAcceptedById: true } }, fundedDeposit: { select: { id: true } } },
   })
   if (!p) fallo('PAGO_NO_ENCONTRADO', 'El pago no existe.')
   if (p.status === 'CONFIRMED') {
     return { id: p.id, number: p.number, aplicado: p.appliedAmount.toFixed(2), sinAplicar: p.amount.minus(p.appliedAmount).toFixed(2), depositId: p.fundedDeposit?.id ?? null, repetido: true }
   }
   exigirTransicion(TRANSICIONES_PAGO_PROVEEDOR, p.status, 'CONFIRMED', 'Pago')
+  await exigirIdentidadDelRepresentante(tx, { supplierId: p.supplierId, paymentId: p.id, representanteId: p.supplier.termsAcceptedById })
   const autoaprobada = esAutoaprobacion(p.createdById, ctx.actorId)
   await tx.supplyV2SupplierPayment.update({ where: { id: p.id }, data: { status: 'CONFIRMED', confirmedById: ctx.actorId, confirmedAt: new Date() } })
   await auditarEnTx(tx, ctx, 'SUPPLY_V2_PAYMENT_CONFIRMED', 'SupplyV2SupplierPayment', p.id, {

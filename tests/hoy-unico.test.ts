@@ -53,7 +53,7 @@ const sinComentarios = (s: string) =>
 
 test('el Resumen, el escáner y el menú calculan «hoy» con la misma función', () => {
   const superficies: Record<string, RegExp> = {
-    'src/modules/admin/dashboardQueries.ts': /inicioDeHoyEn\(/,
+    'src/modules/admin/resumen/calendario.ts': /inicioDeHoyEn\(/,
     'src/components/scanner/VisitasDeHoy.tsx': /inicioDeHoy\(/,
     'src/modules/navegacion/badges.ts': /inicioDeHoy\(/,
   }

@@ -24,6 +24,8 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { formatDateTime } from '@/lib/format'
 import { plural } from '@/lib/plural'
 import { Megaphone, TriangleAlert, X } from 'lucide-react'
+import { Tabla } from '@/components/ui/tabla'
+import { EstadoChip, type TonoEstado } from '@/components/ui/estado-chip'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,11 +40,11 @@ const BASE = '/superadmin/campanas'
  * sí y otras no— se pintaba idéntico a un reparto perfecto, con el número de
  * fallos escondido en una insignia pequeña a tres columnas de distancia.
  */
-const CHIP_ESTADO: Record<string, string> = {
-  BORRADOR: 'bg-muted text-muted-foreground',
-  APLICADA: 'bg-success/15 text-success',
-  APLICADA_PARCIAL: 'bg-warning/15 text-warning',
-  ARCHIVADA: 'bg-muted text-muted-foreground line-through',
+const TONO_CAMPANA: Record<string, TonoEstado> = {
+  BORRADOR: 'neutro',
+  APLICADA: 'exito',
+  APLICADA_PARCIAL: 'aviso',
+  ARCHIVADA: 'neutro',
 }
 
 /**
@@ -189,77 +191,60 @@ export default async function CampanasGlobalesPage({
               <p className="text-caption text-muted-foreground">
                 {datos.filas.length} de {plural(datos.total, 'campaña', 'campañas')}
               </p>
-              <div className="overflow-x-auto rounded-2xl border border-border/70 bg-card">
-                <table className="w-full min-w-[720px] text-sm">
-                  <caption className="sr-only">
-                    Campañas conjuntas con su tipo, empresas alcanzadas y estado
-                  </caption>
-                  <thead>
-                    <tr className="border-b border-border/60 text-left text-caption uppercase tracking-wide text-muted-foreground">
-                      <th scope="col" className="px-4 py-3 font-semibold">Campaña</th>
-                      <th scope="col" className="px-4 py-3 font-semibold">Crea</th>
-                      <th scope="col" className="px-4 py-3 font-semibold">Empresas con su copia</th>
-                      <th scope="col" className="px-4 py-3 font-semibold">Estado</th>
-                      <th scope="col" className="px-4 py-3 font-semibold">Creada</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/50">
-                    {datos.filas.map((c) => (
-                      <tr key={c.id} className="hover:bg-muted/40">
-                        <td className="px-4 py-3">
+              <Tabla
+                caption="Campañas conjuntas con su tipo, empresas alcanzadas y estado"
+                claveDe={(c) => c.id}
+                filas={datos.filas}
+                filaNavegable
+                columnas={[
+                  {
+                    clave: 'campana',
+                    encabezado: 'Campaña',
+                    celda: (c) => (
+                      <>
+                        <Link href={`${BASE}/${c.id}`} className="font-semibold text-primary hover:underline">
+                          {c.nombre}
+                        </Link>
+                        {c.descripcion && <span className="block max-w-72 truncate text-caption font-normal text-muted-foreground">{c.descripcion}</span>}
+                      </>
+                    ),
+                  },
+                  { clave: 'tipo', encabezado: 'Crea', prioridad: 2, valor: (c) => CAMPANA_TIPO_LABELS[c.tipo as CampanaTipo] ?? c.tipo },
+                  {
+                    clave: 'empresas',
+                    encabezado: 'Empresas con su copia',
+                    celda: (c) => (
+                      <span className="whitespace-nowrap">
+                        {/* El encabezado dice ya de qué es el «3/5»: antes ponía solo «Empresas» y había que deducirlo. */}
+                        <span className="font-bold tabular-nums text-foreground">
+                          {c.aplicadas}/{c.totalEmpresas}
+                        </span>
+                        {c.todasLasEmpresas && <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-overline text-muted-foreground">todas</span>}
+                        {c.conError > 0 && (
+                          // Lleva a la campaña, donde está el error de cada empresa: antes era una insignia que no se podía pulsar.
                           <Link
                             href={`${BASE}/${c.id}`}
-                            className="font-semibold text-primary hover:underline"
+                            className="ml-2 inline-block rounded-full bg-destructive/10 px-2 py-0.5 text-overline text-destructive hover:bg-destructive/20"
                           >
-                            {c.nombre}
+                            {c.conError} con error
                           </Link>
-                          {c.descripcion && (
-                            <p className="truncate text-caption text-muted-foreground">
-                              {c.descripcion}
-                            </p>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground">
-                          {CAMPANA_TIPO_LABELS[c.tipo as CampanaTipo] ?? c.tipo}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3">
-                          {/* El encabezado dice ya de qué es el «3/5»: antes
-                              ponía solo «Empresas» y había que deducirlo. */}
-                          <span className="font-bold tabular-nums text-foreground">
-                            {c.aplicadas}/{c.totalEmpresas}
-                          </span>
-                          {c.todasLasEmpresas && (
-                            <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-overline text-muted-foreground">
-                              todas
-                            </span>
-                          )}
-                          {c.conError > 0 && (
-                            // Lleva a la campaña, donde está el error de cada
-                            // empresa: antes era una insignia que no se podía
-                            // pulsar y el detalle había que buscarlo a mano.
-                            <Link
-                              href={`${BASE}/${c.id}`}
-                              className="ml-2 inline-block rounded-full bg-destructive/10 px-2 py-0.5 text-overline text-destructive hover:bg-destructive/20"
-                            >
-                              {c.conError} con error
-                            </Link>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span
-                            className={`rounded-full px-2.5 py-0.5 text-overline ${CHIP_ESTADO[c.estado] ?? 'bg-muted'}`}
-                          >
-                            {CAMPANA_ESTADO_LABELS[c.estado as CampanaEstado] ?? c.estado}
-                          </span>
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-caption text-muted-foreground">
-                          {formatDateTime(c.createdAt)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                        )}
+                      </span>
+                    ),
+                  },
+                  {
+                    clave: 'estado',
+                    encabezado: 'Estado',
+                    celda: (c) => <EstadoChip tono={TONO_CAMPANA[c.estado] ?? 'neutro'}>{CAMPANA_ESTADO_LABELS[c.estado as CampanaEstado] ?? c.estado}</EstadoChip>,
+                  },
+                  {
+                    clave: 'creada',
+                    encabezado: 'Creada',
+                    prioridad: 3,
+                    celda: (c) => <span className="whitespace-nowrap text-caption text-muted-foreground">{formatDateTime(c.createdAt)}</span>,
+                  },
+                ]}
+              />
 
               {paginas > 1 && (
                 <nav

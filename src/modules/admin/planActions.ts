@@ -10,7 +10,7 @@ import { plural } from '@/lib/plural'
 import { explicarNoBorrable } from '@/modules/membresias/borrable'
 import { revocarConsentimientos } from '@/modules/pagos/consentimientos'
 import { NAV_CLIENTE_TAG } from '@/modules/cliente/cacheTags'
-import { validarImagenPlan } from '@/modules/planes/imagen'
+import { leerPlanDeFormulario, type ErroresPlan, type ValoresPlan } from '@/modules/planes/formulario'
 import { emitirCambioMembresiaAlBus, registrarEventoMembresia } from '@/modules/membresia/eventos'
 
 async function requireSuperAdmin() {
@@ -21,74 +21,11 @@ async function requireSuperAdmin() {
 
 export interface PlanActionState {
   error?: string
+  /** Qué campo falló y qué se le dice: el formulario lo enlaza con su campo (`aria-describedby`). */
+  campos?: ErroresPlan
+  /** Lo que se había escrito, para no vaciar el formulario al fallar. */
+  valores?: ValoresPlan
   success?: boolean
-}
-
-/**
- * F4.3: parsea los campos del plan (compartido entre crear y actualizar).
- * Incluye vigencia, condiciones, color y orden de presentación.
- */
-function parsePlan(formData: FormData): { error: string } | {
-  nombre: string
-  precio: number
-  lavados: number
-  esIlimitado: boolean
-  descripcion: string | null
-  beneficios: string[]
-  vigenciaDias: number
-  condiciones: string | null
-  color: string | null
-  imagenUrl: string | null
-  orden: number
-} {
-  const nombre = String(formData.get('nombre') ?? '').trim()
-  const precioRaw = String(formData.get('precio') ?? '').trim()
-  const lavadosRaw = String(formData.get('lavados') ?? '').trim()
-  const esIlimitado = formData.get('esIlimitado') === 'on'
-  const descripcion = String(formData.get('descripcion') ?? '').trim()
-  const beneficiosRaw = String(formData.get('beneficios') ?? '').trim()
-  const vigenciaRaw = String(formData.get('vigenciaDias') ?? '').trim()
-  const condiciones = String(formData.get('condiciones') ?? '').trim()
-  const color = String(formData.get('color') ?? '').trim()
-  const imagenUrl = String(formData.get('imagenUrl') ?? '').trim()
-  const ordenRaw = String(formData.get('orden') ?? '').trim()
-
-  if (!nombre || !precioRaw) return { error: 'Nombre y precio son obligatorios.' }
-
-  const precio = Number(precioRaw)
-  if (isNaN(precio) || precio < 0) return { error: 'Precio inválido.' }
-
-  const vigenciaDias = vigenciaRaw ? Number(vigenciaRaw) : 30
-  if (isNaN(vigenciaDias) || vigenciaDias < 1) {
-    return { error: 'La vigencia debe ser al menos 1 día.' }
-  }
-
-  const orden = ordenRaw ? Number(ordenRaw) : 0
-  if (isNaN(orden)) return { error: 'El orden no es válido.' }
-
-  // El campo de la imagen es oculto y lo rellena el componente de subida, así
-  // que aquí es donde se comprueba de verdad: un formulario enviado a mano
-  // podría poner cualquier origen, y esa URL acaba en un `<img>` de la
-  // pantalla de cada cliente.
-  const errorImagen = validarImagenPlan(imagenUrl)
-  if (errorImagen) return { error: errorImagen }
-
-  return {
-    nombre,
-    precio,
-    lavados: Number(lavadosRaw) || 0,
-    esIlimitado,
-    descripcion: descripcion || null,
-    beneficios: beneficiosRaw
-      .split('\n')
-      .map((b) => b.trim())
-      .filter(Boolean),
-    vigenciaDias,
-    condiciones: condiciones || null,
-    color: color || null,
-    imagenUrl: imagenUrl || null,
-    orden,
-  }
 }
 
 /**
@@ -174,10 +111,11 @@ export async function crearPlan(
     // Superadmin: companyId del form o, si no viene, la empresa ACTIVA del
     // selector del panel. Staff: siempre la de su sesión.
     (await resolveCompanyId(user, formData)) ?? ''
-  if (!companyId) return { error: 'Empresa requerida.' }
+  if (!companyId) return { error: 'Elige la empresa del plan.', campos: { companyId: 'Elige la empresa del plan.' } }
 
-  const parsed = parsePlan(formData)
-  if ('error' in parsed) return { error: parsed.error }
+  const leido = leerPlanDeFormulario(formData)
+  if (!leido.ok) return { error: leido.error, campos: leido.campos, valores: leido.valores }
+  const parsed = leido.plan
 
   try {
     const creado = await conEmpresa(companyId, (tx) =>
@@ -252,8 +190,9 @@ export async function actualizarPlan(
   const planId = String(formData.get('planId') ?? '').trim()
   if (!planId) return { error: 'Plan no especificado.' }
 
-  const parsed = parsePlan(formData)
-  if ('error' in parsed) return { error: parsed.error }
+  const leido = leerPlanDeFormulario(formData)
+  if (!leido.ok) return { error: leido.error, campos: leido.campos, valores: leido.valores }
+  const parsed = leido.plan
 
   const activo = formData.get('activo') === 'on'
 

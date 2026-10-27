@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { CAPACIDAD_DE_SECCION, SECCIONES_POR_CAPACIDAD } from '../src/modules/capacidades/catalogo'
 import { ADMIN_SECTIONS, adminSectionForPath, seccionPermitida } from '../src/lib/auth/permissions'
 import { FUNCIONES_POR_SECCION } from '../src/lib/auth/funciones'
+import { resolverRuta, rutasOfrecidas, type ContextoNav } from '../src/components/layout/nav-config'
 
 /** ANALÍTICA · sección, guardias y aislamiento (Fase 6). El comportamiento contra la base está en `tests/postgres/analytics.db.test.ts`. */
 
@@ -43,9 +44,15 @@ test('Supply Economics se compone en la PÁGINA: el módulo de analítica no lo 
   assert.match(leer('src/components/analytics/AnaliticaPlataformaVista.tsx'), /no se suman a éstas|no se suma al GMV/)
 })
 
-test('el menú: «Resultados Membego» detrás de su capacidad y en Operaciones; «Analítica de Membego» para el superadmin', () => {
+test('el menú: «Resultados Membego» es una pestaña de Pedidos Membego, detrás de su capacidad; «Analítica de Membego» para el superadmin', () => {
   const nav = leer('src/components/layout/nav-config.ts')
+  // El destino sigue declarado con su capacidad en el catálogo de destinos…
   assert.match(nav, /href: '\/admin\/resultados-membego',[\s\S]{0,700}capacidad: 'PEDIDOS_MEMBEGO'/)
-  assert.match(nav, /'\/admin\/facturacion-membego', '\/admin\/resultados-membego'/)
   assert.match(nav, /href: '\/superadmin\/analitica'/)
+  // …y se ofrece como pestaña del módulo de pedidos (fase 6), solo con la capacidad encendida.
+  const encendida: ContextoNav = { role: 'ADMINISTRADOR', scope: 'COMPANY', capacidades: ['PEDIDOS_MEMBEGO'] }
+  const apagada: ContextoNav = { role: 'ADMINISTRADOR', scope: 'COMPANY', capacidades: [] }
+  assert.ok(rutasOfrecidas(encendida).includes('/admin/resultados-membego'))
+  assert.ok(!rutasOfrecidas(apagada).includes('/admin/resultados-membego'))
+  assert.equal(resolverRuta('/admin/resultados-membego', encendida)?.href, '/admin/pedidos-membego')
 })

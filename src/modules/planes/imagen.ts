@@ -11,7 +11,7 @@
  * Por eso solo se acepta lo que salió de nuestro propio bucket público. No es
  * desconfianza hacia quien administra: es que el daño no recae sobre él.
  *
- * Se comprueba en el SERVIDOR, en `parsePlan`, no aquí en el navegador: el
+ * Se comprueba en el SERVIDOR, en `leerPlanDeFormulario`, no aquí en el navegador: el
  * navegador es justo la parte que se puede saltar.
  */
 

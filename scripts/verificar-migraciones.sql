@@ -1,6 +1,6 @@
 -- =============================================================================
 -- ¿ESTÁN APLICADAS TODAS LAS MIGRACIONES DE prisma/migrations? (versión larga)
--- Generado con scripts/generar-verificar-migraciones.mjs en 70f88487: 244 migraciones, última 20261078_conciliacion_cerrar_sin_entregar.
+-- Generado con scripts/generar-verificar-migraciones.mjs en 2d13a2a6: 254 migraciones, última 20261088_conciliacion_cerrar_sin_entregar.
 -- Solo lee; no modifica nada. Es UNA sola sentencia.
 --
 -- Ejecútalo desde el archivo, no pegado (es largo y los pegados se recortan):
@@ -257,7 +257,17 @@ WITH repo(nombre, checksum) AS (VALUES
   ('20261075_expo_push_tokens','140596417c3cf46df3538e522c09dd49903e5fedff4d2b4ae251e7b0e4d3ed59'),
   ('20261076_push_tokens_rls','0006a90d510b74b2f71c33d7d761045b45c15272e9c0c5e29d26915fa002be5d'),
   ('20261077_consentimientos_pago','fe14a7d09234d07ce318497a83e61336652d5c665013f83474a2e7b36884795e'),
-  ('20261078_conciliacion_cerrar_sin_entregar','1a52882b75f2536a289a92f807ac9ee927414d1d710c05405a5aebeb7eea7d76')
+  ('20261078_identidad_acciones_enum','6e1ffe96e26494abc4118da894929573c803cd4944736e6445cb4a4c24c4f6e9'),
+  ('20261079_identidad_verificacion','4906d354e4b8de439d6ace4b941940539295cc2dec0e76707a35e31105293e83'),
+  ('20261080_identidad_acciones_proveedor','600eee8b5877cdc70dc4569cf414ed53a4b3938422aaf5799cce9ac4cd19abaa'),
+  ('20261081_identidad_proveedor','25916026f65f4f72fe56515f90c25d36b1290626fb0e7f309aade652733ee154'),
+  ('20261082_identidad_avisos_incidencias_enums','2ca9d999a1f062d334b6031fb7f1572218bb353f4701ee14cd5aad0febf392c5'),
+  ('20261083_identidad_incidencias','3798404b1e045fcbe3dfb04f6c03acb8408d1ebfb16f39b83aac628e9953f515'),
+  ('20261084_identidad_admin_enums','fe8951938116a22a5ce66b1ae032ac35051113b1f349bfad98684142e4689a24'),
+  ('20261085_identidad_incidencias_respuesta','5fbcc5c960c258b4bab37b7442175fb43f6fe6ea4600b02d2067d6ce93e959ae'),
+  ('20261086_identidad_reglas_enums','103ee8129fcd8c8f2b99b029fc6477025f0873b40c98bc51094db6a110295c4d'),
+  ('20261087_identidad_reglas','a9818fdd0994cfccb22f85d212f27d6796cd7d4c168a0a3a758efdc973fbbdcd'),
+  ('20261088_conciliacion_cerrar_sin_entregar','1a52882b75f2536a289a92f807ac9ee927414d1d710c05405a5aebeb7eea7d76')
 ),
 hallazgos AS (
   SELECT 1 AS orden, 'FALTANTE' AS tipo, r.nombre AS migracion,

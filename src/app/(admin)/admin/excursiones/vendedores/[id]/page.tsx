@@ -15,6 +15,14 @@ import {
   urlDeQr,
   type EstadoVendedor,
 } from '@/modules/excursiones/vendedores/nucleo'
+import {
+  OPCIONES_CANAL_CAPTADO,
+  OPCIONES_ETAPA_CAPTADO,
+  hayFiltrosCaptados,
+  leerFiltrosCaptados,
+} from '@/modules/excursiones/vendedores/lista'
+import { urlConFiltros } from '@/modules/admin/filtrosComunes'
+import { leerPaginacion } from '@/lib/paginacion'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 import { VendedorEstadoBotones } from '@/components/excursiones/VendedorEstadoBotones'
 import { VendedorQrCard } from '@/components/excursiones/VendedorQrCard'
@@ -22,6 +30,8 @@ import { VendedorForm } from '@/components/excursiones/VendedorForm'
 import { VendedorAcceso } from '@/components/excursiones/VendedorAcceso'
 import { ClientesCaptadosTabla } from '@/components/excursiones/ClientesCaptadosTabla'
 import { StatusChip } from '@/components/ui/status-chip'
+import { BarraFiltros } from '@/components/ui/barra-filtros'
+import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
 export const dynamic = 'force-dynamic'
@@ -40,14 +50,7 @@ export default async function VendedorDetallePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{
-    q?: string
-    etapa?: string
-    canal?: string
-    desde?: string
-    hasta?: string
-    page?: string
-  }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const user = await requireRole(ADMIN_ROLES)
   const companyId = user.metadata.companyId
@@ -61,18 +64,14 @@ export default async function VendedorDetallePage({
   const { vendedor, embudo, correoAcceso } = detalle
 
   const enlace = vendedor.enlaces[0] ?? null
-  const [supervisoresTodos, captadosResultado] = await Promise.all([
+  const filtrosCaptados = leerFiltrosCaptados(sp)
+  const paginacion = leerPaginacion(sp)
+  const [supervisoresTodos, captados] = await Promise.all([
     vendedoresParaSupervisor(companyId),
-    clientesCaptados(companyId, vendedor.id, {
-      q: sp.q,
-      etapa: sp.etapa,
-      canal: sp.canal,
-      desde: sp.desde,
-      hasta: sp.hasta,
-      page: sp.page ? Number(sp.page) : 1,
-      limit: 15,
-    }),
+    clientesCaptados(companyId, vendedor.id, { filtros: filtrosCaptados, paginacion }),
   ])
+  const baseVendedor = `/admin/excursiones/vendedores/${vendedor.id}`
+  const anclaCaptados = '#clientes-captados'
   const supervisores = supervisoresTodos.filter((s) => s.id !== vendedor.id)
 
   return (
@@ -134,13 +133,53 @@ export default async function VendedorDetallePage({
         </>
       ) : null}
 
-      {/* Detalle y auditoría de clientes captados con filtros y paginación */}
-      <ClientesCaptadosTabla
-        items={captadosResultado.items}
-        total={captadosResultado.total}
-        totalPages={captadosResultado.totalPages}
-        currentPage={captadosResultado.currentPage}
-      />
+      {/* Detalle y auditoría de clientes captados: filtros y página en la URL, resueltos por la base */}
+      <section id="clientes-captados" aria-labelledby="titulo-clientes-captados" className="space-y-3">
+        <div>
+          <h2 id="titulo-clientes-captados" className="text-h3 text-foreground">
+            Clientes captados
+          </h2>
+          <p className="text-caption text-muted-foreground">
+            {captados.total.toLocaleString('es-DO')} {captados.total === 1 ? 'registro' : 'registros'} en el embudo
+            {hayFiltrosCaptados(filtrosCaptados) ? ' con estos filtros' : ''}
+          </p>
+        </div>
+
+        <BarraFiltros
+          action={anclaCaptados}
+          busqueda={{ nombre: 'q', valor: filtrosCaptados.q, etiqueta: 'Buscar', placeholder: 'Cliente, teléfono o correo…' }}
+          filtros={[
+            { nombre: 'etapa', etiqueta: 'Etapa', valor: filtrosCaptados.etapa, opciones: OPCIONES_ETAPA_CAPTADO, todas: 'Todas las etapas' },
+            { nombre: 'canal', etiqueta: 'Canal', valor: filtrosCaptados.canal, opciones: OPCIONES_CANAL_CAPTADO, todas: 'Todos los canales' },
+          ]}
+          fechas={[
+            { nombre: 'desde', etiqueta: 'Desde', valor: filtrosCaptados.desde },
+            { nombre: 'hasta', etiqueta: 'Hasta', valor: filtrosCaptados.hasta },
+          ]}
+          hrefSin={(nombre) => urlConFiltros(baseVendedor, sp, { [nombre]: undefined }) + anclaCaptados}
+          hrefLimpiar={baseVendedor + anclaCaptados}
+          enlace={({ href, ...resto }) => <Link href={href} {...resto} />}
+        />
+
+        <ClientesCaptadosTabla
+          filas={captados.filas}
+          hayFiltros={hayFiltrosCaptados(filtrosCaptados)}
+          vacio={{
+            titulo: 'Todavía no ha captado clientes',
+            descripcion: 'Cuando alguien entre por su enlace o su QR, aparece aquí con la etapa del embudo en la que va.',
+          }}
+          sinResultados={{
+            titulo: 'Ningún cliente captado coincide con los filtros',
+            descripcion: 'Prueba con otro nombre, etapa, canal o rango de fechas.',
+            accion: (
+              <Link href={baseVendedor + anclaCaptados} className="text-small font-medium text-primary hover:underline">
+                Limpiar filtros
+              </Link>
+            ),
+          }}
+          pie={<TablaPaginacion paginacion={paginacion} total={captados.total} params={sp} etiqueta="clientes captados" />}
+        />
+      </section>
 
       <VendedorAcceso
         vendedorId={vendedor.id}

@@ -51,8 +51,32 @@ interface StatCardProps {
     | 'indigo'
     /** @deprecated usa `brand` */
     | 'violet'
+  /**
+   * `clasica` (por defecto) es la tarjeta de siempre. `panel` es la del sistema de diseño del panel administrativo
+   * (docs/auditoria-admin/10 §7): plana, con borde, una sola talla de cifra, y con `ventana`, `unidad`, `pie` y `sinPermiso`.
+   * Las cuatro props siguientes SOLO las lee `panel`; en `clasica` se ignoran.
+   */
+  variante?: 'clasica' | 'panel'
+  /**
+   * El periodo al que se refiere la cifra, escrito: «1–20 oct 2026», «últimos 30 días». Una cifra sin su ventana obliga a
+   * adivinar (05 · D-06: ingresos del mes calendario junto a «nuevos» de 30 días rodantes bajo un mismo rótulo).
+   */
+  ventana?: string
+  /** Unidad pegada a la cifra («%», «días»). El dinero NO va aquí: llega ya formateado en `value`. */
+  unidad?: string
+  /** Línea al pie, con tono: «▲ 18,5 % frente a 1–20 sep» (éxito), «2 por vencer» (aviso). */
+  pie?: { texto: string; tono?: 'exito' | 'aviso' | 'neutro' }
+  /**
+   * El rol no puede ver esta cifra. Se pinta «Sin permiso» en lugar de la cifra, y `value` ni siquiera se renderiza: el
+   * servidor ya debió dejar de calcularla (05 · D-01); esto solo evita un hueco mudo.
+   */
+  sinPermiso?: boolean
   className?: string
 }
+
+/** El color del texto del pie según su tono. Una función y no una tabla: es de la tarjeta, no un contrato de estado. */
+const clasePie = (tono: 'exito' | 'aviso' | 'neutro' = 'neutro') =>
+  tono === 'exito' ? 'text-success' : tono === 'aviso' ? 'text-warning' : 'text-muted-foreground'
 
 /* Colores con alpha para que funcionen igual en tema claro y oscuro. */
 const ACCENT = {
@@ -79,10 +103,56 @@ export function StatCard({
   accent,
   href,
   hrefLabel,
+  variante = 'clasica',
+  ventana,
+  unidad,
+  pie,
+  sinPermiso = false,
   className,
 }: StatCardProps) {
   const a = accent ? ACCENT[accent] : null
   const Contenedor = href ? 'a' : 'div'
+
+  if (variante === 'panel') {
+    return (
+      <Contenedor
+        data-slot="stat-card"
+        {...(href ? { href, 'aria-label': hrefLabel ? `${label}: ${hrefLabel}` : undefined } : {})}
+        className={cn(
+          'group relative block min-w-0 rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5',
+          href &&
+            'cursor-pointer transition-colors duration-fast hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+          className
+        )}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-small font-medium text-muted-foreground">{label}</p>
+          {Icon && <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" />}
+        </div>
+        {sinPermiso ? (
+          <p className="mt-1.5 text-h4 font-medium text-muted-foreground">Sin permiso</p>
+        ) : (
+          <p className="mt-1 text-kpi text-foreground tabular-nums">
+            {value}
+            {unidad && <span className="ml-1 text-small font-medium text-muted-foreground">{unidad}</span>}
+          </p>
+        )}
+        {ventana && <p className="mt-0.5 text-caption text-muted-foreground">{ventana}</p>}
+        {sub && !sinPermiso && <p className="mt-0.5 text-caption text-muted-foreground">{sub}</p>}
+        {trend && !sinPermiso && (
+          <span
+            className={cn(
+              'mt-1.5 inline-flex items-center rounded-lg px-1.5 py-0.5 text-caption font-medium',
+              trend.positive !== false ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
+            )}
+          >
+            {trend.positive !== false ? '↑' : '↓'} {Math.abs(trend.value)}%
+          </span>
+        )}
+        {pie && !sinPermiso && <p className={cn('mt-2 text-small', clasePie(pie.tono))}>{pie.texto}</p>}
+      </Contenedor>
+    )
+  }
 
   return (
     <Contenedor

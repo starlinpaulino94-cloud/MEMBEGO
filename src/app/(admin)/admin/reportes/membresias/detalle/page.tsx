@@ -19,7 +19,7 @@ import {
   siguienteDireccion,
   type CampoOrden,
 } from '@/modules/reportes/orden-detalle'
-import { ThOrden } from '@/components/reportes/ThOrden'
+import { TablaDetalle } from '@/components/reportes/TablaDetalle'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/ui/page-header'
@@ -314,92 +314,65 @@ export default async function DetalleCicloVidaPage({
           }
         />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border">
-          <table className="w-full text-small">
-            <thead>
-              <tr className="border-b border-border text-left">
-                <ThOrden
-                  campo="fecha"
-                  activo={orden.clave}
-                  direccion={orden.direccion}
-                  href={enlaceOrden('fecha')}
-                >
-                  Cuándo
-                </ThOrden>
-                <ThOrden
-                  campo="cliente"
-                  activo={orden.clave}
-                  direccion={orden.direccion}
-                  href={enlaceOrden('cliente')}
-                >
-                  Cliente
-                </ThOrden>
-                <ThOrden
-                  campo="origen"
-                  activo={orden.clave}
-                  direccion={orden.direccion}
-                  href={enlaceOrden('origen')}
-                >
-                  Origen
-                </ThOrden>
-                {tipo === 'CAMBIO_PLAN' && (
-                  <th className="px-3 py-2 text-right text-overline">Precio</th>
-                )}
-                {tipo === 'AJUSTADA' && <th className="px-3 py-2 text-overline">Qué cambió</th>}
-                <th className="px-3 py-2 text-overline">Quién</th>
-                {CON_MOTIVO.has(tipo) && <th className="px-3 py-2 text-overline">Motivo</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {filas.map((f) => (
-                <tr key={f.id} className="border-b border-border/60">
-                  <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">
-                    {formatDateTime(f.ocurridoEn, prefs)}
-                    {f.reconstruido && (
-                      <span
-                        className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-caption"
-                        title="Fila reconstruida desde la bitácora, no escrita por el camino normal"
-                      >
-                        reconstruido
+        <TablaDetalle
+          caption={TIPOS[tipo]}
+          campos={CAMPOS}
+          orden={orden}
+          enlaceOrden={enlaceOrden}
+          filas={filas}
+          claveDe={(f) => f.id}
+          columnas={[
+            {
+              clave: 'fecha',
+              encabezado: 'Cuándo',
+              celda: (f) => (
+                <span className="whitespace-nowrap text-muted-foreground">
+                  {formatDateTime(f.ocurridoEn, prefs)}
+                  {f.reconstruido && (
+                    <span
+                      className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-caption"
+                      title="Fila reconstruida desde la bitácora, no escrita por el camino normal"
+                    >
+                      reconstruido
+                    </span>
+                  )}
+                </span>
+              ),
+            },
+            {
+              clave: 'cliente',
+              encabezado: 'Cliente',
+              celda: (f) =>
+                f.membership?.cliente ? (
+                  <Link href={`/admin/clientes/${f.membership.cliente.id}`} className="text-foreground underline-offset-2 hover:underline">
+                    {f.membership.cliente.nombre}
+                  </Link>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                ),
+            },
+            { clave: 'origen', encabezado: 'Origen', valor: (f) => ORIGEN_LABEL[f.origen] ?? f.origen },
+            ...(tipo === 'CAMBIO_PLAN'
+              ? [
+                  {
+                    clave: 'precio',
+                    encabezado: 'Precio',
+                    alineacion: 'derecha' as const,
+                    celda: (f: (typeof filas)[number]) => (
+                      <span className="whitespace-nowrap text-muted-foreground">
+                        {dinero(f.precioAnterior)} → {dinero(f.precioNuevo)}
                       </span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2">
-                    {f.membership?.cliente ? (
-                      <Link
-                        href={`/admin/clientes/${f.membership.cliente.id}`}
-                        className="text-foreground underline-offset-2 hover:underline"
-                      >
-                        {f.membership.cliente.nombre}
-                      </Link>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-muted-foreground">
-                    {ORIGEN_LABEL[f.origen] ?? f.origen}
-                  </td>
-                  {tipo === 'CAMBIO_PLAN' && (
-                    <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-muted-foreground">
-                      {dinero(f.precioAnterior)} → {dinero(f.precioNuevo)}
-                    </td>
-                  )}
-                  {tipo === 'AJUSTADA' && (
-                    <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">
-                      {detalleAjuste(f.payload) ?? '—'}
-                    </td>
-                  )}
-                  <td className="px-3 py-2 text-muted-foreground">
-                    {f.actor?.name ?? f.actor?.email ?? '—'}
-                  </td>
-                  {CON_MOTIVO.has(tipo) && (
-                    <td className="px-3 py-2 text-muted-foreground">{f.motivo ?? '—'}</td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                    ),
+                  },
+                ]
+              : []),
+            ...(tipo === 'AJUSTADA'
+              ? [{ clave: 'cambio', encabezado: 'Qué cambió', valor: (f: (typeof filas)[number]) => detalleAjuste(f.payload) }]
+              : []),
+            { clave: 'quien', encabezado: 'Quién', valor: (f) => f.actor?.name ?? f.actor?.email },
+            ...(CON_MOTIVO.has(tipo) ? [{ clave: 'motivo', encabezado: 'Motivo', valor: (f: (typeof filas)[number]) => f.motivo }] : []),
+          ]}
+        />
       )}
     </div>
   )

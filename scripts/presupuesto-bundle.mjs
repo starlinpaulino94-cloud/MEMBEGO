@@ -76,7 +76,7 @@ const PRESUPUESTOS = [
   {
     id: 'total',
     nombre: 'JavaScript de cliente (todo)',
-    techoKB: 9200, // 2026-10-07: subido de 8100 por app universal cliente y orquestación de pagos CardNET (medido 8748 KB). Entrada compartida (868 KB) y mayor trozo (527 KB) se mantienen bajo sus techos.
+    techoKB: 9400, // 2026-10-26: subido de 9200. `main` ya estaba en 9191 KB (99,9 %) y la verificación de identidad (pantalla de la persona, panel del equipo, portal del proveedor) suma 22 KB (medido 9213 KB). Entrada compartida (861 KB) y mayor trozo (409 KB) no se movieron. | 2026-10-07: subido de 8100 por app universal cliente y orquestación de pagos CardNET (medido 8748 KB).
     porque: 'Indicador general de peso del proyecto. Ningún usuario lo descarga entero.',
   },
   {

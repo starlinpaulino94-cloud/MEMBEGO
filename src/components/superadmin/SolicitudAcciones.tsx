@@ -180,6 +180,15 @@ export function SolicitudAcciones({
                 La solicitud está incompleta: no se puede crear en automático.
               </p>
             ) : null}
+            {/* La misma alta, pero eligiendo tú la cuenta del administrador (p. ej. si el dueño ya tiene una) y revisando los datos
+                antes de crear: el formulario de «Empresas → Nueva» llega con lo de la solicitud ya escrito. */}
+            <p className="text-xs text-muted-foreground">
+              ¿El dueño ya tiene una cuenta, o quieres revisar los datos antes de crear?{' '}
+              <Link href={`/superadmin/empresas/nueva?solicitud=${id}`} className="font-semibold text-primary hover:underline">
+                Crear con los datos precargados
+              </Link>
+              .
+            </p>
           </div>
         )}
       </section>
