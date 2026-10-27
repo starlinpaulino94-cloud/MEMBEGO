@@ -208,7 +208,7 @@ export default async function SuperadminPlanesPage({
                       </p>
                       <div className="flex gap-2">
                         <Button size="sm" variant="outline" asChild>
-                          <Link href={`/superadmin/planes/${plan.id}/editar`}>
+                          <Link href={`/superadmin/planes/${plan.id}/editar`} aria-label={`Editar ${plan.nombre}`}>
                             <Pencil className="h-3.5 w-3.5" />
                           </Link>
                         </Button>
@@ -234,7 +234,7 @@ export default async function SuperadminPlanesPage({
             {plural(sinPlanes.length, 'empresa sin planes', 'empresas sin planes')}:
           </span>{' '}
           {sinPlanes.map((c) => c.name).join(', ')}.{' '}
-          <Link href="/superadmin/planes/nuevo" className="text-primary hover:underline">
+          <Link href="/superadmin/planes/nuevo" className="text-primary underline underline-offset-2 hover:no-underline">
             Crear uno
           </Link>
         </p>

@@ -48,7 +48,9 @@ export type ContadoresSupplyV2 = Partial<Record<SeccionSupplyV2, { valor: number
 export function NavSupplyV2({ activa, contadores }: { activa: SeccionSupplyV2; contadores?: ContadoresSupplyV2 }) {
   return (
     <nav aria-label="Secciones de Supply" className="no-scrollbar -mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
-      <div className="flex min-w-max items-stretch">
+      {/* En móvil, una fila que se desliza. Desde `md` las etapas pasan a otra línea si no caben: con doce pestañas la última
+          («Economía») quedaba cortada a 1 366 px y, sin barra de desplazamiento visible, parecía que no existía. */}
+      <div className="flex min-w-max items-stretch md:min-w-0 md:flex-wrap md:gap-y-3">
         {GRUPOS.map((grupo, i) => (
           <div key={grupo} className={cn('flex flex-col gap-1.5', i > 0 && 'ml-3 border-l border-sv2-border pl-3')}>
             <span className="px-2 text-[12px] font-semibold uppercase leading-4 tracking-wider text-sv2-outline">{grupo}</span>

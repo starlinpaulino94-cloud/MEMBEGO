@@ -124,7 +124,7 @@ export function CapacidadesPanel({
                   Controla: {seccionesQueApaga(cap).join(', ')}
                 </span>
               )}
-              <span className="block text-caption uppercase tracking-wide text-muted-foreground/70">
+              <span className="block text-caption uppercase tracking-wide text-muted-foreground">
                 {cap}
               </span>
             </span>

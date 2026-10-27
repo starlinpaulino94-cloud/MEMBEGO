@@ -41,14 +41,16 @@ export default function AuthLayout({
         <div className="w-full max-w-md" suppressHydrationWarning>{children}</div>
       </main>
 
+      {/* `prefetch={false}`: aquí /privacy y /terms redirigen a la landing (otro dominio) y el prefetch de Next
+          chocaba con la CSP (`connect-src`) en cada carga, con un error rojo en la consola. */}
       <footer className="border-t border-border bg-sidebar py-5 text-center">
         <p className="text-caption text-sidebar-foreground" suppressHydrationWarning>
           © {new Date().getFullYear()} MembeGo ·{' '}
-          <Link href="/privacy" className="underline-offset-2 hover:underline">
+          <Link href="/privacy" prefetch={false} className="underline-offset-2 hover:underline">
             Privacidad
           </Link>{' '}
           ·{' '}
-          <Link href="/terms" className="underline-offset-2 hover:underline">
+          <Link href="/terms" prefetch={false} className="underline-offset-2 hover:underline">
             Términos
           </Link>
         </p>

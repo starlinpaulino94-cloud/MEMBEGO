@@ -69,6 +69,13 @@ test('cada regla señala SU campo, no un aviso suelto', () => {
   assert.deepEqual(Object.keys(falla({ nombre: 'X', precio: 'abc' })!.campos), ['precio'])
   assert.deepEqual(Object.keys(falla({ nombre: 'X', precio: '10', vigenciaDias: '0' })!.campos), ['vigenciaDias'])
   assert.deepEqual(Object.keys(falla({ nombre: 'X', precio: '10', orden: 'primero' })!.campos), ['orden'])
+  // Lo que la prueba de producción dejó pasar: usos negativos, nombre desbordado y precio que la base no admite.
+  assert.deepEqual(Object.keys(falla({ nombre: 'X', precio: '10', lavados: '-3' })!.campos), ['lavados'])
+  assert.deepEqual(Object.keys(falla({ nombre: 'X', precio: '10', lavados: '2.5' })!.campos), ['lavados'])
+  assert.deepEqual(Object.keys(falla({ nombre: 'Q'.repeat(81), precio: '10' })!.campos), ['nombre'])
+  assert.deepEqual(Object.keys(falla({ nombre: 'X', precio: '100000000' })!.campos), ['precio'])
+  assert.deepEqual(Object.keys(falla({ nombre: 'X', precio: '10', vigenciaDias: '1.5' })!.campos), ['vigenciaDias'])
+  assert.ok(leerPlanDeFormulario(formulario({ nombre: 'Q'.repeat(80), precio: '99999999.99', lavados: '0' })).ok)
   assert.deepEqual(Object.keys(falla({ nombre: 'X', precio: '10', imagenUrl: 'https://otro-sitio.example/foto.png' })!.campos), ['imagenUrl'])
 })
 

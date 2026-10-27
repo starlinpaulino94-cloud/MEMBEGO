@@ -28,7 +28,7 @@ export interface DatosPlan {
 }
 
 /** Qué campo falló y qué se le dice. Las claves son los `name` del formulario. */
-export type ErroresPlan = Partial<Record<'nombre' | 'precio' | 'vigenciaDias' | 'orden' | 'imagenUrl' | 'companyId', string>>
+export type ErroresPlan = Partial<Record<'nombre' | 'precio' | 'vigenciaDias' | 'lavados' | 'orden' | 'imagenUrl' | 'companyId', string>>
 
 /**
  * Lo que se pinta en cada campo, TAL CUAL se escribió (texto, no números ya convertidos). Es el estado del formulario: sirve para
@@ -57,6 +57,11 @@ export interface ValoresPlan {
 export type ResultadoPlan =
   | { ok: true; plan: DatosPlan }
   | { ok: false; error: string; campos: ErroresPlan; valores: ValoresPlan }
+
+/** Tope del nombre de un plan: más largo desborda su tarjeta y la vitrina. */
+export const NOMBRE_PLAN_MAX = 80
+/** `precio` es DECIMAL(10,2) en la base: por encima de esto la base lo rechaza con un error que no dice nada. */
+export const PRECIO_PLAN_MAX = 99_999_999.99
 
 const texto = (f: FormData, k: string) => String(f.get(k) ?? '').trim()
 const crudo = (f: FormData, k: string) => String(f.get(k) ?? '')
@@ -172,16 +177,22 @@ export function leerPlanDeFormulario(formData: FormData): ResultadoPlan {
   const campos: ErroresPlan = {}
 
   if (!nombre) campos.nombre = 'Escribe el nombre del plan.'
+  else if (nombre.length > NOMBRE_PLAN_MAX) campos.nombre = `El nombre es demasiado largo: máximo ${NOMBRE_PLAN_MAX} letras.`
 
   const precio = Number(precioRaw)
   if (!precioRaw) campos.precio = 'Escribe el precio (puede ser 0).'
   else if (Number.isNaN(precio) || precio < 0) campos.precio = 'El precio no es válido: usa un número desde 0.'
+  else if (precio > PRECIO_PLAN_MAX) campos.precio = 'El precio es demasiado alto.'
 
   const vigenciaDias = vigenciaRaw ? Number(vigenciaRaw) : 30
-  if (Number.isNaN(vigenciaDias) || vigenciaDias < 1) campos.vigenciaDias = 'La vigencia debe ser al menos 1 día.'
+  if (Number.isNaN(vigenciaDias) || vigenciaDias < 1 || !Number.isInteger(vigenciaDias)) campos.vigenciaDias = 'La vigencia debe ser un número entero de al menos 1 día.'
+
+  // Vacío = 0 (como antes). Un negativo se guardaba tal cual y la tarjeta decía «-3 usos incluidos».
+  const lavados = lavadosRaw ? Number(lavadosRaw) : 0
+  if (Number.isNaN(lavados) || lavados < 0 || !Number.isInteger(lavados)) campos.lavados = 'Los usos incluidos deben ser un número entero desde 0.'
 
   const orden = ordenRaw ? Number(ordenRaw) : 0
-  if (Number.isNaN(orden)) campos.orden = 'El orden debe ser un número.'
+  if (Number.isNaN(orden) || !Number.isInteger(orden)) campos.orden = 'El orden debe ser un número entero.'
 
   const errorImagen = validarImagenPlan(imagenUrl)
   if (errorImagen) campos.imagenUrl = errorImagen
@@ -198,7 +209,7 @@ export function leerPlanDeFormulario(formData: FormData): ResultadoPlan {
     plan: {
       nombre,
       precio,
-      lavados: Number(lavadosRaw) || 0,
+      lavados,
       esIlimitado,
       descripcion: descripcion || null,
       beneficios: beneficiosRaw

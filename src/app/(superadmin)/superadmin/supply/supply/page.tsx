@@ -190,7 +190,7 @@ export default async function SupplyPoolPage({
                   {f.vence && <input type="hidden" name="vence" value="30" />}
                   <Link
                     href={href({ ...f, vence: !f.vence })}
-                    aria-pressed={f.vence}
+                    aria-current={f.vence ? 'true' : undefined}
                     className={cn('inline-flex h-10 items-center gap-1 rounded-[8px] px-3 text-[14px] font-semibold leading-5 transition-colors', f.vence ? 'bg-sv2-accent text-white hover:bg-sv2-accent-hover' : 'border border-sv2-border bg-card text-foreground hover:bg-sv2-soft')}
                     data-testid="btn-vencimientos"
                   >

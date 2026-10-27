@@ -115,8 +115,8 @@ export function UsuarioStaffForm({
       </div>
 
       <div className="space-y-2">
-        <Label>Correo</Label>
-        <Input value={usuario.email} disabled className="bg-muted" />
+        <Label htmlFor="correo">Correo</Label>
+        <Input id="correo" value={usuario.email} disabled className="bg-muted" />
         <p className="text-xs text-muted-foreground">
           El correo es la identidad de acceso y no se cambia desde aquí.
         </p>
@@ -126,8 +126,8 @@ export function UsuarioStaffForm({
         // Un desplegable con una sola opción imposible de cambiar es peor que
         // no tenerlo: parece que se puede y no se puede. Se dice dónde SÍ.
         <div className="space-y-2">
-          <Label>Rol</Label>
-          <Input value="Superadmin" disabled className="bg-muted" />
+          <Label htmlFor="rol-superadmin">Rol</Label>
+          <Input id="rol-superadmin" value="Superadmin" disabled className="bg-muted" />
           <p className="text-xs text-muted-foreground">
             El rango de superadmin se otorga y se retira desde la lista de
             usuarios, con su confirmación.

@@ -1,6 +1,7 @@
 import { conEmpresa, sinEmpresa } from '@/lib/tenant'
 import { whereCobrado } from '@/modules/pagos/cobrado'
 import { membresiaVigente } from '@/modules/membresia/vigencia'
+import { ACCION_LABEL, ENTIDAD_LABEL } from '@/modules/auditoria/queries'
 
 export interface CategoryOption {
   id: string
@@ -162,8 +163,10 @@ export async function getEmpresaDashboard(companyId: string): Promise<EmpresaDas
       })
       actividadReciente = (logs as { id: string; accion: string; entidadTipo: string; createdAt: Date; user: { name: string } | null }[]).map((a) => ({
         id: a.id,
-        accion: String(a.accion),
-        detalle: a.entidadTipo,
+        // Con la etiqueta de la bitácora, igual que el Centro de control: antes se veía el código interno
+        // («SUPPLY_V2_OFFER_RESUMED — SupplyV2Offer»).
+        accion: ACCION_LABEL[String(a.accion)] ?? String(a.accion),
+        detalle: ENTIDAD_LABEL[a.entidadTipo] ?? a.entidadTipo,
         createdAt: a.createdAt,
         userName: a.user?.name ?? null,
       }))

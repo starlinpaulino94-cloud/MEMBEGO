@@ -9,7 +9,7 @@ import {
   normalizeCompanyBrandColor,
   paletaDeMarca,
 } from '@/lib/company-branding'
-import type { ErroresPlan, ValoresPlan } from '@/modules/planes/formulario'
+import { NOMBRE_PLAN_MAX, type ErroresPlan, type ValoresPlan } from '@/modules/planes/formulario'
 
 /**
  * LOS CAMPOS DE UN PLAN (auditoría admin · fase 7, tarea 7.2; 04 · F-01, F-04, F-06, F-07).
@@ -101,7 +101,7 @@ export function PlanCampos({
 
         <Campo id="nombre" etiqueta="Nombre del plan" error={errores.nombre}>
           {(control) => (
-            <Input name="nombre" required defaultValue={valores.nombre} placeholder="Ej: Silver, Gold, Premium, VIP" {...control} />
+            <Input name="nombre" required maxLength={NOMBRE_PLAN_MAX} defaultValue={valores.nombre} placeholder="Ej: Silver, Gold, Premium, VIP" {...control} />
           )}
         </Campo>
 
@@ -117,7 +117,7 @@ export function PlanCampos({
         </div>
 
         <div className="space-y-3">
-          <Campo id="lavados" etiqueta="Usos incluidos" opcional ayuda="Cuántas veces se puede aprovechar. Se ignora si los usos son ilimitados.">
+          <Campo id="lavados" etiqueta="Usos incluidos" opcional ayuda="Cuántas veces se puede aprovechar. Se ignora si los usos son ilimitados." error={errores.lavados}>
             {(control) => <Input name="lavados" type="number" min="0" defaultValue={valores.lavados} placeholder="0" {...control} />}
           </Campo>
           <label className="flex items-center gap-2.5">

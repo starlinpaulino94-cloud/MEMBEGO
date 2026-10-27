@@ -46,11 +46,11 @@ export default async function VendedorLayout({ children }: { children: React.Rea
         <footer className="border-t border-border bg-sidebar py-5 text-center">
           <p className="text-caption text-sidebar-foreground">
             © {new Date().getFullYear()} MembeGo ·{' '}
-            <Link href="/privacy" className="underline-offset-2 hover:underline">
+            <Link href="/privacy" prefetch={false} className="underline-offset-2 hover:underline">
               Privacidad
             </Link>{' '}
             ·{' '}
-            <Link href="/terms" className="underline-offset-2 hover:underline">
+            <Link href="/terms" prefetch={false} className="underline-offset-2 hover:underline">
               Términos
             </Link>
           </p>
