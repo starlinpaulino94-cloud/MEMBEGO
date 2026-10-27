@@ -1,6 +1,6 @@
 import { Tabla, type Columna } from '@/components/ui/tabla'
 import { formatDateTimeExacto } from '@/lib/format'
-import type { AuditoriaItem } from '@/modules/auditoria/queries'
+import { ENTIDAD_LABEL, type AuditoriaItem } from '@/modules/auditoria/queries'
 
 /**
  * Bitácora de actividad, en la `Tabla` del sistema (auditoría admin · fase 7, tarea 7.1): una fila por acción, con la FECHA Y
@@ -54,7 +54,7 @@ export function BitacoraTabla({
       prioridad: 3,
       celda: (i) => (
         <>
-          <span className="block text-foreground">{i.entidadTipo}</span>
+          <span className="block text-foreground">{ENTIDAD_LABEL[i.entidadTipo] ?? i.entidadTipo}</span>
           <span className="block font-mono text-caption text-muted-foreground">{i.entidadId}</span>
         </>
       ),
