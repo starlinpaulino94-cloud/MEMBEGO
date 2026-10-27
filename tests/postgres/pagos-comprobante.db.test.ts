@@ -228,7 +228,7 @@ test('H6 · (fase 4) un cobro con la entrega FALLIDA y el cliente sin su membres
   const h = hallazgo(r, 'cobrado-sin-entregar')
   assert.ok(h, 'ahora aparece')
   assert.deepEqual([h.cantidad, h.monto, h.severidad], [1, PRECIO, 'ALTA'])
-  assert.deepEqual(h.casos.map((c) => [c.tipo, c.id, c.acciones]), [['CLIENTE_ESPERANDO', i.id, ['REINTENTAR_ENTREGA', 'ABRIR_FICHA']]])
+  assert.deepEqual(h.casos.map((c) => [c.tipo, c.id, c.acciones]), [['CLIENTE_ESPERANDO', i.id, ['REINTENTAR_ENTREGA', 'CERRAR_SIN_ENTREGAR', 'ABRIR_FICHA']]])
   assert.match(h.casos[0]!.detalle ?? '', /fallida: La activación falló\. \(1 intento\)/)
   assert.equal(r.cuadra, false, 'y el panel deja de afirmar «Todo cuadra»')
 })

@@ -71,7 +71,9 @@ model PagoIntento {
   /// CUMPLIMIENTO separado del cobro (P1B). 'PENDIENTE' = cobrado sin
   /// entregar · 'COMPLETADA' = producto activo + fulfillmentAt ·
   /// 'FALLIDA' = cobrado con entrega fallida (+ fulfillmentError) → caso de
-  /// conciliación y reintento, nunca éxito para el cliente.
+  /// conciliación y reintento, nunca éxito para el cliente · 'DESCARTADA' =
+  /// una persona lo cerró SIN entregar desde la conciliación (motivo y nota en
+  /// la bitácora); estado final y sin venta.
   fulfillmentEstado   String    @default("PENDIENTE")
   fulfillmentAt       DateTime?
   fulfillmentError    String?

@@ -141,7 +141,7 @@ test('4 · «Reintentar entrega» activa el producto del cliente que esperaba; n
   const h = hallazgo(await conciliar(e.companyId), 'cobrado-sin-entregar')
   assert.ok(h)
   assert.equal(h.casos[0]!.id, i.id)
-  assert.deepEqual(h.casos[0]!.acciones, ['REINTENTAR_ENTREGA', 'ABRIR_FICHA'])
+  assert.deepEqual(h.casos[0]!.acciones, ['REINTENTAR_ENTREGA', 'CERRAR_SIN_ENTREGAR', 'ABRIR_FICHA'])
 
   // Mientras la causa siga, el reintento falla y se dice por qué (y se asienta igual).
   const mal = await reintentarEntregaDeCobro(e.companyId, i.id, actor(e))

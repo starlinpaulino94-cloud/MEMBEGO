@@ -243,7 +243,7 @@ test('2 · un cambio de plan pagado con tarjeta no se reintenta en vano: el caso
 
   const h = (await conciliar(e.companyId)).hallazgos.find((x) => x.clave === 'cobrado-sin-entregar')
   assert.ok(h)
-  assert.deepEqual(h.casos.map((x) => [x.tipo, x.acciones]), [['CLIENTE_ESPERANDO', ['ABRIR_FICHA']]], 'no se ofrece un botón que va a fallar')
+  assert.deepEqual(h.casos.map((x) => [x.tipo, x.acciones]), [['CLIENTE_ESPERANDO', ['CERRAR_SIN_ENTREGAR', 'ABRIR_FICHA']]], 'no se ofrece un botón que va a fallar')
   assert.match(h.casos[0]!.detalle ?? '', /cambio de plan/i)
 
   // Una persona aplica el cambio desde Pagos: la membresía queda con el plan nuevo y la fecha de ese pago.

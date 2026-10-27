@@ -426,6 +426,10 @@ export async function reintentarEntrega(
     if (intento.estado === 'APROBADO') await asegurarVentaDelIntento(intentoId)
     return { ok: true, entrega: estadoEntregaActual(intento.fulfillmentEstado) }
   }
+  // Cerrado sin entregar desde la conciliación: una persona decidió que no se entrega. Nada lo reabre solo.
+  if (intento.fulfillmentEstado === 'DESCARTADA') {
+    return { ok: false, entrega: 'PENDIENTE', error: 'Este cobro se cerró sin entregar desde la conciliación.' }
+  }
 
   // Un cambio de plan que la pasarela no puede aplicar sola lo aplica una persona: reintentarlo toparía con lo mismo.
   if (entregaRequierePersona({ canal: intento.canal, planDestinoId: intento.planDestinoId, membership: intento.membership })) {

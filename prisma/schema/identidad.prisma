@@ -642,6 +642,10 @@ enum AuditAccion {
   IDENTIDAD_INCIDENCIA_ATENDIDA
   /// El equipo de MEMBEGO encendió, apagó o cambió el alcance de una regla de verificación de identidad.
   IDENTIDAD_REGLA_CAMBIADA
+
+  // Conciliación (cont.): al final porque su migración (20261088) es posterior a las de identidad.
+  /// Se cerró SIN entregar un cobro aprobado (reembolsado, de prueba, producto eliminado…), con motivo y nota.
+  CONCILIACION_ENTREGA_CERRADA_SIN_ENTREGAR
 }
 
 // ─────────────────────────────────────────────

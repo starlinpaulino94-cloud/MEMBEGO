@@ -109,7 +109,10 @@ export async function asegurarVentaDelIntento(
       ? `Cambio a ${intento.planDestino.nombre}`
       : intento.membership
       ? `${canal === 'RENOVACION_AUTOMATICA' ? 'Renovación' : 'Membresía'} ${plan ?? ''}`.trim()
-      : `Promoción ${intento.compra?.promocion?.titulo ?? ''}`.trim()
+      : intento.compra
+      ? `Promoción ${intento.compra.promocion?.titulo ?? ''}`.trim()
+      // Ni membresía ni compra: se borraron después del cobro (cuenta del cliente eliminada). El dinero sí entró.
+      : 'Cobro con tarjeta (producto eliminado)'
     const sucursal = intento.membership?.sucursalPago ?? intento.compra?.sucursalPago ?? null
     const monto = Number(intento.monto)
 

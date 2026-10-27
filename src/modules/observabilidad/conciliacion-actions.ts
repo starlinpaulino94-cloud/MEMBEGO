@@ -3,6 +3,7 @@
 import { requireSection } from '@/lib/auth/guards'
 import { getRequestMeta } from '@/lib/server-utils'
 import {
+  cerrarCobroSinEntregar,
   generarComprobanteDeCobro,
   generarComprobantesPendientes,
   marcarCobroEntregado,
@@ -56,6 +57,12 @@ export async function reintentarEntregaAccion(intentoId: string): Promise<Result
 
 export async function marcarEntregadaAccion(intentoId: string, nota: string): Promise<ResultadoDeAccion> {
   return ejecutar(intentoId, (companyId, idLimpio, actor) => marcarCobroEntregado(companyId, idLimpio, actor, typeof nota === 'string' ? nota : ''))
+}
+
+export async function cerrarSinEntregarAccion(intentoId: string, motivo: string, nota: string): Promise<ResultadoDeAccion> {
+  return ejecutar(intentoId, (companyId, idLimpio, actor) =>
+    cerrarCobroSinEntregar(companyId, idLimpio, actor, motivo, typeof nota === 'string' ? nota : '')
+  )
 }
 
 /** Los periodos que la pantalla ofrece: el lote no acepta uno que la persona no haya podido ver. */

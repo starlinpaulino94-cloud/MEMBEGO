@@ -46,8 +46,13 @@ test('H7 · cada acción del servidor exige la misma función que confirmar un p
   }
 })
 
-test('H7 · las tres acciones asientan la bitácora y ninguna recobra', () => {
-  for (const accion of ['CONCILIACION_COMPROBANTE_GENERADO', 'CONCILIACION_ENTREGA_REINTENTADA', 'CONCILIACION_ENTREGA_MARCADA']) {
+test('H7 · las acciones asientan la bitácora y ninguna recobra', () => {
+  for (const accion of [
+    'CONCILIACION_COMPROBANTE_GENERADO',
+    'CONCILIACION_ENTREGA_REINTENTADA',
+    'CONCILIACION_ENTREGA_MARCADA',
+    'CONCILIACION_ENTREGA_CERRADA_SIN_ENTREGAR',
+  ]) {
     assert.match(SERVICIO, new RegExp(accion))
   }
   assert.doesNotMatch(SERVICIO, /cobrar|cardnet|purchase|autorizar/i, 'la conciliación no toca la pasarela: el dinero ya entró')

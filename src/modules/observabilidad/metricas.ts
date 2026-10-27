@@ -179,7 +179,8 @@ export async function leerMetricas(): Promise<Metricas> {
             company: SIN_DEMO,
             OR: [
               { estado: 'ERROR', respuesta: { path: ['_clasificacion'], equals: 'incierto' } },
-              { estado: 'APROBADO', activadoAt: { not: null }, fulfillmentEstado: { not: 'COMPLETADA' } },
+              // `DESCARTADA` ya la cerró una persona desde la conciliación: no queda nada por conciliar.
+              { estado: 'APROBADO', activadoAt: { not: null }, fulfillmentEstado: { notIn: ['COMPLETADA', 'DESCARTADA'] } },
               { estado: 'CREADO', createdAt: { lt: haceHoras(0.25) } },
             ],
           },

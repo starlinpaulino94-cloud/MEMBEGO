@@ -6,6 +6,7 @@ import { reintentarEntrega } from '@/modules/pagos/intentos'
 import { asegurarVentaDelIntento } from '@/modules/pagos/venta-tarjeta'
 import { asentarEnBitacora } from '@/modules/observabilidad/conciliacion-servicio'
 import { entregaRequierePersona, situacionDeEntrega, type EstadoDeEntrega } from '@/modules/observabilidad/conciliacion-entrega'
+import { activacionesEnBitacora } from '@/modules/observabilidad/conciliacion-bitacora'
 import {
   UMBRAL_AVISO_MS,
   VENTANA_COMPROBANTE_DIAS,
@@ -81,8 +82,8 @@ async function leerEsperando(ahora: Date, companyId?: string) {
       truncado = true
       break
     }
-    const filas = await sinEmpresa('barrido de entregas de pago: leer los cobros sin entregar de todas las empresas', (tx) =>
-      tx.pagoIntento.findMany({
+    const { filas, activaciones } = await sinEmpresa('barrido de entregas de pago: leer los cobros sin entregar de todas las empresas', async (tx) => {
+      const filas = await tx.pagoIntento.findMany({
         where: { estado: 'APROBADO', fulfillmentEstado: { in: ['PENDIENTE', 'PROCESANDO', 'FALLIDA'] }, ...(companyId ? { companyId } : {}) },
         select: {
           id: true,
@@ -94,6 +95,8 @@ async function leerEsperando(ahora: Date, companyId?: string) {
           updatedAt: true,
           fulfillmentEstado: true,
           fulfillmentIntentos: true,
+          membershipId: true,
+          compraId: true,
           membership: { select: { pagoConfirmado: true, fechaPago: true, estado: true, planIdSolicitado: true } },
           compra: { select: { pagoConfirmado: true, fechaActivacion: true } },
         },
@@ -101,11 +104,22 @@ async function leerEsperando(ahora: Date, companyId?: string) {
         take: PAGINA,
         ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       })
-    )
-    // Solo los CLIENTES ESPERANDO: un registro sin cerrar (el producto ya está activo) o una entrega en vuelo no se tocan.
+      // La misma evidencia que la conciliación: sin la bitácora, un cobro antiguo ya entregado cuya membresía venció (o se
+      // borró con la cuenta del cliente) contaba como «cliente esperando» y generaba el aviso a los administradores cada día.
+      return { filas, activaciones: await activacionesEnBitacora(tx, filas) }
+    })
+    // Solo los CLIENTES ESPERANDO: un registro sin cerrar (el producto ya está activo), un cobro cuyo producto ya no existe o
+    // una entrega en vuelo no se tocan ni se avisan.
     for (const i of filas) {
       const situacion = situacionDeEntrega(
-        { estado: i.fulfillmentEstado as EstadoDeEntrega, actualizadoAt: i.updatedAt, activadoAt: i.activadoAt, membership: i.membership, compra: i.compra },
+        {
+          estado: i.fulfillmentEstado as EstadoDeEntrega,
+          actualizadoAt: i.updatedAt,
+          activadoAt: i.activadoAt,
+          membership: i.membership,
+          compra: i.compra,
+          activacionRegistrada: activaciones.get(i.id) ?? null,
+        },
         ahora
       )
       if (situacion === 'CLIENTE_ESPERANDO') esperando.push({ ...i, requierePersona: entregaRequierePersona({ canal: i.canal, planDestinoId: i.planDestinoId, membership: i.membership }) })
