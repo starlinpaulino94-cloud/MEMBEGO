@@ -335,6 +335,7 @@ function Vincular({ ficha }: { ficha: FichaMostrador }) {
               size="sm"
               disabled={buscando}
               onClick={buscar}
+              aria-label="Buscar"
               className="min-h-11 shrink-0"
             >
               {buscando ? (

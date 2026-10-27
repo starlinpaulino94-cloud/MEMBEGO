@@ -202,8 +202,8 @@ export default async function ClientesPage({
           className="min-h-10"
           autoComplete="off"
         />
-        <Button type="submit" variant="outline" className="shrink-0">
-          <Search className="h-4 w-4" />
+        <Button type="submit" variant="outline" className="shrink-0" aria-label="Buscar">
+          <Search className="h-4 w-4" aria-hidden />
         </Button>
         {/* La exportación es un ENLACE al servidor, no un botón en la tabla: se
             lleva todo el filtro, no las 50 filas que el navegador tenga a mano. */}

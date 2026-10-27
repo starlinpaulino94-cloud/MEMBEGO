@@ -37,7 +37,8 @@ export async function ComercioResumen({
   const verOfertas = comercio.modulos.ofertas && ve('/admin/deals')
   if (!verPedidos && !verCatalogo && !verInventario && !verOfertas) return null
 
-  const tarjeta = 'rounded-lg border p-3 transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+  // `block h-full`: el enlace va dentro de un <li> (antes era un <dl> con enlaces dentro, que no es una lista de definición válida).
+  const tarjeta = 'block h-full rounded-lg border p-3 transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
 
   return (
     <section aria-labelledby="comercio-membego" className="rounded-xl border border-border bg-card p-4 shadow-sm">
@@ -47,50 +48,50 @@ export async function ComercioResumen({
         </h2>
         <span className="text-caption text-muted-foreground">Catálogo → Inventario → Ofertas → Pedidos</span>
       </div>
-      <dl className="mt-3 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <ul className="mt-3 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {verPedidos ? (
           <>
-            <Link href="/admin/pedidos-membego?estado=AWAITING_MERCHANT" className={cn(tarjeta, comercio.pedidosNuevos > 0 ? 'border-primary/40 bg-primary/5' : 'border-border')}>
-              <dt className="text-caption">Pedidos nuevos</dt>
-              <dd className="text-h3 tabular-nums text-foreground">{fmt(comercio.pedidosNuevos)}</dd>
+            <li><Link href="/admin/pedidos-membego?estado=AWAITING_MERCHANT" className={cn(tarjeta, comercio.pedidosNuevos > 0 ? 'border-primary/40 bg-primary/5' : 'border-border')}>
+              <span className="block text-caption">Pedidos nuevos</span>
+              <span className="block text-h3 tabular-nums text-foreground">{fmt(comercio.pedidosNuevos)}</span>
               <p className="text-caption text-muted-foreground">{comercio.pedidosNuevos > 0 ? 'Esperan tu respuesta' : 'Nada pendiente'}</p>
-            </Link>
-            <Link href="/admin/pedidos-membego" className={cn(tarjeta, 'border-border')}>
-              <dt className="text-caption">En curso</dt>
-              <dd className="text-h3 tabular-nums text-foreground">{fmt(comercio.pedidosEnCurso)}</dd>
+            </Link></li>
+            <li><Link href="/admin/pedidos-membego" className={cn(tarjeta, 'border-border')}>
+              <span className="block text-caption">En curso</span>
+              <span className="block text-h3 tabular-nums text-foreground">{fmt(comercio.pedidosEnCurso)}</span>
               <p className="text-caption text-muted-foreground">Aceptados o listos para recoger</p>
-            </Link>
+            </Link></li>
             {conFinanzas ? (
-              <div className="rounded-lg border border-border p-3">
-                <dt className="text-caption">Ventas Membego del mes</dt>
-                <dd className="text-h3 tabular-nums text-foreground">{formatMoney(Number(comercio.ventasMes), company)}</dd>
+              <li className="rounded-lg border border-border p-3">
+                <span className="block text-caption">Ventas Membego del mes</span>
+                <span className="block text-h3 tabular-nums text-foreground">{formatMoney(Number(comercio.ventasMes), company)}</span>
                 <p className="text-caption text-muted-foreground">{fmt(comercio.pedidosCompletadosMes)} pedidos completados</p>
-              </div>
+              </li>
             ) : null}
           </>
         ) : null}
         {verCatalogo ? (
-          <Link href="/admin/catalogo" className={cn(tarjeta, 'border-border')}>
-            <dt className="flex items-center gap-1 text-caption"><Package className="size-3.5" aria-hidden /> Catálogo</dt>
-            <dd className="text-h3 tabular-nums text-foreground">{fmt(comercio.productosPublicados)}</dd>
+          <li><Link href="/admin/catalogo" className={cn(tarjeta, 'border-border')}>
+            <span className="flex items-center gap-1 text-caption"><Package className="size-3.5" aria-hidden /> Catálogo</span>
+            <span className="block text-h3 tabular-nums text-foreground">{fmt(comercio.productosPublicados)}</span>
             <p className="text-caption text-muted-foreground">{comercio.productosTotal === 0 ? 'Crea tu primer producto' : `publicados de ${fmt(comercio.productosTotal)}`}</p>
-          </Link>
+          </Link></li>
         ) : null}
         {verInventario ? (
-          <Link href="/admin/inventario?estado=BAJO" className={cn(tarjeta, comercio.stockBajo > 0 ? 'border-warning/50 bg-warning/5' : 'border-border')}>
-            <dt className="flex items-center gap-1 text-caption"><Warehouse className="size-3.5" aria-hidden /> Stock bajo</dt>
-            <dd className="text-h3 tabular-nums text-foreground">{fmt(comercio.stockBajo)}</dd>
+          <li><Link href="/admin/inventario?estado=BAJO" className={cn(tarjeta, comercio.stockBajo > 0 ? 'border-warning/50 bg-warning/5' : 'border-border')}>
+            <span className="flex items-center gap-1 text-caption"><Warehouse className="size-3.5" aria-hidden /> Stock bajo</span>
+            <span className="block text-h3 tabular-nums text-foreground">{fmt(comercio.stockBajo)}</span>
             <p className="text-caption text-muted-foreground">{comercio.stockBajo > 0 ? 'Productos por reponer' : 'Todo con existencias'}</p>
-          </Link>
+          </Link></li>
         ) : null}
         {verOfertas ? (
-          <Link href="/admin/deals" className={cn(tarjeta, 'border-border')}>
-            <dt className="flex items-center gap-1 text-caption"><BadgePercent className="size-3.5" aria-hidden /> Ofertas activas</dt>
-            <dd className="text-h3 tabular-nums text-foreground">{fmt(comercio.ofertasActivas)}</dd>
+          <li><Link href="/admin/deals" className={cn(tarjeta, 'border-border')}>
+            <span className="flex items-center gap-1 text-caption"><BadgePercent className="size-3.5" aria-hidden /> Ofertas activas</span>
+            <span className="block text-h3 tabular-nums text-foreground">{fmt(comercio.ofertasActivas)}</span>
             <p className="text-caption text-muted-foreground">{fmt(comercio.canjesMes)} canjes este mes</p>
-          </Link>
+          </Link></li>
         ) : null}
-      </dl>
+      </ul>
     </section>
   )
 }

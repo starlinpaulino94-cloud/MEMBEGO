@@ -175,6 +175,7 @@ export function AgendaConfigForm({ config }: { config: AgendaConfigData | null }
                   <input
                     type="time"
                     name={`dia_${d}_desde`}
+                    aria-label={`${label}: desde`}
                     defaultValue={rango?.desde ?? '08:00'}
                     className="rounded-lg border border-input bg-background px-2 py-1.5 text-sm"
                   />
@@ -182,6 +183,7 @@ export function AgendaConfigForm({ config }: { config: AgendaConfigData | null }
                   <input
                     type="time"
                     name={`dia_${d}_hasta`}
+                    aria-label={`${label}: hasta`}
                     defaultValue={rango?.hasta ?? '18:00'}
                     className="rounded-lg border border-input bg-background px-2 py-1.5 text-sm"
                   />

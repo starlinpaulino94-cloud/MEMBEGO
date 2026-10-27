@@ -18,9 +18,10 @@ export function BannerDemo({ nombreEmpresa }: { nombreEmpresa?: string | null })
   return (
     <div
       role="status"
-      className="sticky top-14 z-40 mb-6 flex items-center gap-2 rounded-xl border border-warning/40 bg-warning/15 px-4 py-2 text-sm font-semibold text-warning backdrop-blur"
+      className="sticky top-14 z-40 mb-6 flex items-center gap-2 rounded-xl border border-warning/40 bg-warning/15 px-4 py-2 text-sm font-semibold text-foreground backdrop-blur"
     >
-      <FlaskConical className="h-4 w-4 shrink-0" aria-hidden />
+      {/* El texto en `foreground`: en `warning` sobre el fondo tintado daba 3,7:1 en cada pantalla de una empresa de práctica. */}
+      <FlaskConical className="h-4 w-4 shrink-0 text-warning" aria-hidden />
       <span className="flex-1">
         Modo demostración{nombreEmpresa ? ` · ${nombreEmpresa}` : ''} — todo lo que pase aquí es
         de práctica: ni los cobros ni los datos son reales.

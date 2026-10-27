@@ -117,6 +117,7 @@ export default async function RegistrosPage({
         </div>
         <select
           name="tipo"
+          aria-label="Tipo"
           defaultValue={sp.tipo ?? ''}
           className="h-10 rounded-xl border border-input bg-background px-3 text-sm"
         >
@@ -127,6 +128,7 @@ export default async function RegistrosPage({
         </select>
         <select
           name="estado"
+          aria-label="Estado"
           defaultValue={sp.estado ?? ''}
           className="h-10 rounded-xl border border-input bg-background px-3 text-sm"
         >
@@ -137,6 +139,7 @@ export default async function RegistrosPage({
         </select>
         <select
           name="metodo"
+          aria-label="Método de pago"
           defaultValue={sp.metodo ?? ''}
           className="h-10 rounded-xl border border-input bg-background px-3 text-sm"
         >

@@ -242,7 +242,7 @@ function Buscador({
           className="min-h-11"
           autoComplete="off"
         />
-        <Button type="button" size="sm" disabled={buscando} onClick={buscar} className="shrink-0">
+        <Button type="button" size="sm" disabled={buscando} onClick={buscar} aria-label="Buscar" className="shrink-0">
           {buscando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
         </Button>
         <Button

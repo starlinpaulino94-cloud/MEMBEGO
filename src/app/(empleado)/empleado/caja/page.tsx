@@ -64,9 +64,9 @@ export default async function CajaPage({
   const companyId = user.metadata.companyId as string | undefined
   if (!companyId) {
     return (
-      <main className="container max-w-2xl py-8">
+      <div className="container max-w-2xl py-8">
         <p className="text-muted-foreground">Tu usuario no está vinculado a una empresa.</p>
-      </main>
+      </div>
     )
   }
 
@@ -75,12 +75,12 @@ export default async function CajaPage({
   const { tieneCapacidad } = await import('@/modules/capacidades/resolver')
   if (!(await tieneCapacidad(companyId, 'POS_CAJA'))) {
     return (
-      <main className="container max-w-2xl py-8">
+      <div className="container max-w-2xl py-8">
         <p className="text-muted-foreground">
           La caja no está activada para este negocio. Si crees que es un error,
           contacta al administrador.
         </p>
-      </main>
+      </div>
     )
   }
 
@@ -150,7 +150,7 @@ export default async function CajaPage({
 
   if (!sesion) {
     return (
-      <main className="container max-w-lg py-8">
+      <div className="container max-w-lg py-8">
         <header className="mb-6">
           <h1 className="text-h2 text-foreground">Caja</h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -171,7 +171,7 @@ export default async function CajaPage({
           <ReporteDiaDialog />
         </div>
         {cierresRecientes && <div className="mt-6">{cierresRecientes}</div>}
-      </main>
+      </div>
     )
   }
 
@@ -193,7 +193,7 @@ export default async function CajaPage({
   const esperado = Number(sesion.balanceInicial) + resumen.totalEfectivo + movimientos.neto
 
   return (
-    <main className="container max-w-3xl space-y-6 py-8">
+    <div className="container max-w-3xl space-y-6 py-8">
       {abiertas.length > 1 && (
         <nav aria-label="Cajas abiertas" className="flex flex-wrap items-center gap-2 rounded-2xl border border-border/70 bg-card p-3" data-testid="caja-selector">
           <span className="text-sm font-medium text-foreground">Hay {abiertas.length} cajas abiertas. Trabajas con:</span>
@@ -337,6 +337,6 @@ export default async function CajaPage({
       <CerrarCajaForm cajaSesionId={sesion.id} esperado={esperado} />
 
       {cierresRecientes}
-    </main>
+    </div>
   )
 }

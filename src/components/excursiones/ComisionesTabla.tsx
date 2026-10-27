@@ -37,7 +37,7 @@ function columnasDeComisiones(acciones: (c: ComisionFila) => ReactNode): Columna
     celda: (c) => (
       <>
         {c.venta ? (
-          <Link href={`/admin/excursiones/ventas/${c.venta.id}`} className="font-mono font-semibold text-foreground hover:text-primary hover:underline">
+          <Link href={`/admin/excursiones/reservas/${c.venta.reservaId}`} className="font-mono font-semibold text-foreground hover:text-primary hover:underline">
             {c.venta.numero}
           </Link>
         ) : (

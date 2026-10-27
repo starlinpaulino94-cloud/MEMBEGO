@@ -439,9 +439,9 @@ function BeneficioFields({
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label>Beneficio digital (recomendado)</Label>
+        <Label htmlFor={`${prefix}PromocionId`}>Beneficio digital (recomendado)</Label>
         <Select name={`${prefix}PromocionId`} defaultValue={defaults?.promocionId ?? 'none'}>
-          <SelectTrigger>
+          <SelectTrigger id={`${prefix}PromocionId`}>
             <SelectValue placeholder="Selecciona una promoción" />
           </SelectTrigger>
           <SelectContent>
@@ -461,9 +461,9 @@ function BeneficioFields({
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label>Tipo de beneficio</Label>
+          <Label htmlFor={`${prefix}Tipo`}>Tipo de beneficio</Label>
           <Select name={`${prefix}Tipo`} value={tipo} onValueChange={onTipoChange}>
-            <SelectTrigger>
+            <SelectTrigger id={`${prefix}Tipo`}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

@@ -49,7 +49,7 @@ export function FiltrosChips({
                 key={o.valor}
                 // Pulsar el activo lo quita: `undefined` borra el parámetro.
                 href={urlConFiltros(base, params, { [g.clave]: activo ? undefined : o.valor })}
-                aria-pressed={activo}
+                aria-current={activo ? 'true' : undefined}
                 className={
                   activo
                     ? 'inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1 text-sm font-medium text-primary-foreground'
