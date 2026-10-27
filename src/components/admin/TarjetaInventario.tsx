@@ -13,7 +13,8 @@ function aNumero(c: Costo): number {
   return (c < CERO ? -1 : 1) * Number(costoADecimal(c < CERO ? -c : c))
 }
 
-const TILE = 'rounded-lg border border-border p-3 transition hover:bg-muted/40'
+// `block h-full`: el enlace va dentro de un <li> (antes era un <dl> con enlaces dentro, que no es una lista de definición válida).
+const TILE = 'block h-full rounded-lg border border-border p-3 transition hover:bg-muted/40'
 
 /** Las columnas según cuántas cifras hay: valor o unidades, margen (con costos), lo perdido y —si la empresa lleva lotes— lo que vence. */
 function columnas(r: ResumenInventario): string {
@@ -41,65 +42,65 @@ export function TarjetaInventario({ resumen, company }: { resumen: ResumenInvent
           Ver reportes
         </Link>
       </div>
-      <dl className={`mt-3 grid gap-3 ${columnas(resumen)}`}>
+      <ul className={`mt-3 grid gap-3 ${columnas(resumen)}`}>
         {resumen.conCostos && resumen.valor !== null ? (
-          <Link href="/admin/inventario/valor" className={TILE}>
-            <dt className="text-caption">Valor del inventario</dt>
-            <dd className="text-h3 tabular-nums text-foreground">{dinero(resumen.valor)}</dd>
+          <li><Link href="/admin/inventario/valor" className={TILE}>
+            <span className="block text-caption">Valor del inventario</span>
+            <span className="block text-h3 tabular-nums text-foreground">{dinero(resumen.valor)}</span>
             <p className="text-label-sm text-muted-foreground">
               {fmt(resumen.unidadesEnExistencia)} unidad{resumen.unidadesEnExistencia === 1 ? '' : 'es'}
               {(resumen.unidadesSinCosto ?? 0) > 0 ? ` · ${fmt(resumen.unidadesSinCosto ?? 0)} sin costo` : ''}
             </p>
-          </Link>
+          </Link></li>
         ) : (
-          <Link href="/admin/inventario" className={TILE}>
-            <dt className="text-caption">Unidades en existencia</dt>
-            <dd className="text-h3 tabular-nums text-foreground">{fmt(resumen.unidadesEnExistencia)}</dd>
+          <li><Link href="/admin/inventario" className={TILE}>
+            <span className="block text-caption">Unidades en existencia</span>
+            <span className="block text-h3 tabular-nums text-foreground">{fmt(resumen.unidadesEnExistencia)}</span>
             <p className="text-label-sm text-muted-foreground">En todas tus sucursales</p>
-          </Link>
+          </Link></li>
         )}
         {resumen.conCostos && m !== null ? (
-          <Link href="/admin/inventario/reportes/margen" className={TILE}>
-            <dt className="text-caption">Margen del mes</dt>
-            <dd className={`text-h3 tabular-nums ${m.margen < CERO ? 'text-destructive' : 'text-foreground'}`}>{m.productos === 0 ? '—' : dinero(m.margen)}</dd>
+          <li><Link href="/admin/inventario/reportes/margen" className={TILE}>
+            <span className="block text-caption">Margen del mes</span>
+            <span className={`block text-h3 tabular-nums ${m.margen < CERO ? 'text-destructive' : 'text-foreground'}`}>{m.productos === 0 ? '—' : dinero(m.margen)}</span>
             <p className="text-label-sm text-muted-foreground">
               {m.productos === 0
                 ? 'Sin ventas este mes'
                 : `${m.margenPct === null ? 'Sin base para el porcentaje' : formatearPorcentaje(m.margenPct)} · ${fmt(m.unidades)} unidad${m.unidades === 1 ? '' : 'es'} vendida${m.unidades === 1 ? '' : 's'}`}
               {m.unidadesSinCosto > 0 ? ` · ${fmt(m.unidadesSinCosto)} sin costo no entran` : ''}
             </p>
-          </Link>
+          </Link></li>
         ) : null}
         {resumen.vencimientos.llevaLotes ? (
-          <Link
+          <li><Link
             href={resumen.vencimientos.vencidos.lotes > 0 ? '/admin/inventario/reportes/vencimientos?estado=VENCIDO' : '/admin/inventario/reportes/vencimientos'}
             className={`${TILE} ${resumen.vencimientos.vencidos.lotes > 0 || resumen.vencimientos.porVencer.urgentes > 0 ? 'border-warning/50 bg-warning/5' : ''}`}
           >
-            <dt className="flex items-center gap-1 text-caption">
+            <span className="flex items-center gap-1 text-caption">
               <CalendarClock className="size-3.5" aria-hidden /> Vence pronto
-            </dt>
-            <dd className="text-h3 tabular-nums text-foreground">
+            </span>
+            <span className="block text-h3 tabular-nums text-foreground">
               {fmt(resumen.vencimientos.porVencer.lotes)} <span className="text-small text-muted-foreground">lote{resumen.vencimientos.porVencer.lotes === 1 ? '' : 's'}</span>
-            </dd>
+            </span>
             <p className="text-label-sm text-muted-foreground">
               {resumen.vencimientos.porVencer.lotes === 0 && resumen.vencimientos.vencidos.lotes === 0
                 ? `Nada vence en ${resumen.vencimientos.dias} días`
                 : `en ${resumen.vencimientos.dias} días${resumen.vencimientos.porVencer.urgentes > 0 ? ` · ${fmt(resumen.vencimientos.porVencer.urgentes)} urgente${resumen.vencimientos.porVencer.urgentes === 1 ? '' : 's'}` : ''}${resumen.vencimientos.vencidos.lotes > 0 ? ` · ${fmt(resumen.vencimientos.vencidos.lotes)} ya vencido${resumen.vencimientos.vencidos.lotes === 1 ? '' : 's'}` : ''}`}
             </p>
-          </Link>
+          </Link></li>
         ) : null}
-        <Link href="/admin/inventario/reportes/mermas" className={`${TILE} ${resumen.perdido.unidades > 0 ? 'border-warning/50 bg-warning/5' : ''}`}>
-          <dt className="text-caption">Perdido este mes</dt>
-          <dd className="text-h3 tabular-nums text-foreground">
+        <li><Link href="/admin/inventario/reportes/mermas" className={`${TILE} ${resumen.perdido.unidades > 0 ? 'border-warning/50 bg-warning/5' : ''}`}>
+          <span className="block text-caption">Perdido este mes</span>
+          <span className="block text-h3 tabular-nums text-foreground">
             {fmt(resumen.perdido.unidades)} <span className="text-small text-muted-foreground">unidad{resumen.perdido.unidades === 1 ? '' : 'es'}</span>
-          </dd>
+          </span>
           <p className="text-label-sm text-muted-foreground">
             {resumen.perdido.unidades === 0
               ? 'Sin faltantes ni bajas'
               : `${fmt(resumen.perdido.movimientos)} movimiento${resumen.perdido.movimientos === 1 ? '' : 's'}${resumen.conCostos && resumen.perdido.valor !== null ? ` · ${dinero(resumen.perdido.valor)}` : ''}`}
           </p>
-        </Link>
-      </dl>
+        </Link></li>
+      </ul>
     </section>
   )
 }
