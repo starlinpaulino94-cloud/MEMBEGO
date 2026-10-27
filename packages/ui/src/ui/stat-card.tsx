@@ -163,7 +163,11 @@ export function StatCard({
           }
         : {})}
       className={cn(
-        'group relative block overflow-hidden rounded-2xl border border-border/60 bg-card p-5 shadow-card transition-all duration-base hover:shadow-card-hover hover:-translate-y-0.5',
+        // `@container`: la cifra y el icono se ajustan al ancho de la TARJETA,
+        // no al de la pantalla. Con dos columnas en un móvil (o cuatro junto a
+        // la barra lateral a 1 024 px) la tarjeta mide ~170 px y una cifra como
+        // «RD$11,313.33» a text-3xl se salía y `overflow-hidden` la cortaba.
+        '@container group relative block overflow-hidden rounded-2xl border border-border/60 bg-card p-5 shadow-card transition-all duration-base hover:shadow-card-hover hover:-translate-y-0.5',
         // El foco visible solo cuando es pulsable: un anillo en algo que no
         // hace nada al pulsarlo es una promesa falsa.
         href &&
@@ -180,7 +184,19 @@ export function StatCard({
       <div className="relative flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-muted-foreground">{label}</p>
-          <p className="mt-1.5 text-3xl font-bold tracking-tight text-foreground tabular-nums">
+          {/* Un escalón más grande desde 11rem de contenido (la consulta mide
+              sin el p-5: ~14,5rem de tarjeta). Una cifra larga —el dinero:
+              «RD$11,313»— va un escalón por debajo de una corta para caber junto
+              al icono. `overflow-wrap:anywhere` es la última red: partir la
+              cifra antes que esconder parte de ella. */}
+          <p
+            className={cn(
+              'mt-1.5 font-bold tracking-tight text-foreground tabular-nums [overflow-wrap:anywhere]',
+              typeof value === 'string' && value.length > 7
+                ? 'text-lg @min-[11rem]:text-2xl'
+                : 'text-2xl @min-[11rem]:text-3xl'
+            )}
+          >
             {value}
           </p>
           {sub && <p className="mt-0.5 text-xs text-muted-foreground">{sub}</p>}
@@ -199,7 +215,9 @@ export function StatCard({
         </div>
 
         {Icon && a && (
-          <div className={cn('shrink-0 rounded-xl p-2.5 ring-1', a.iconBg)}>
+          // Decorativo: con menos de 10rem de contenido le quitaba a la cifra
+          // casi la mitad del ancho.
+          <div className={cn('hidden shrink-0 rounded-xl p-2.5 ring-1 @min-[10rem]:block', a.iconBg)}>
             <Icon className={cn('h-5 w-5', a.iconText)} />
           </div>
         )}

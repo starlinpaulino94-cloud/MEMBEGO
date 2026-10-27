@@ -30,8 +30,11 @@ function TarjetaUsuario({ u, esYo }: { u: UsuarioFila; esYo: boolean }) {
   return (
     <Card>
       <CardContent className="p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3">
+        {/* `flex-wrap` + nombre con base de 12rem: en un móvil el botón de
+            superadmin dejaba el nombre en «ALVA…»; ahora las acciones bajan
+            de línea cuando no caben junto a él. */}
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-1 basis-48 items-center gap-3">
             <div
               className={`rounded-lg p-2 ${u.esSuperadmin ? 'bg-warning/15' : 'bg-info/15'}`}
             >
@@ -213,7 +216,7 @@ export default async function UsuariosYAccesosPage({
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {d.filas.map((u) => (
             <TarjetaUsuario key={u.id} u={u} esYo={u.id === sesion.metadata.dbUserId} />
           ))}

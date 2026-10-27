@@ -196,6 +196,8 @@ export function TablaReporte({
   }
   return (
     <div className={cn('overflow-x-auto', className)}>
+      {/* `pl-4` en las columnas a la derecha: sin él, en un móvil dos cabeceras
+          numéricas seguidas se tocaban («INGRESOSACTIVASUSOS»). */}
       <table className="w-full text-sm print:text-xs">
         {titulo && (
           <caption className="sr-only text-left print:not-sr-only print:mb-1 print:font-bold">
@@ -210,7 +212,7 @@ export function TablaReporte({
                 scope="col"
                 className={cn(
                   'py-2 pr-3 text-overline font-semibold print:py-1 print:text-xs',
-                  c.alinearDerecha && 'pr-0 text-right'
+                  c.alinearDerecha && 'pl-4 pr-0 text-right'
                 )}
               >
                 {c.titulo}
@@ -226,7 +228,7 @@ export function TablaReporte({
                   key={c.clave}
                   className={cn(
                     'py-2 pr-3 text-foreground print:py-0.5',
-                    c.alinearDerecha && 'pr-0 text-right tabular-nums'
+                    c.alinearDerecha && 'pl-4 pr-0 text-right tabular-nums'
                   )}
                 >
                   {f[c.clave]}
@@ -243,7 +245,7 @@ export function TablaReporte({
                   key={c.clave}
                   className={cn(
                     'py-2 pr-3 text-foreground print:py-0.5',
-                    c.alinearDerecha && 'pr-0 text-right tabular-nums'
+                    c.alinearDerecha && 'pl-4 pr-0 text-right tabular-nums'
                   )}
                 >
                   {total[c.clave]}
