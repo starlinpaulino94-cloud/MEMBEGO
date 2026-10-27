@@ -17,10 +17,10 @@ const statusChipVariants = cva(
   {
     variants: {
       tone: {
-        success: 'border-success/20 bg-success/10 text-success',
-        warning: 'border-warning/30 bg-warning/15 text-warning',
-        danger: 'border-destructive/20 bg-destructive/10 text-destructive',
-        info: 'border-info/20 bg-info/10 text-info',
+        success: 'border-success/20 bg-success/10 text-success panel:border-transparent panel:bg-success-soft panel:text-success-ink',
+        warning: 'border-warning/30 bg-warning/15 text-warning panel:border-transparent panel:bg-warning-soft panel:text-warning-ink',
+        danger: 'border-destructive/20 bg-destructive/10 text-destructive panel:border-transparent panel:bg-danger-soft panel:text-danger-ink',
+        info: 'border-info/20 bg-info/10 text-info panel:border-transparent panel:bg-info-soft panel:text-info-ink',
         neutral: 'border-border bg-muted text-muted-foreground',
         /* Fase 4 · «Pendiente» del sistema de diseño del panel (`--pending`, docs/auditoria-admin/10 §3). Sobre `bg-card`, NO
            sobre `bg-muted`: `scripts/contraste.mjs` midió `text-pending` sobre `--muted` en 4,42:1 en el tema claro (< 4,5). */

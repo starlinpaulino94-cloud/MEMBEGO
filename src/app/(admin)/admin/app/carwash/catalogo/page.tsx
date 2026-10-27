@@ -57,7 +57,7 @@ export default async function CatalogoCarWashPage() {
       />
 
       {datos === null ? (
-        <p className="rounded-2xl border border-warning/30 bg-warning/10 p-5 text-sm text-foreground">
+        <p className="rounded-2xl border border-warning/30 bg-warning-soft p-5 text-sm text-foreground">
           No se pudo cargar el catálogo. Si acabas de instalar esta versión, corre la
           migración <b>20260762_carwash_fase1</b> en la base de datos.
         </p>

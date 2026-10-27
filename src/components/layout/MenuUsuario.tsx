@@ -2,7 +2,7 @@
 
 import { useId } from 'react'
 import Link from 'next/link'
-import { CircleHelp, LogOut, User } from 'lucide-react'
+import { ChevronDown, CircleHelp, LogOut, User } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,6 +48,7 @@ export function MenuUsuario({
   align = 'end',
   side,
   triggerClassName,
+  rotuloRol,
 }: {
   role: AppRole
   userEmail: string
@@ -64,6 +65,11 @@ export function MenuUsuario({
   side?: 'top' | 'right' | 'bottom' | 'left'
   /** Estilo del disparador: la cabecera es clara y el riel es navy. */
   triggerClassName?: string
+  /**
+   * Solo la cabecera: con él, el disparador es una píldora de cuenta (avatar, y en pantallas anchas nombre y rol, más la
+   * flecha que dice que se despliega). Sin él, solo el avatar, como en el riel.
+   */
+  rotuloRol?: string
 }) {
   const idFormSalir = useId()
   const identidad = userName?.trim() || userEmail
@@ -74,13 +80,25 @@ export function MenuUsuario({
       <DropdownMenuTrigger
         aria-label="Tu cuenta"
         className={cn(
-          'flex h-10 w-10 items-center justify-center rounded-lg outline-none transition-colors duration-fast hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring',
+          rotuloRol
+            ? 'flex h-10 min-w-0 items-center gap-2 rounded-full py-1 pl-1 pr-1 outline-none transition-colors duration-fast hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring md:pr-2'
+            : 'flex h-10 w-10 items-center justify-center rounded-lg outline-none transition-colors duration-fast hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring',
           triggerClassName
         )}
       >
-        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-brand text-[13px] font-semibold text-white">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-brand text-[13px] font-semibold text-white">
           {inicial}
         </span>
+        {rotuloRol ? (
+          <>
+            {/* Nombre y rol solo en 2xl: por debajo le quitaban a las migas el ancho que necesitan. */}
+            <span className="hidden min-w-0 max-w-[11rem] text-left 2xl:block" aria-hidden>
+              <span className="block truncate text-label-lg text-foreground">{identidad}</span>
+              <span className="block truncate text-label-md text-muted-foreground">{rotuloRol}</span>
+            </span>
+            <ChevronDown className="hidden h-4 w-4 shrink-0 text-muted-foreground md:block" aria-hidden />
+          </>
+        ) : null}
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align={align} side={side} className="w-60">

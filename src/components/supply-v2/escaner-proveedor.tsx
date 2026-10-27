@@ -126,7 +126,7 @@ export function EscanerProveedor({ sucursales, extras = [], puedeVenderExtras = 
               <input type="hidden" name="idempotencyKey" value={preview.idempotencyKey ?? ''} />
               <input type="hidden" name="channel" value={canal} />
               {entrega.error && (
-                <p className="flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive" role="alert" data-testid="entrega-error">
+                <p className="flex items-center gap-2 rounded-lg bg-danger-soft p-3 text-sm text-danger-ink" role="alert" data-testid="entrega-error">
                   <XCircle className="size-4 shrink-0" aria-hidden />
                   {entrega.error}
                 </p>
@@ -166,7 +166,7 @@ export function EscanerProveedor({ sucursales, extras = [], puedeVenderExtras = 
             {escaneando && <p className="text-sm text-muted-foreground">Comprobando…</p>}
             {(escaneo.error || (preview && !preview.valid)) && (
               <div className="space-y-3">
-                <p className="flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive" role="alert" data-testid="preview-rechazado">
+                <p className="flex items-center gap-2 rounded-lg bg-danger-soft p-3 text-sm text-danger-ink" role="alert" data-testid="preview-rechazado">
                   <XCircle className="size-4 shrink-0" aria-hidden />
                   {escaneo.error ?? preview?.message}
                 </p>

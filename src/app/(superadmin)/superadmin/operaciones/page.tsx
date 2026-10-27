@@ -92,7 +92,7 @@ function TarjetaEmpresa({ e }: { e: OperacionEmpresa }) {
             {e.esDemo && (
               <Badge
                 variant="outline"
-                className="border-warning/40 bg-warning/10 text-caption text-warning"
+                className="border-warning/40 bg-warning-soft text-caption text-warning-ink"
               >
                 Práctica
               </Badge>
@@ -157,7 +157,7 @@ function TarjetaEmpresa({ e }: { e: OperacionEmpresa }) {
                 variant="outline"
                 className={
                   e.whatsapp.activo
-                    ? 'border-success/40 bg-success/10 text-caption text-success'
+                    ? 'border-success/40 bg-success-soft text-caption text-success-ink'
                     : 'text-caption text-muted-foreground'
                 }
               >

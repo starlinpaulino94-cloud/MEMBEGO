@@ -388,9 +388,9 @@ export function ReporteEmpresaVista({
                   <span
                     className={`mt-0.5 shrink-0 rounded-lg p-1.5 print:hidden ${
                       i.tono === 'bueno'
-                        ? 'bg-success/10 text-success'
+                        ? 'bg-success-soft text-success-ink'
                         : i.tono === 'malo'
-                          ? 'bg-destructive/10 text-destructive'
+                          ? 'bg-danger-soft text-danger-ink'
                           : 'bg-muted text-muted-foreground'
                     }`}
                   >

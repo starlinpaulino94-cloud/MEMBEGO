@@ -247,7 +247,7 @@ export function ReservaEstadoBotones({
           </div>
 
           {totalNuevo === 0 && (
-            <div className="flex items-center gap-2 rounded-xl bg-destructive/10 p-3 text-xs text-destructive">
+            <div className="flex items-center gap-2 rounded-xl bg-danger-soft p-3 text-xs text-danger-ink">
               <AlertCircle className="h-4 w-4 shrink-0" />
               <div className="flex-1">
                 <p className="font-semibold">Reducir a 0 pasajeros cancelará la reserva completa.</p>

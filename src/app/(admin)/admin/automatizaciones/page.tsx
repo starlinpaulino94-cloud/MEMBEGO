@@ -30,7 +30,7 @@ const REGLAS: {
   },
   {
     icon: Clock,
-    chip: 'bg-warning/15 text-warning',
+    chip: 'bg-warning-soft text-warning-ink',
     titulo: 'Membresía por vencer',
     cuando: 'Cuando faltan 7 días o menos para el vencimiento',
     accion: 'Le recuerda renovar para no perder sus beneficios (una vez por vencimiento).',

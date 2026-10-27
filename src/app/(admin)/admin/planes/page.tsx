@@ -97,7 +97,8 @@ export default async function PlanesPage() {
         title="Planes"
         description="Lo que vendes. Define precio, usos y beneficios; los clientes los compran y se convierten en membresías."
         action={
-          <div className="flex items-center gap-2">
+          // `flex-wrap`: en un móvil los tres botones no caben en una fila y «Nuevo plan» se salía de la pantalla.
+          <div className="flex flex-wrap items-center gap-2">
             {empresa && (
               <CompartirOfertaButton
                 variant="full"
@@ -165,7 +166,7 @@ export default async function PlanesPage() {
                   </CardTitle>
                   <div className="flex items-center gap-1.5">
                     {plan.esIlimitado && (
-                      <Badge className="bg-warning/15 text-warning">
+                      <Badge className="bg-warning-soft text-warning-ink">
                         <InfinityIcon className="mr-1 h-3 w-3" /> Ilimitado
                       </Badge>
                     )}

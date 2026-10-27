@@ -153,7 +153,7 @@ export default async function ReportesOperativosPage({
       </Form>
 
       {reporte.recortado && (
-        <p className="rounded-xl border border-warning/40 bg-warning/10 p-3 text-xs text-warning">
+        <p className="rounded-xl border border-warning/40 bg-warning-soft p-3 text-xs text-warning-ink">
           El rango pedido era muy amplio; se muestran los primeros 92 días.
         </p>
       )}

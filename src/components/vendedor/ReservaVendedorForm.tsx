@@ -288,7 +288,7 @@ export function ReservaVendedorForm({
 
   if (excursiones.length === 0) {
     return (
-      <Alert className="border-warning/30 bg-warning/10">
+      <Alert className="border-warning/30 bg-warning-soft">
         <Info className="h-5 w-5 text-warning" />
         <AlertDescription className="text-sm font-medium">
           No hay excursiones activas en esta empresa para reservar.
@@ -328,7 +328,7 @@ export function ReservaVendedorForm({
           )}
 
           {state.success && (
-            <Alert className="border-success/30 bg-success/10 text-success animate-in fade-in duration-slow w-full min-w-0">
+            <Alert className="border-success/30 bg-success-soft text-success-ink animate-in fade-in duration-slow w-full min-w-0">
               <ShieldCheck className="h-5 w-5 text-success shrink-0" />
               <AlertDescription className="font-semibold">{state.success}</AlertDescription>
             </Alert>
@@ -601,7 +601,7 @@ export function ReservaVendedorForm({
                                 <span
                                   className={`text-xs font-bold px-2 py-0.5 rounded-full shrink-0 ${
                                     esPd
-                                      ? 'bg-success/10 text-success border border-success/20'
+                                      ? 'bg-success-soft text-success-ink border border-success/20'
                                       : 'bg-primary/10 text-primary border border-primary/20'
                                     }`}
                                 >

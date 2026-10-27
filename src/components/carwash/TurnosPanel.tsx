@@ -82,7 +82,7 @@ export function TurnosPanel({ panel }: { panel: PanelTurnos }) {
       </div>
 
       {sinCosto && (
-        <p className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm text-muted-foreground">
+        <p className="rounded-xl border border-warning/30 bg-warning-soft p-4 text-sm text-muted-foreground">
           Hay horas registradas pero ningún turno lleva <b>costo por hora</b>, así que el costo
           por lavado no se puede calcular. Ponlo al marcar la entrada, o corrígelo en los turnos
           de abajo.
@@ -286,7 +286,7 @@ function FilaTurno({ f }: { f: TurnoFila }) {
           <p className="truncate text-sm font-semibold text-foreground">
             {f.empleado}
             {f.abierto && (
-              <span className="ml-2 rounded-full bg-success/15 px-2 py-0.5 text-xs font-bold uppercase text-success">
+              <span className="ml-2 rounded-full bg-success-soft px-2 py-0.5 text-xs font-bold uppercase text-success-ink">
                 abierto
               </span>
             )}

@@ -101,7 +101,7 @@ export function NotasCliente({
           {notas.map((n) => (
             <li
               key={n.id}
-              className="rounded-lg border border-warning/30 bg-warning/15 p-3"
+              className="rounded-lg border border-warning/30 bg-warning-soft p-3"
             >
               <div className="flex items-start justify-between gap-2">
                 <p className="whitespace-pre-wrap text-sm text-foreground">{n.texto}</p>

@@ -39,10 +39,10 @@ const ICONO: Record<TipoEvento, LucideIcon> = {
 const TONO: Record<TipoEvento, string> = {
   REGISTRO: 'bg-muted text-muted-foreground',
   MEMBRESIA: 'bg-primary/10 text-primary',
-  PAGO: 'bg-success/15 text-success',
-  VISITA: 'bg-info/10 text-info',
+  PAGO: 'bg-success-soft text-success-ink',
+  VISITA: 'bg-info-soft text-info-ink',
   COMPRA: 'bg-primary/10 text-primary',
-  CITA: 'bg-warning/15 text-warning',
+  CITA: 'bg-warning-soft text-warning-ink',
   NOTA: 'bg-muted text-foreground',
   NOTIFICACION: 'bg-muted text-muted-foreground',
 }

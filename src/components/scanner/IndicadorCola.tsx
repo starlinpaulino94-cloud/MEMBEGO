@@ -36,7 +36,7 @@ export function IndicadorCola({ cola }: { cola: ColaOffline }) {
     <div
       className={`rounded-xl border px-4 py-3 text-sm ${
         r.requiereAtencion
-          ? 'border-warning/40 bg-warning/10'
+          ? 'border-warning/40 bg-warning-soft'
           : 'border-border/60 bg-muted/40'
       }`}
       role="status"

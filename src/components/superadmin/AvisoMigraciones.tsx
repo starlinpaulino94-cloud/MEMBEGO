@@ -14,7 +14,7 @@ export async function AvisoMigraciones() {
   if (pendientes.length === 0) return null
 
   return (
-    <div className="rounded-2xl border border-warning/40 bg-warning/10 p-4">
+    <div className="rounded-2xl border border-warning/40 bg-warning-soft p-4">
       <p className="flex items-center gap-2 font-bold text-warning">
         <TriangleAlert className="h-4 w-4 shrink-0" />
         {pendientes.length === 1

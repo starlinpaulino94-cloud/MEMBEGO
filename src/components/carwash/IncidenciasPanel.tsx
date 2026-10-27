@@ -58,14 +58,14 @@ function fmtFecha(d: Date) {
 }
 
 const CHIP_ESTADO: Record<string, string> = {
-  ABIERTA: 'bg-destructive/10 text-destructive',
-  EN_PROCESO: 'bg-warning/15 text-warning',
-  RESUELTA: 'bg-success/15 text-success',
+  ABIERTA: 'bg-danger-soft text-danger-ink',
+  EN_PROCESO: 'bg-warning-soft text-warning-ink',
+  RESUELTA: 'bg-success-soft text-success-ink',
 }
 
 const CHIP_GRAVEDAD: Record<string, string> = {
-  ALTA: 'bg-destructive/10 text-destructive',
-  MEDIA: 'bg-warning/15 text-warning',
+  ALTA: 'bg-danger-soft text-danger-ink',
+  MEDIA: 'bg-warning-soft text-warning-ink',
   BAJA: 'bg-muted text-muted-foreground',
 }
 

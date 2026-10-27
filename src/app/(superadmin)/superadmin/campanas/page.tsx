@@ -224,7 +224,7 @@ export default async function CampanasGlobalesPage({
                           // Lleva a la campaña, donde está el error de cada empresa: antes era una insignia que no se podía pulsar.
                           <Link
                             href={`${BASE}/${c.id}`}
-                            className="ml-2 inline-block rounded-full bg-destructive/10 px-2 py-0.5 text-overline text-destructive hover:bg-destructive/20"
+                            className="ml-2 inline-block rounded-full bg-danger-soft px-2 py-0.5 text-overline text-danger-ink hover:bg-destructive/20"
                           >
                             {c.conError} con error
                           </Link>

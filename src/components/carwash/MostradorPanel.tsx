@@ -247,7 +247,7 @@ function Buscador() {
                       className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-bold uppercase ${
                         c.esLocal
                           ? 'bg-muted text-muted-foreground'
-                          : 'bg-success/15 text-success'
+                          : 'bg-success-soft text-success-ink'
                       }`}
                     >
                       {c.esLocal ? 'mostrador' : 'con cuenta'}

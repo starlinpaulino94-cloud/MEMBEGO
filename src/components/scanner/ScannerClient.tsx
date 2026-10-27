@@ -79,12 +79,12 @@ function leerModoGuardado(): Modo | null {
 // código (título + qué hacer) viene del diagnóstico del servidor.
 const TONE = {
   destructive: {
-    box: 'border-destructive/25 bg-destructive/10',
+    box: 'border-destructive/25 bg-danger-soft',
     icon: 'text-destructive',
     title: 'text-destructive',
   },
   warning: {
-    box: 'border-warning/30 bg-warning/10',
+    box: 'border-warning/30 bg-warning-soft',
     icon: 'text-warning',
     title: 'text-warning',
   },
@@ -598,7 +598,7 @@ function ReaderPanel({
             <span className="inline-flex items-center gap-1"><Wifi className="h-3.5 w-3.5" /> Inalámbrico</span>
           </div>
           {lectorDetectado && (
-            <p className="inline-flex items-center gap-1.5 rounded-full bg-success/15 px-3 py-1 text-caption font-medium text-success">
+            <p className="inline-flex items-center gap-1.5 rounded-full bg-success-soft px-3 py-1 text-caption font-medium text-success-ink">
               <CheckCircle2 className="h-3.5 w-3.5" /> Lector físico detectado
             </p>
           )}

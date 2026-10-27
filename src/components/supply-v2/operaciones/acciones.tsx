@@ -103,7 +103,7 @@ export function Interruptor({
             Apagar
           </Button>
         ) : (
-          <form action={enviar} className="flex flex-col gap-2 rounded-lg border border-warning/40 bg-warning/10 p-2">
+          <form action={enviar} className="flex flex-col gap-2 rounded-lg border border-warning/40 bg-warning-soft p-2">
             <input type="hidden" name="clave" value={clave} />
             <input type="hidden" name="encender" value="no" />
             <p className="text-xs">

@@ -249,7 +249,7 @@ export function Pista({ estado }: { estado: EstadoPista }) {
 /** Aviso cuando el catálogo del oficio todavía no está configurado. */
 export function PistaSinCatalogo({ faltan }: { faltan: string[] }) {
   return (
-    <div className="rounded-2xl border border-warning/30 bg-warning/10 p-5">
+    <div className="rounded-2xl border border-warning/30 bg-warning-soft p-5">
       <p className="flex items-center gap-2 font-bold text-foreground">
         <Car className="h-5 w-5" /> Falta configurar la pista
       </p>

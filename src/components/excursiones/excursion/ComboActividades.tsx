@@ -66,7 +66,7 @@ export function ComboActividades({
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
                       {act.tipoItem === 'PASE_DIA' && (
-                        <span className="rounded-full border border-success/20 bg-success/10 px-2 py-0.5 text-xs font-bold text-success">Daypass</span>
+                        <span className="rounded-full border border-success/20 bg-success-soft px-2 py-0.5 text-xs font-bold text-success-ink">Daypass</span>
                       )}
                       {act.categoria ? <span className="text-caption font-normal text-muted-foreground">{act.categoria}</span> : null}
                     </div>
@@ -186,7 +186,7 @@ export function ComboActividades({
                   </p>
                   <div className="flex flex-wrap gap-1.5 pt-1">
                     {pasesDia.map((pd) => (
-                      <span key={pd.id} className="inline-flex items-center gap-1 rounded-lg border border-success/20 bg-success/10 px-2.5 py-1 text-xs font-semibold text-success">
+                      <span key={pd.id} className="inline-flex items-center gap-1 rounded-lg border border-success/20 bg-success-soft px-2.5 py-1 text-xs font-semibold text-success-ink">
                         {pd.nombre}
                       </span>
                     ))}

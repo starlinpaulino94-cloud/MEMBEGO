@@ -41,7 +41,7 @@ export function ConfirmPedido({ pedido, onDone, onScanNext }: { pedido: PedidoQr
     return (
       <div className="space-y-5" data-testid="pedido-cerrado">
         <div className="text-center">
-          <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-success/15">
+          <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-success-soft">
             <CheckCircle2 className="h-9 w-9 text-success" />
           </div>
           <h3 className="text-h2 text-foreground">Pedido entregado</h3>
@@ -65,7 +65,7 @@ export function ConfirmPedido({ pedido, onDone, onScanNext }: { pedido: PedidoQr
   const puede = pedido.puedeCerrar
   return (
     <div className="space-y-4" data-testid="pedido-lookup">
-      <div className={cn('flex items-center gap-3 rounded-xl border px-4 py-3', puede ? 'border-success/25 bg-success/10' : 'border-destructive/25 bg-destructive/10')}>
+      <div className={cn('flex items-center gap-3 rounded-xl border px-4 py-3', puede ? 'border-success/25 bg-success-soft' : 'border-destructive/25 bg-danger-soft')}>
         {puede ? <CheckCircle2 className="h-6 w-6 shrink-0 text-success" /> : <XCircle className="h-6 w-6 shrink-0 text-destructive" />}
         <div>
           <p className={cn('font-bold', puede ? 'text-success' : 'text-destructive')}>{puede ? 'Pedido listo para entregar' : 'No se puede entregar'}</p>
@@ -75,7 +75,7 @@ export function ConfirmPedido({ pedido, onDone, onScanNext }: { pedido: PedidoQr
 
       <div className={cn('rounded-xl border-2 bg-card p-4', puede ? 'border-success/30' : 'border-destructive/30')}>
         <div className="flex items-start gap-3">
-          <div className={cn('flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl', puede ? 'bg-success/10' : 'bg-destructive/10')}>
+          <div className={cn('flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl', puede ? 'bg-success-soft' : 'bg-danger-soft')}>
             <ShoppingBag className={cn('h-6 w-6', puede ? 'text-success' : 'text-destructive')} />
           </div>
           <div className="min-w-0 flex-1">

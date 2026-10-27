@@ -15,9 +15,9 @@ import { ArrowLeft, Check, Users, Target } from 'lucide-react'
 export const dynamic = 'force-dynamic'
 
 const DIFICULTAD_STYLE: Record<PlanPlantillaCard['dificultad'], string> = {
-  baja: 'bg-success/10 text-success',
-  media: 'bg-warning/15 text-warning',
-  alta: 'bg-destructive/10 text-destructive',
+  baja: 'bg-success-soft text-success-ink',
+  media: 'bg-warning-soft text-warning-ink',
+  alta: 'bg-danger-soft text-danger-ink',
 }
 
 function fmtPrecio(p: PlanPlantillaCard): string {
@@ -34,7 +34,7 @@ function PlantillaCard({ p }: { p: PlanPlantillaCard }) {
           <div>
             <p className="font-semibold text-foreground">{p.nombre}</p>
             <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
-              <span className="rounded-full bg-info/10 px-2 py-0.5 font-medium text-info">
+              <span className="rounded-full bg-info-soft px-2 py-0.5 font-medium text-info-ink">
                 {p.modelo}
               </span>
               <span

@@ -249,7 +249,7 @@ export default async function CasoDeIdentidadPage({ params, searchParams }: { pa
                     <span className="ml-auto text-xs tabular-nums text-muted-foreground">{fecha(i.creadaAt)}</span>
                   </div>
                   <p className="whitespace-pre-wrap rounded-lg bg-muted/50 p-3">{i.mensaje}</p>
-                  {i.respuesta && <p className="whitespace-pre-wrap rounded-lg border border-success/25 bg-success/10 p-3">{i.respuesta}</p>}
+                  {i.respuesta && <p className="whitespace-pre-wrap rounded-lg border border-success/25 bg-success-soft p-3">{i.respuesta}</p>}
                   {i.estado !== 'resuelta' && (
                     <div className="flex flex-wrap gap-2">
                       {i.estado === 'abierta' && <AccionConTexto accion={atenderIncidenciaAction} campos={{ incidenciaId: i.id, accion: 'tomar' }} boton="Tomarla" etiquetaTexto="" sinTexto />}

@@ -53,7 +53,7 @@ export function RechazarCambioButton({ membershipId }: { membershipId: string })
   return (
     <Dialog open={open} onOpenChange={setManualOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline" className="border-destructive/30 text-destructive hover:bg-destructive/10">
+        <Button size="sm" variant="outline" className="border-destructive/30 text-destructive hover:bg-danger-soft">
           <X className="h-4 w-4" />
           Rechazar
         </Button>

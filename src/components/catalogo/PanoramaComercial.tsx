@@ -177,7 +177,7 @@ export function PanoramaComercial({
         </CardHeader>
         <CardContent>
           {panorama.ventas.pedidosEsperando > 0 && (
-            <p className="mb-3 rounded-lg bg-warning/10 px-3 py-2 text-sm">
+            <p className="mb-3 rounded-lg bg-warning-soft px-3 py-2 text-sm">
               <strong>{panorama.ventas.pedidosEsperando}</strong> pedido{panorama.ventas.pedidosEsperando === 1 ? '' : 's'} con este ítem espera{panorama.ventas.pedidosEsperando === 1 ? '' : 'n'} tu respuesta.
             </p>
           )}

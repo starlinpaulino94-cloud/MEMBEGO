@@ -15,8 +15,8 @@ export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Regalos VIP' }
 
 const ESTADO_CLASE: Record<string, string> = {
-  ACTIVA: 'bg-success/15 text-success',
-  PAUSADA: 'bg-warning/15 text-warning',
+  ACTIVA: 'bg-success-soft text-success-ink',
+  PAUSADA: 'bg-warning-soft text-warning-ink',
   FINALIZADA: 'bg-muted text-muted-foreground',
 }
 

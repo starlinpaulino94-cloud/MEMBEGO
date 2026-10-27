@@ -39,7 +39,7 @@ export class ScannerErrorBoundary extends Component<Props, State> {
     const { error } = this.state
     if (error) {
       return (
-        <div className="rounded-xl border border-destructive/25 bg-destructive/10 p-6 text-center space-y-4">
+        <div className="rounded-xl border border-destructive/25 bg-danger-soft p-6 text-center space-y-4">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-card shadow-sm">
             <AlertTriangle className="h-7 w-7 text-destructive" />
           </div>

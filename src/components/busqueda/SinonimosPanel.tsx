@@ -126,7 +126,7 @@ export function SinonimosPanel({
                 <button
                   type="submit"
                   aria-label={`Eliminar el sinónimo ${f.termino} → ${f.equivalencia}`}
-                  className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors duration-fast hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2 focus-visible:ring-primary"
+                  className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors duration-fast hover:bg-danger-soft hover:text-destructive focus-visible:ring-2 focus-visible:ring-primary"
                 >
                   <Trash2 className="h-4 w-4" aria-hidden />
                 </button>

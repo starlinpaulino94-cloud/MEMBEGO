@@ -60,7 +60,7 @@ export function ComisionesPanel({
   return (
     <div className="space-y-6">
       {sinNingunaTarifa && (
-        <div className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm">
+        <div className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning-soft p-4 text-sm">
           <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
           <div>
             <p className="font-bold text-foreground">Ningún servicio paga comisión todavía</p>
@@ -133,8 +133,8 @@ export function ComisionesPanel({
                       <span
                         className={`rounded-full px-2 py-0.5 text-xs font-bold uppercase ${
                           f.estado === 'PAGADA'
-                            ? 'bg-success/15 text-success'
-                            : 'bg-warning/15 text-warning'
+                            ? 'bg-success-soft text-success-ink'
+                            : 'bg-warning-soft text-warning-ink'
                         }`}
                       >
                         {COMISION_ESTADO_LABELS[f.estado as ComisionEstado] ?? f.estado}

@@ -61,7 +61,7 @@ function EstadoConVigencia({ fila }: { fila: MembresiaFila }) {
       {desfasada && (
         <Badge
           variant="outline"
-          className="border-warning/40 bg-warning/10 text-caption text-warning"
+          className="border-warning/40 bg-warning-soft text-caption text-warning-ink"
           title="Sigue marcada como activa en la base, pero su fecha ya pasó: el escáner la rechaza."
         >
           ya venció

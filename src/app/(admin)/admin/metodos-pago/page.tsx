@@ -94,11 +94,11 @@ export default async function MetodosPagoPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
                     {m.tipo === 'TRANSFERENCIA' ? (
-                      <div className="rounded-lg bg-info/10 p-2">
+                      <div className="rounded-lg bg-info-soft p-2">
                         <CreditCard className="h-5 w-5 text-primary" />
                       </div>
                     ) : (
-                      <div className="rounded-lg bg-warning/15 p-2">
+                      <div className="rounded-lg bg-warning-soft p-2">
                         <Building2 className="h-5 w-5 text-warning" />
                       </div>
                     )}

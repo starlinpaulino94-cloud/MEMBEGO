@@ -37,9 +37,9 @@ export function AlertTile({
 }) {
   const activo = value > 0
   const TONOS = {
-    warning: { borde: 'border-warning/30 bg-warning/10', icono: 'text-warning' },
-    info: { borde: 'border-info/30 bg-info/10', icono: 'text-info' },
-    danger: { borde: 'border-destructive/30 bg-destructive/10', icono: 'text-destructive' },
+    warning: { borde: 'border-warning/30 bg-warning/10 panel:border-warning/40 panel:bg-warning-soft', icono: 'text-warning' },
+    info: { borde: 'border-info/30 bg-info/10 panel:bg-info-soft', icono: 'text-info' },
+    danger: { borde: 'border-destructive/30 bg-destructive/10 panel:bg-danger-soft', icono: 'text-destructive' },
   }
   const t = TONOS[tono]
 

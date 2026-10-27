@@ -49,7 +49,7 @@ export default async function NuevaPromocionPage({
       />
 
       {prefill && (
-        <div className="flex max-w-2xl items-start gap-3 rounded-xl border border-info/30 bg-info/10 p-4 text-sm">
+        <div className="flex max-w-2xl items-start gap-3 rounded-xl border border-info/30 bg-info-soft p-4 text-sm">
           <LayoutTemplate className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
           <div>
             <p className="font-medium text-info">

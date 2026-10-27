@@ -13,7 +13,7 @@ import { diasDesde, waLink, type FilaSeguimiento } from '@/modules/pagos/colasMe
 function Antiguedad({ fecha }: { fecha: Date }) {
   const dias = diasDesde(fecha)
   const clase =
-    dias >= 7 ? 'bg-destructive/10 text-destructive' : dias >= 3 ? 'bg-warning/15 text-warning' : 'bg-muted text-muted-foreground'
+    dias >= 7 ? 'bg-danger-soft text-danger-ink' : dias >= 3 ? 'bg-warning-soft text-warning-ink' : 'bg-muted text-muted-foreground'
   return (
     <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-bold ${clase}`}>
       {dias === 0 ? 'hoy' : `${dias} día${dias !== 1 ? 's' : ''}`}
@@ -32,7 +32,7 @@ function Contactar({ s }: { s: FilaSeguimiento }) {
           rel="noopener noreferrer"
           title={`WhatsApp ${s.cliente.telefono}`}
           aria-label={`Escribir por WhatsApp a ${s.cliente.nombre}`}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/70 text-success hover:bg-success/10"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/70 text-success hover:bg-success-soft"
         >
           <MessageCircle className="h-4 w-4" />
         </a>

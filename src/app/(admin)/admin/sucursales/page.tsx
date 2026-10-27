@@ -154,7 +154,7 @@ export default async function SucursalesPage() {
                   </p>
                   <Badge
                     variant="secondary"
-                    className={s.activa ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'}
+                    className={s.activa ? 'bg-success-soft text-success-ink' : 'bg-muted text-muted-foreground'}
                   >
                     {s.activa ? 'Activa' : 'Inactiva'}
                   </Badge>

@@ -32,7 +32,7 @@ export function ComboItinerario({ combo, duracionHoras }: { combo: ComboEstado; 
         </div>
 
         {itinerario.ok ? (
-          <div className="flex items-center gap-2 rounded-lg bg-success/10 px-3 py-1.5 text-xs font-medium text-success">
+          <div className="flex items-center gap-2 rounded-lg bg-success-soft px-3 py-1.5 text-xs font-medium text-success-ink">
             <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
             <span>
               {actividadesConHorario.length > 0
@@ -41,7 +41,7 @@ export function ComboItinerario({ combo, duracionHoras }: { combo: ComboEstado; 
             </span>
           </div>
         ) : (
-          <div role="alert" className="flex items-start gap-2 rounded-lg bg-destructive/10 p-2.5 text-xs font-medium text-destructive">
+          <div role="alert" className="flex items-start gap-2 rounded-lg bg-danger-soft p-2.5 text-xs font-medium text-danger-ink">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
             <div>
               <p className="font-bold">{itinerario.error}</p>
@@ -82,7 +82,7 @@ export function ComboItinerario({ combo, duracionHoras }: { combo: ComboEstado; 
                           <div className="flex items-center gap-1.5">
                             <span className="text-xs font-bold text-warning" aria-hidden>↳</span>
                             <span className="font-medium text-foreground">{hijo.nombre}</span>
-                            <span className="rounded-full bg-warning/10 px-1.5 py-0.5 text-xs font-bold text-warning">Anidada</span>
+                            <span className="rounded-full bg-warning-soft px-1.5 py-0.5 text-xs font-bold text-warning-ink">Anidada</span>
                           </div>
                           <div className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
                             <span className="font-semibold text-foreground">{formato12h(hijo.inicio)}</span>

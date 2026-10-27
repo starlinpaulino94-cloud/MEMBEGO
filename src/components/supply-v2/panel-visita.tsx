@@ -118,7 +118,7 @@ export function PanelVisita({ visita, extras, puedeVenderExtras, alReiniciar }: 
       {registradas.length > 0 && (
         <ul className="space-y-1 text-sm" data-testid="ventas-registradas">
           {registradas.map((r) => (
-            <li key={r.id} className="flex items-center justify-between gap-2 rounded-lg bg-success/10 px-3 py-2" data-testid="venta-registrada">
+            <li key={r.id} className="flex items-center justify-between gap-2 rounded-lg bg-success-soft px-3 py-2" data-testid="venta-registrada">
               <span>
                 <span className="font-mono text-caption text-muted-foreground">{r.number}</span>
                 <span className="block">{r.lineas.map((l) => `${l.description} ×${l.quantity}`).join(', ')}</span>
@@ -194,7 +194,7 @@ export function PanelVisita({ visita, extras, puedeVenderExtras, alReiniciar }: 
           )}
 
           {venta.error && (
-            <p className="flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive" role="alert" data-testid="venta-error">
+            <p className="flex items-center gap-2 rounded-lg bg-danger-soft p-3 text-sm text-danger-ink" role="alert" data-testid="venta-error">
               <XCircle className="size-4 shrink-0" aria-hidden />
               {venta.error}
             </p>

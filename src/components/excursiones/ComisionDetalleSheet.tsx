@@ -352,7 +352,7 @@ export function ComisionDetalleSheet({
                   size="default"
                   variant="outline"
                   disabled={pending}
-                  className="w-full gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  className="w-full gap-2 text-destructive hover:text-destructive hover:bg-danger-soft"
                 >
                   <XCircle className="h-4 w-4" /> Anular Comisión
                 </Button>

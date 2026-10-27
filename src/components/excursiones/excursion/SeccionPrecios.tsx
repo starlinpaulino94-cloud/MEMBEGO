@@ -54,7 +54,7 @@ function Tarifa({
             <p className="text-xs text-muted-foreground">{detalle}</p>
           </div>
         </div>
-        <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${principal ? 'bg-primary/10 text-primary' : 'bg-success/15 text-success'}`}>{insignia}</span>
+        <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${principal ? 'bg-primary/10 text-primary' : 'bg-success-soft text-success-ink'}`}>{insignia}</span>
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{children}</div>
     </div>
@@ -126,7 +126,7 @@ export function SeccionPrecios({
               </p>
             </div>
             {resumenCombo.ahorro && resumenCombo.ahorro.ahorro > 0 ? (
-              <span className="rounded-full bg-success/15 px-3 py-1 text-xs font-bold text-success">
+              <span className="rounded-full bg-success-soft px-3 py-1 text-xs font-bold text-success-ink">
                 Ahorro para el cliente: ${resumenCombo.ahorro.ahorro.toFixed(2)} ({resumenCombo.ahorro.pct}% de descuento)
               </span>
             ) : null}

@@ -36,7 +36,7 @@ function TarjetaUsuario({ u, esYo }: { u: UsuarioFila; esYo: boolean }) {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 flex-1 basis-48 items-center gap-3">
             <div
-              className={`rounded-lg p-2 ${u.esSuperadmin ? 'bg-warning/15' : 'bg-info/15'}`}
+              className={`rounded-lg p-2 ${u.esSuperadmin ? 'bg-warning-soft' : 'bg-info-soft'}`}
             >
               {u.esSuperadmin ? (
                 <Shield aria-hidden className="h-5 w-5 text-warning" />
@@ -76,7 +76,7 @@ function TarjetaUsuario({ u, esYo }: { u: UsuarioFila; esYo: boolean }) {
             variant={u.esSuperadmin ? 'outline' : 'secondary'}
             className={
               u.esSuperadmin
-                ? 'border-warning/40 bg-warning/10 text-caption font-medium text-warning'
+                ? 'border-warning/40 bg-warning-soft text-caption font-medium text-warning-ink'
                 : 'text-caption'
             }
           >

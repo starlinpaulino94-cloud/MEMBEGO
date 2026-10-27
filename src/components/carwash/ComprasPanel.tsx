@@ -43,9 +43,9 @@ function fmtFecha(d: Date) {
 
 const CHIP: Record<string, string> = {
   BORRADOR: 'bg-muted text-muted-foreground',
-  PEDIDA: 'bg-info/15 text-info',
-  RECIBIDA: 'bg-success/15 text-success',
-  CANCELADA: 'bg-destructive/10 text-destructive',
+  PEDIDA: 'bg-info-soft text-info-ink',
+  RECIBIDA: 'bg-success-soft text-success-ink',
+  CANCELADA: 'bg-danger-soft text-danger-ink',
 }
 
 function useAviso(state: Fase3State) {
@@ -75,7 +75,7 @@ export function ComprasPanel({
 
       {/* ── Lo que hay que pedir ─────────────────────────────────────────── */}
       {panel.porPedir.length > 0 && (
-        <div className="rounded-2xl border border-warning/30 bg-warning/10 p-5">
+        <div className="rounded-2xl border border-warning/30 bg-warning-soft p-5">
           <p className="flex items-center gap-2 font-bold text-foreground">
             <TriangleAlert className="h-5 w-5" /> Hay que pedir {panel.porPedir.length} producto(s)
           </p>
@@ -127,7 +127,7 @@ function Kpi({
   return (
     <div
       className={`rounded-2xl border p-4 ${
-        destacar ? 'border-warning/40 bg-warning/10' : 'border-border/70 bg-card'
+        destacar ? 'border-warning/40 bg-warning-soft' : 'border-border/70 bg-card'
       }`}
     >
       <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
@@ -318,7 +318,7 @@ function Proveedores({ proveedores }: { proveedores: ProveedorResumen[] }) {
             </div>
             <div className="flex shrink-0 items-center gap-1">
               {p.ordenesAbiertas > 0 && (
-                <span className="rounded-full bg-info/15 px-2 py-0.5 text-xs font-bold text-info">
+                <span className="rounded-full bg-info-soft px-2 py-0.5 text-xs font-bold text-info-ink">
                   {p.ordenesAbiertas} abierta(s)
                 </span>
               )}

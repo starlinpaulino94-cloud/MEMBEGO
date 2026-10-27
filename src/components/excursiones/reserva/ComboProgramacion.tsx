@@ -90,7 +90,7 @@ export function ComboProgramacion({
                     <span className="truncate text-sm font-bold text-foreground">{ci.nombre}</span>
                     <span
                       className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${
-                        esPase ? 'border border-success/20 bg-success/10 text-success' : 'border border-primary/20 bg-primary/10 text-primary'
+                        esPase ? 'border border-success/20 bg-success-soft text-success-ink' : 'border border-primary/20 bg-primary/10 text-primary'
                       }`}
                     >
                       {esPase ? 'Daypass (acceso libre)' : 'Actividad'}

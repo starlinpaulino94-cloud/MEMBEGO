@@ -24,19 +24,19 @@
  *  (success). */
 export const ETAPA_CHIP = {
   // Legacy lowercase (configuración del pipeline)
-  nuevo: 'bg-info/10 text-info',
+  nuevo: 'bg-info-soft text-info-ink',
   contactado: 'bg-pending/15 text-pending',
-  cotizacion: 'bg-warning/15 text-warning',
+  cotizacion: 'bg-warning-soft text-warning-ink',
   negociacion: 'bg-primary/10 text-primary',
-  cerrado: 'bg-success/10 text-success',
+  cerrado: 'bg-success-soft text-success-ink',
   // DB values (UPPERCASE — Lead.etapa)
-  NUEVO: 'bg-info/10 text-info',
+  NUEVO: 'bg-info-soft text-info-ink',
   CONTACTADO: 'bg-pending/15 text-pending',
-  INTERESADO: 'bg-warning/15 text-warning',
+  INTERESADO: 'bg-warning-soft text-warning-ink',
   PROPUESTA: 'bg-primary/10 text-primary',
   NEGOCIACION: 'bg-primary/15 text-primary',
-  GANADO: 'bg-success/10 text-success',
-  PERDIDO: 'bg-destructive/10 text-destructive',
+  GANADO: 'bg-success-soft text-success-ink',
+  PERDIDO: 'bg-danger-soft text-danger-ink',
 } as const
 
 /** El mismo recorrido cuando solo es un punto (configuración del embudo). */
@@ -81,17 +81,17 @@ export const PRIORIDAD_PUNTO = {
  * tema. Lo que hace falta aquí es distinguir tres canales entre sí.
  */
 export const CANAL_TINTE = {
-  whatsapp: { texto: 'text-success', fondo: 'bg-success/10' },
+  whatsapp: { texto: 'text-success', fondo: 'bg-success-soft' },
   instagram: { texto: 'text-primary', fondo: 'bg-primary/10' },
-  messenger: { texto: 'text-info', fondo: 'bg-info/10' },
+  messenger: { texto: 'text-info', fondo: 'bg-info-soft' },
   email: { texto: 'text-muted-foreground', fondo: 'bg-muted' },
 } as const
 
 /** Tipo de actividad de seguimiento. WhatsApp comparte color con su canal. */
 export const ACTIVIDAD_CHIP = {
-  Llamada: 'bg-info/10 text-info',
+  Llamada: 'bg-info-soft text-info-ink',
   Email: 'bg-primary/10 text-primary',
-  WhatsApp: 'bg-success/10 text-success',
-  Visita: 'bg-warning/15 text-warning',
+  WhatsApp: 'bg-success-soft text-success-ink',
+  Visita: 'bg-warning-soft text-warning-ink',
   Reunión: 'bg-pending/15 text-pending',
 } as const

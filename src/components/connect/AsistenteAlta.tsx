@@ -232,7 +232,7 @@ export function AsistenteAlta(props: AsistenteProps) {
     return (
       <Marco {...marco} completa>
         <div className="space-y-4 py-6 text-center">
-          <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-success/10">
+          <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-success-soft">
             <Check className="h-7 w-7 text-success" aria-hidden />
           </span>
           <div>

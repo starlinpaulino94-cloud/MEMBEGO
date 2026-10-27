@@ -397,7 +397,7 @@ function Incidencias({ vista, datos }: { vista: 'abiertas' | 'resueltas'; datos:
                     </p>
                     <p className="whitespace-pre-wrap rounded-lg bg-muted/50 p-3 text-sm leading-relaxed text-foreground">{i.mensaje}</p>
                     {i.respuesta && (
-                      <p className="whitespace-pre-wrap rounded-lg border border-success/25 bg-success/10 p-3 text-sm leading-relaxed">
+                      <p className="whitespace-pre-wrap rounded-lg border border-success/25 bg-success-soft p-3 text-sm leading-relaxed">
                         <span className="block text-xs font-semibold text-success">Respuesta{i.atendidaPor ? ` de ${i.atendidaPor}` : ''}{i.resueltaAt ? ` · ${fecha(i.resueltaAt)}` : ''}</span>
                         {i.respuesta}
                       </p>

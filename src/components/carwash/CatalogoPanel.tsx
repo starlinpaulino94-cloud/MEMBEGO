@@ -238,7 +238,7 @@ export function CatalogoPanel({
       {seccion === 'servicios' && (
         <div className="space-y-4">
           {tiposActivos.length === 0 ? (
-            <p className="rounded-2xl border border-warning/30 bg-warning/10 p-5 text-sm text-foreground">
+            <p className="rounded-2xl border border-warning/30 bg-warning-soft p-5 text-sm text-foreground">
               Primero crea al menos un <b>tipo de vehículo</b>: el precio de un servicio se
               define por tipo.
             </p>
