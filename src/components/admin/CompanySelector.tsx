@@ -39,7 +39,7 @@ export function CompanySelector({ companies, current }: Props) {
         <Building2 className="h-4 w-4" /> Empresa
       </Label>
       <Select value={current ?? undefined} onValueChange={onChange}>
-        <SelectTrigger className="w-56">
+        <SelectTrigger className="w-56" aria-label="Empresa">
           <SelectValue placeholder="Selecciona empresa" />
         </SelectTrigger>
         <SelectContent>

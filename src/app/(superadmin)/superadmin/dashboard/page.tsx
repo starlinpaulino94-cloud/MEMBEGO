@@ -377,7 +377,7 @@ export default async function SuperadminDashboard({
                             .join(' · ')}
                         </p>
                       </div>
-                      <span className="shrink-0 text-caption text-muted-foreground/70">
+                      <span className="shrink-0 text-caption text-muted-foreground">
                         {fmtHora(a.createdAt)}
                       </span>
                     </li>

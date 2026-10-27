@@ -85,6 +85,7 @@ export default async function AuditoriaPage({
         </div>
         <select
           name="empresa"
+          aria-label="Empresa"
           defaultValue={empresa ?? ''}
           className="h-10 rounded-lg border border-border bg-background px-3 text-sm text-foreground"
         >
@@ -97,6 +98,7 @@ export default async function AuditoriaPage({
         </select>
         <select
           name="accion"
+          aria-label="Acción"
           defaultValue={accion ?? ''}
           className="h-10 rounded-lg border border-border bg-background px-3 text-sm text-foreground"
         >

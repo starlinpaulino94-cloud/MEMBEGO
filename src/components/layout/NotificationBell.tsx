@@ -137,7 +137,7 @@ export function NotificationBell({ initialCount }: { initialCount: number }) {
           // `aria-label` del botón — si no, el lector la anuncia dos veces.
           <span
             aria-hidden
-            className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-destructive px-1 text-[12px] font-bold leading-none text-white"
+            className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-destructive px-1 text-[12px] font-bold leading-none text-white dark:text-background"
           >
             {count > 9 ? '9+' : count}
           </span>
@@ -205,7 +205,7 @@ export function NotificationBell({ initialCount }: { initialCount: number }) {
                               <p className={cn('truncate text-sm', !n.leida ? 'font-semibold text-foreground' : 'font-medium text-muted-foreground')}>
                                 {n.titulo}
                               </p>
-                              <span className="shrink-0 text-xs text-muted-foreground/70">
+                              <span className="shrink-0 text-xs text-muted-foreground">
                                 {timeAgo(n.createdAt)}
                               </span>
                             </div>

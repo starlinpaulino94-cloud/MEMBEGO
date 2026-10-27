@@ -47,7 +47,7 @@ export function DeletePlanButton({
         return eliminarPlan({}, fd)
       }}
       title="¿Eliminar este plan?"
-      description="Esta acción no se puede deshacer. Si solo quieres dejar de ofrecerlo, púsalo en pausa."
+      description="Esta acción no se puede deshacer. Si solo quieres dejar de ofrecerlo, ponlo en pausa."
       successMessage="Plan eliminado."
       label="Eliminar plan"
       disabled={enUso > 0}
