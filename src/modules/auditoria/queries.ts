@@ -551,12 +551,96 @@ function limiteDia(fecha: string, fin: boolean): Date | null {
 }
 
 /**
+ * Los estados de Membego Supply se guardan en inglés (`DRAFT → ACTIVE`). En la bitácora se dicen en español, con el género de lo
+ * que cambió de estado: una oferta queda «activa» y un lote «activo». Un código que no esté aquí se deja tal cual: es mejor un
+ * código a la vista que un estado inventado.
+ */
+const ESTADO_LABEL: Record<string, string | readonly [masculino: string, femenino: string]> = {
+  DRAFT: 'Borrador',
+  PENDING_APPROVAL: 'Pendiente de aprobación',
+  PENDING: 'Pendiente',
+  AWAITING_PAYMENT: 'Esperando el pago',
+  UNPAID: 'Sin pagar',
+  SUBMITTED: ['Enviado', 'Enviada'],
+  UNDER_REVIEW: 'En revisión',
+  INVESTIGATING: 'En investigación',
+  PROCESSING: 'En proceso',
+  SCHEDULED: ['Programado', 'Programada'],
+  ACTIVE: ['Activo', 'Activa'],
+  INACTIVE: ['Inactivo', 'Inactiva'],
+  PAUSED: ['Pausado', 'Pausada'],
+  SUSPENDED: ['Suspendido', 'Suspendida'],
+  BLOCKED: ['Bloqueado', 'Bloqueada'],
+  APPROVED: ['Aprobado', 'Aprobada'],
+  REJECTED: ['Rechazado', 'Rechazada'],
+  CONFIRMED: ['Confirmado', 'Confirmada'],
+  PUBLISHED: ['Publicado', 'Publicada'],
+  PARTIALLY_PAID: ['Pagado parcialmente', 'Pagada parcialmente'],
+  PAID: ['Pagado', 'Pagada'],
+  PARTIALLY_RECEIVED: ['Recibido parcialmente', 'Recibida parcialmente'],
+  RECEIVED: ['Recibido', 'Recibida'],
+  DELIVERED: ['Entregado', 'Entregada'],
+  PROCESSED: ['Procesado', 'Procesada'],
+  APPLIED: ['Aplicado', 'Aplicada'],
+  RESERVED: ['Reservado', 'Reservada'],
+  ISSUED: ['Emitido', 'Emitida'],
+  CLAIMED: ['Reclamado', 'Reclamada'],
+  REDEEMED: ['Canjeado', 'Canjeada'],
+  RELEASED: ['Liberado', 'Liberada'],
+  REVERSED: ['Revertido', 'Revertida'],
+  REFUNDED: ['Reembolsado', 'Reembolsada'],
+  CREDITED: ['Acreditado', 'Acreditada'],
+  EXHAUSTED: ['Agotado', 'Agotada'],
+  SOLD_OUT: ['Agotado', 'Agotada'],
+  EXPIRED: ['Vencido', 'Vencida'],
+  ENDED: ['Finalizado', 'Finalizada'],
+  COMPLETED: ['Completado', 'Completada'],
+  CANCELLED: ['Cancelado', 'Cancelada'],
+  CLOSED: ['Cerrado', 'Cerrada'],
+  TERMINATED: ['Terminado', 'Terminada'],
+  ARCHIVED: ['Archivado', 'Archivada'],
+  OPEN: ['Abierto', 'Abierta'],
+  MATCHED: ['Cuadrado', 'Cuadrada'],
+  DISCREPANCY: 'Con diferencias',
+  RESOLVED: ['Resuelto', 'Resuelta'],
+  FAILED: ['Fallido', 'Fallida'],
+  IGNORED: ['Ignorado', 'Ignorada'],
+  DEAD_LETTER: 'Sin salida',
+}
+
+/** Las entidades de Supply de género masculino (acuerdo, lote, beneficio…); todas las demás se dicen en femenino (orden, oferta, factura…). */
+const ENTIDADES_MASCULINAS = new Set([
+  'SupplyV2Agreement',
+  'SupplyV2Allocation',
+  'SupplyV2Benefit',
+  'SupplyV2CatalogItem',
+  'SupplyV2Entitlement',
+  'SupplyV2ExternalEvent',
+  'SupplyV2Lot',
+  'SupplyV2LoyaltyProgram',
+  'SupplyV2MembershipPlan',
+  'SupplyV2OutboxEvent',
+  'SupplyV2ReferralProgram',
+  'SupplyV2Reward',
+  'SupplyV2Supplier',
+  'SupplyV2Voucher',
+])
+
+function estadoLegible(codigo: string, entidadTipo?: string): string {
+  const e = ESTADO_LABEL[codigo]
+  if (e === undefined) return codigo
+  if (typeof e === 'string') return e
+  return ENTIDADES_MASCULINAS.has(entidadTipo ?? '') ? e[0] : e[1]
+}
+
+/**
  * Un valor de «antes» o «después» como texto. Un número o un texto se dicen tal cual; el saldo de un producto del inventario
  * (`{ onHand, reserved, damaged }`) se dice con sus cubetas. Cualquier otro objeto no se puede decir en una línea y se omite: antes
  * se pasaba por `String()` y la bitácora enseñaba «[object Object] → [object Object]».
  */
-function valorLegible(v: unknown): string | null {
-  if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return String(v)
+function valorLegible(v: unknown, entidadTipo?: string): string | null {
+  if (typeof v === 'string') return estadoLegible(v, entidadTipo)
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v)
   if (v && typeof v === 'object' && typeof (v as { onHand?: unknown }).onHand === 'number') {
     const s = v as { onHand: number; reserved?: unknown; damaged?: unknown }
     const partes = [`${s.onHand} en existencia`]
@@ -568,7 +652,7 @@ function valorLegible(v: unknown): string | null {
 }
 
 /** Resumen corto de lo que pasó, leído del payload de cada acción. */
-export function describir(payload: Record<string, unknown>): string | null {
+export function describir(payload: Record<string, unknown>, entidadTipo?: string): string | null {
   const tipo = typeof payload.tipo === 'string' ? payload.tipo : null
   const base = tipo ? (SUBTIPO_LABEL[tipo] ?? tipo) : null
 
@@ -577,11 +661,11 @@ export function describir(payload: Record<string, unknown>): string | null {
   if (typeof payload.motivo === 'string' && payload.motivo) {
     partes.push(payload.motivo)
   }
-  const antes = valorLegible(payload.antes)
-  const despues = valorLegible(payload.despues)
+  const antes = valorLegible(payload.antes, entidadTipo)
+  const despues = valorLegible(payload.despues, entidadTipo)
   if (antes !== null && despues !== null) partes.push(`${antes} → ${despues}`)
   if (typeof payload.de === 'string' && typeof payload.a === 'string') {
-    partes.push(`${payload.de} → ${payload.a}`)
+    partes.push(`${estadoLegible(payload.de, entidadTipo)} → ${estadoLegible(payload.a, entidadTipo)}`)
   }
   if (typeof payload.placa === 'string' && payload.placa) {
     partes.push(`placa ${payload.placa}`)
@@ -667,7 +751,7 @@ export async function getAuditoria(
       fecha: l.createdAt,
       accion: l.accion,
       accionLabel: ACCION_LABEL[l.accion] ?? l.accion,
-      detalle: describir(payload),
+      detalle: describir(payload, l.entidadTipo),
       entidadTipo: l.entidadTipo,
       entidadId: l.entidadId,
       usuario: l.user?.name ?? null,
