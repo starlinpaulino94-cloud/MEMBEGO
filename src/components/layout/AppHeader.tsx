@@ -223,8 +223,10 @@ export function AppHeader({
           pero ahí compite con el buscador por un espacio que no hay—. */}
       {/* `overflow-hidden`: con cuatro migas («Empresa › Operaciones › Pagos › Conciliación») ya no caben junto al buscador y, sin
           recorte, se pisaban unas a otras (se veía a 1 280 px desde antes de las pestañas). Solo la última cede ancho y se trunca;
-          las anteriores conservan el suyo y es la derecha la que se recorta. */}
-      <nav aria-label="Ruta de navegación" className="hidden min-w-0 items-center gap-1.5 overflow-hidden md:flex">
+          las anteriores conservan el suyo y es la derecha la que se recorta.
+          `min-w-[8rem]`: sin suelo, el buscador y las acciones se comían todo el ancho y a 1 366 px la miga
+          «Resumen» del superadmin quedaba reducida a «R.». */}
+      <nav aria-label="Ruta de navegación" className="hidden min-w-[8rem] items-center gap-1.5 overflow-hidden md:flex">
         {migas.length === 0 ? (
           <span className="truncate text-h4 text-foreground">{title}</span>
         ) : (
@@ -342,7 +344,11 @@ export function AppHeader({
             title={`Abrir ${s.nombre}`}
           >
             <ExternalLink className="h-4 w-4 text-muted-foreground" aria-hidden />
-            <span className="hidden sm:inline">{s.nombre}</span>
+            {/* El rótulo solo desde xl: entre lg y xl la columna lateral ya
+                ocupa 280 px y, con el nombre del sistema, las acciones no
+                cabían y empujaban la cabecera fuera de la pantalla. */}
+            <span className="hidden xl:inline">{s.nombre}</span>
+            <span className="sr-only xl:hidden">{s.nombre}</span>
           </a>
         ))}
         {/* CANJE RÁPIDO — el atajo que el diseño pone en la barra superior.
@@ -368,7 +374,9 @@ export function AppHeader({
         <ThemeToggle />
         <NotificationBell initialCount={notifCount} />
         {userEmail && (userName || ctx.role) ? (
-          <span className="hidden min-w-0 max-w-[12rem] text-right lg:block" aria-hidden>
+          // Solo en 2xl: por debajo, nombre + rol (hasta 12rem) dejaban sin
+          // sitio a las migas. El menú de cuenta ya muestra ambos.
+          <span className="hidden min-w-0 max-w-[12rem] text-right 2xl:block" aria-hidden>
             <span className="block truncate text-label-lg text-foreground">
               {userName || userEmail}
             </span>

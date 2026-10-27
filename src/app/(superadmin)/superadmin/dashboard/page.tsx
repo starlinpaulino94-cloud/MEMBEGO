@@ -68,8 +68,12 @@ function TarjetaEmpresa({ c }: { c: EmpresaPanel }) {
   return (
     <Card className="card-interactive border-border/60 shadow-card">
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2.5">
+        {/* `min-w-0`: CardHeader es una rejilla y, sin él, esta fila no se
+            encogía y las insignias se salían de la tarjeta. Con `flex-wrap`,
+            si el nombre (al menos 10rem) y las insignias no caben, las
+            insignias bajan de línea en vez de dejar el nombre en «To…». */}
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 flex-1 basis-40 items-center gap-2.5">
             {c.logoUrl ? (
               <span className="relative block h-8 w-8 shrink-0 overflow-hidden rounded-lg border border-border/60">
                 <Image src={c.logoUrl} alt="" fill className="object-cover" />
@@ -279,7 +283,12 @@ export default async function SuperadminDashboard({
         </section>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+      {/* `minmax(0, …)` y `grid-cols-1`: con pistas `auto`/`fr` a secas la
+          columna crecía hasta el ancho mínimo de su contenido y, en móvil, las
+          tarjetas de empresa y la actividad se salían por la derecha. Las dos
+          columnas, solo desde xl: entre lg y xl, junto a la barra lateral, las
+          tarjetas de empresa quedaban a ~180 px y sus cifras se montaban. */}
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <div>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-h4 text-foreground">Empresas</h2>
@@ -290,7 +299,7 @@ export default async function SuperadminDashboard({
               Administrar <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </div>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {d.empresas.map((c) => (
               <TarjetaEmpresa key={c.id} c={c} />
             ))}
@@ -317,7 +326,7 @@ export default async function SuperadminDashboard({
                 Para entrenar al personal. Sus clientes, cobros y números no cuentan en ninguna
                 cifra de esta pantalla.
               </p>
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 {d.demos.map((c) => (
                   <TarjetaEmpresa key={c.id} c={c} />
                 ))}
