@@ -57,7 +57,7 @@ export default async function FacturaPage({ params }: { params: Promise<{ id: st
         action={<ChipFactura estado={f.status} />}
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Total" value={<span data-testid="factura-total">{dineroSupplyV2(f.total, m)}</span>} sub={`subtotal ${dineroSupplyV2(f.subtotal, m)} · impuestos ${dineroSupplyV2(f.taxes, m)}`} />
         <StatCard label="Aplicado (depósito)" value={<span data-testid="factura-aplicado">{dineroSupplyV2(f.amountApplied, m)}</span>} />
         <StatCard label="Pagado (transferencia)" value={<span data-testid="factura-pagado">{dineroSupplyV2(f.amountPaid, m)}</span>} />
@@ -90,7 +90,7 @@ export default async function FacturaPage({ params }: { params: Promise<{ id: st
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader><CardTitle>Líneas</CardTitle></CardHeader>
           <CardContent>

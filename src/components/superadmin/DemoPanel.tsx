@@ -77,7 +77,7 @@ export function DemoPanel({
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       {empresas.map((e) => (
         <TarjetaDemo key={e.id} e={e} admins={admins} />
       ))}

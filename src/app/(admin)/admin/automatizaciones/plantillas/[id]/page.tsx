@@ -111,7 +111,7 @@ export default async function EstrategiaDetallePage({
       </div>
 
       {/* Qué resuelve y cuándo usarla */}
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Seccion icon={AlertTriangle} titulo="Problema que resuelve">
           <p className="text-sm text-muted-foreground">{playbook.problem}</p>
         </Seccion>
@@ -135,7 +135,7 @@ export default async function EstrategiaDetallePage({
       </Seccion>
 
       {/* Disparadores y condiciones */}
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Seccion icon={Zap} titulo="Se dispara cuando">
           <Lista items={playbook.triggers} />
         </Seccion>
@@ -150,7 +150,7 @@ export default async function EstrategiaDetallePage({
 
       {/* Esperas y excepciones */}
       {(playbook.esperas?.length || playbook.exceptions.length) ? (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Seccion icon={Clock} titulo="Esperas del flujo">
             {playbook.esperas && playbook.esperas.length > 0 ? (
               <Lista items={playbook.esperas} />
@@ -165,7 +165,7 @@ export default async function EstrategiaDetallePage({
       ) : null}
 
       {/* KPIs y configuración editable */}
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Seccion icon={BarChart3} titulo="Métricas que genera (KPIs)">
           <div className="flex flex-wrap gap-1.5">
             {playbook.kpis.map((k) => (

@@ -67,7 +67,7 @@ export function TicketDetail({ ticket, mensajes }: Props) {
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_20rem]">
       {/* Conversación */}
       <div className="space-y-4">
         <Card>

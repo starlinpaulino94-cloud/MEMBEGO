@@ -61,7 +61,7 @@ export function FormAcuerdo({
   return (
     <form action={accion} className="space-y-3" data-testid="form-acuerdo">
       <input type="hidden" name="supplierId" value={supplierId} />
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <Label>Proveedor</Label>
           <p className="h-9 rounded-lg border border-border bg-muted/40 px-3 text-sm leading-9">{proveedorNombre}</p>
@@ -69,7 +69,7 @@ export function FormAcuerdo({
         {comision && (
           <div className="sm:col-span-2">
             <Label>Alcance de la comisión</Label>
-            <div className="grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Alcance" data-testid="acuerdo-alcance">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Alcance" data-testid="acuerdo-alcance">
               {ALCANCES.map((a) => (
                 <label key={a.v} className={`cursor-pointer rounded-lg border p-3 text-sm ${alcance === a.v ? 'border-primary bg-primary/10' : 'border-border hover:bg-muted'}`}>
                   <input type="radio" name="scope" value={a.v} checked={alcance === a.v} onChange={() => setAlcance(a.v)} className="mr-2" />
@@ -108,7 +108,7 @@ export function FormAcuerdo({
         </div>
         <div className="sm:col-span-2">
           <Label htmlFor="acuerdoTipo">Tipo de acuerdo</Label>
-          <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Tipo de acuerdo">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Tipo de acuerdo">
             {AGREEMENT_TYPES_SLICE5.map((t) => (
               <label
                 key={t}

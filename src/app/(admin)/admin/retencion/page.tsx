@@ -124,7 +124,7 @@ export default async function RetencionPage() {
       {/* ── Renovación y pasivo ─────────────────────────────────────────── */}
       <section className="space-y-4">
         <SectionHeader title="Lo que decide si el negocio crece" />
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Card>
             <CardHeader>
               <CardTitle className="text-h4">Renovación</CardTitle>

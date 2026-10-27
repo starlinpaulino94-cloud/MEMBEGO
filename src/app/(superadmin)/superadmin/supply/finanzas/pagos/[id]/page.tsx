@@ -38,7 +38,7 @@ export default async function PagoPage({ params }: { params: Promise<{ id: strin
         nav={<NavSupplyV2 activa="finanzas" />}
         action={<ChipPagoProveedor estado={p.status} />}
       />
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard label="Monto" value={<span data-testid="pago-monto">{dineroSupplyV2(p.amount, m)}</span>} />
         <StatCard label="Aplicado" value={dineroSupplyV2(p.appliedAmount, m)} />
         <StatCard label="Sin aplicar" value={<span data-testid="pago-sin-aplicar">{dineroSupplyV2(sinAplicar, m)}</span>} accent={sinAplicar.greaterThan(0) && p.status === 'CONFIRMED' ? 'warning' : undefined} />
@@ -59,7 +59,7 @@ export default async function PagoPage({ params }: { params: Promise<{ id: strin
           {p.status !== 'CANCELLED' && puedoConfirmar && vivas.every((a) => a.reversedAt) && <CancelarPago paymentId={p.id} />}
         </CardContent>
       </Card>
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader><CardTitle>Datos</CardTitle></CardHeader>
           <CardContent className="space-y-2 text-sm">

@@ -56,7 +56,7 @@ export default async function MiDineroPage({
       </div>
 
       {/* ── RESUMEN DE SALDOS ── */}
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5 shadow-sm">
           <span className="text-xs font-bold uppercase tracking-wider text-primary">Comisión por cobrar</span>
           <p className="mt-1 font-mono text-3xl sm:text-4xl font-extrabold text-foreground">
@@ -85,7 +85,7 @@ export default async function MiDineroPage({
           description="Tus comisiones se calculan y acreditan cuando una reserva queda cobrada. Aquí verás el detalle de cada cálculo y los recibos de pago."
         />
       ) : (
-        <div className="grid gap-6 lg:grid-cols-2 items-start">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 items-start">
           {/* COMISIONES */}
           <section aria-labelledby="comisiones-list-heading" className="rounded-2xl border border-border/80 bg-card p-5 shadow-sm space-y-4">
             <div className="border-b border-border/60 pb-3">

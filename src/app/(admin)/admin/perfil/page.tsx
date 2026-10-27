@@ -63,7 +63,7 @@ export default async function PerfilEmpresaPage({
               </CardContent>
             </Card>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {companies.map((c) => (
                 <Link
                   key={c.id}

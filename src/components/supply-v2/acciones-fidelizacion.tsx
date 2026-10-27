@@ -151,7 +151,7 @@ export function FormPlan({ programId, moneda }: { programId: string; moneda: str
     <form action={accion} className="space-y-3 rounded-lg border border-border bg-muted/20 p-3" data-testid="form-plan">
       <input type="hidden" name="programId" value={programId} />
       <input type="hidden" name="kind" value={kind} />
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <Label htmlFor="planNombre">Nombre del plan</Label>
           <Input id="planNombre" name="name" maxLength={140} required placeholder="Membresía Oro" data-testid="plan-nombre" />
@@ -290,7 +290,7 @@ export function FormRecompensa({ programId, beneficios, ofertas, moneda }: { pro
     <form action={accion} className="space-y-3 rounded-lg border border-border bg-muted/20 p-3" data-testid="form-recompensa">
       <input type="hidden" name="programId" value={programId} />
       <input type="hidden" name="kind" value={kind} />
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <Label htmlFor="recNombre">Nombre</Label>
           <Input id="recNombre" name="name" maxLength={140} required placeholder="Pizza gratis" data-testid="recompensa-nombre" />
@@ -406,7 +406,7 @@ export function FormReferidos({ programId, beneficios, configurado }: { programI
     <form action={accion} className="space-y-3 rounded-lg border border-border bg-muted/20 p-3" data-testid="form-referidos">
       <input type="hidden" name="programId" value={programId} />
       <input type="hidden" name="rewardKind" value={kind} />
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <Label htmlFor="refTipo">Con qué se premia a quien invita</Label>
           <select id="refTipo" value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} className={SELECT} data-testid="referidos-tipo">
@@ -542,7 +542,7 @@ export function FormOtorgarMembresia({ programId, planes }: { programId: string;
       {elegido && <input type="hidden" name="customerId" value={elegido.id} />}
       <BuscadorDeClientes onElegir={setElegido} testid="otorgar-cliente" />
       {elegido && <p className="text-sm" data-testid="otorgar-elegido">Para: <span className="font-medium">{elegido.nombre}</span> · {elegido.email}</p>}
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <Label htmlFor="otorgarPlan">Plan</Label>
           <select id="otorgarPlan" name="planId" className={SELECT} required data-testid="otorgar-plan">

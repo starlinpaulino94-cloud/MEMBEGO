@@ -42,7 +42,7 @@ function Numerito({ label, valor, malo }: { label: string; valor: number; malo?:
       <p className={`text-lg font-semibold ${valor > 0 && malo ? 'text-destructive' : ''}`}>
         {valor}
       </p>
-      <p className="text-caption text-muted-foreground">{label}</p>
+      <p className="text-caption text-muted-foreground [overflow-wrap:anywhere]">{label}</p>
     </div>
   )
 }
@@ -112,8 +112,11 @@ export function ColaTrabajosCard({
       <CardHeader>
         <CardTitle className="text-base">Cola de trabajos</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      {/* `@container`: las cuatro cifras se reparten según el ancho de la TARJETA, no de la pantalla. En el
+          Centro de integraciones la tarjeta va en una columna estrecha y, con `sm:grid-cols-4`, «Webhooks en
+          reintento» no cabía en su casilla y se salía. */}
+      <CardContent className="@container space-y-4">
+        <div className="grid grid-cols-2 gap-2 @lg:grid-cols-4">
           <Numerito label="Trabajos difuntos" valor={salud.trabajosMuertos} malo />
           <Numerito label="Webhooks en reintento" valor={salud.webhooksPendientes} />
           <Numerito label="Webhooks agotados" valor={salud.webhooksMuertos} malo />

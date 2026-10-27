@@ -69,7 +69,7 @@ export default async function SolicitudesMerchantPage({ searchParams }: { search
                     </div>
                     <StatusChip tone={TONO[s.status]} data-testid="chip-solicitud">{MERCHANT_APPLICATION_LABELS[s.status]}</StatusChip>
                   </div>
-                  <dl className="grid gap-1 sm:grid-cols-2">
+                  <dl className="grid grid-cols-1 gap-1 sm:grid-cols-2">
                     <Dato label="Nombre comercial">{s.datos.nombreComercial}</Dato>
                     <Dato label="Tipo">{s.datos.tipoNegocio}</Dato>
                     <Dato label="Teléfono">{s.datos.telefono}</Dato>

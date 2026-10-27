@@ -94,7 +94,7 @@ export function ReporteCrecimientoVista({
           title="Resumen"
           description="Lo que pasó con las invitaciones en el periodo elegido."
         />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 print:gap-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 print:gap-2">
           <KpiReporte
             label="Clics en invitaciones"
             kpi={r.clics}
@@ -125,7 +125,7 @@ export function ReporteCrecimientoVista({
           />
         </div>
 
-        <div className="mt-4 grid gap-4 sm:grid-cols-3 print:grid-cols-3">
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3 print:grid-cols-3">
           <Celda
             label="De clic a registro"
             valor={r.tasaRegistro == null ? 'Sin dato' : `${r.tasaRegistro} %`}
@@ -256,7 +256,7 @@ export function ReporteCrecimientoVista({
           title="Los enlaces de invitación"
           description="Cuántos se crearon en el periodo y cuántos siguen sirviendo ahora mismo. Los vigentes son una foto de hoy y por eso no se comparan contra el periodo anterior."
         />
-        <div className="grid gap-4 sm:grid-cols-2 print:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 print:grid-cols-2">
           <Celda label="Creados en el periodo" valor={entero(r.enlaces.creados)} />
           <Celda
             label="Vigentes ahora mismo"
@@ -271,7 +271,7 @@ export function ReporteCrecimientoVista({
           title="Lo que el antifraude apartó"
           description="Registros atribuidos con huella repetida —misma red o mismo dispositivo—. Se conservan para auditoría, no cuentan en el embudo y no dan puntos."
         />
-        <div className="grid gap-4 sm:grid-cols-2 print:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 print:grid-cols-2">
           <Celda label="Referidos marcados sospechosos" valor={entero(r.bloqueados.referidosSospechosos)} />
           <Celda label="Intentos bloqueados" valor={entero(r.bloqueados.eventosFraude)} />
         </div>
@@ -308,7 +308,7 @@ export function ReporteCrecimientoVista({
             title="Se fueron a otro negocio de la plataforma"
             description="Personas invitadas por un cliente tuyo que acabaron registrándose en otra empresa de MembeGo. No cuentan en tu embudo porque no son clientes tuyos."
           />
-          <div className="grid gap-4 sm:grid-cols-2 print:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 print:grid-cols-2">
             <Celda label="Registros en otra empresa" valor={entero(r.fueraDeLaEmpresa.registros)} />
             <Celda label="Membresías en otra empresa" valor={entero(r.fueraDeLaEmpresa.membresias)} />
           </div>

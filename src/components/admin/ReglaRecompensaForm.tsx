@@ -69,7 +69,7 @@ export function ReglaRecompensaForm({ companies }: { companies?: EmpresaOpcion[]
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="nombre">Nombre de la regla *</Label>
           <Input id="nombre" name="nombre" placeholder="Ej: 3 referidos = 1 uso gratis" required />

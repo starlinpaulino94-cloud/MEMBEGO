@@ -50,7 +50,7 @@ export function IniciarConteoForm({ sucursales }: { sucursales: SucursalOpcionFo
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <form onSubmit={abrir} aria-label="Iniciar conteo" className="grid items-end gap-4 sm:grid-cols-[1fr_2fr_auto]">
+        <form onSubmit={abrir} aria-label="Iniciar conteo" className="grid grid-cols-1 items-end gap-4 sm:grid-cols-[1fr_2fr_auto]">
           <div className="space-y-1.5">
             <Label htmlFor="ic-sucursal">Sucursal que vas a contar</Label>
             <select id="ic-sucursal" value={sucursalId} onChange={(e) => setSucursalId(e.target.value)} className={campo}>

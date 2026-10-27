@@ -253,7 +253,7 @@ export function CatalogoPanel({
                 className="space-y-4 rounded-2xl border border-border/70 bg-card p-4"
               >
                 {editando && <input type="hidden" name="id" value={editando} />}
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <div className="space-y-1.5 lg:col-span-2">
                     <Label htmlFor="s-nombre">Servicio *</Label>
                     <Input
@@ -290,7 +290,7 @@ export function CatalogoPanel({
                   <legend className="px-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">
                     Precio por tipo de vehículo
                   </legend>
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     {tiposActivos.map((t) => (
                       <div key={t.id} className="space-y-1.5">
                         <Label htmlFor={`p-${t.id}`}>{t.nombre}</Label>

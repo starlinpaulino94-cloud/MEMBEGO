@@ -47,7 +47,7 @@ export default async function LiquidacionPage({ params, searchParams }: { params
         nav={<NavSupplyV2 activa="finanzas" />}
         action={<ChipLiquidacion estado={l.status} />}
       />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Bruto vendido (GMV)" value={<span data-testid="liq-bruto">{dineroSupplyV2(l.grossSales, m)}</span>} sub={`${l.totalLineas} entrega(s)`} />
         <StatCard label="Comisión de Membego" value={<span data-testid="liq-comision">{dineroSupplyV2(l.commissionAmount, m)}</span>} accent="brand" />
         <StatCard label="Neto al proveedor" value={<span data-testid="liq-neto">{dineroSupplyV2(l.supplierNet, m)}</span>} accent="warning" />
@@ -55,7 +55,7 @@ export default async function LiquidacionPage({ params, searchParams }: { params
       </div>
 
       {/* Slice 6 (§26): el GMV, el valor contractual y lo que de verdad pagó el cliente son tres cifras distintas. */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="liq-financiacion">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="liq-financiacion">
         <StatCard label="Valor contractual" value={<span data-testid="liq-contractual">{dineroSupplyV2(l.contractualValue, m)}</span>} sub="base de la comisión y del neto" />
         <StatCard label="Descuento del proveedor" value={<span data-testid="liq-descuento-proveedor">{dineroSupplyV2(l.supplierDiscountTotal, m)}</span>} sub="lo rebajó el proveedor; no es dinero de Membego" />
         <StatCard label="Bono de Membego" value={<span data-testid="liq-subsidio">{dineroSupplyV2(l.membegoSubsidyTotal, m)}</span>} sub="costo promocional; no rebaja el neto del proveedor" accent="warning" />

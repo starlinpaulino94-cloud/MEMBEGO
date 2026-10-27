@@ -21,7 +21,7 @@ export default function CargandoIntegraciones() {
           <Skeleton key={i} className="h-8 w-24 rounded-full" />
         ))}
       </div>
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
         {Array.from({ length: 6 }, (_, i) => (
           <Skeleton key={i} className="h-56 w-full rounded-xl" />
         ))}

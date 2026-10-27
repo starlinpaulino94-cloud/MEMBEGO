@@ -69,7 +69,7 @@ export function Pista({ estado }: { estado: EstadoPista }) {
           <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
             En pista ahora
           </h2>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {bahias.map((b) => (
               <div
                 key={b.id}
@@ -135,7 +135,7 @@ export function Pista({ estado }: { estado: EstadoPista }) {
         </section>
       )}
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         {/* ── Esperando: ordenado por quien lleva más ─────────────────── */}
         <section>
           <h2 className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">

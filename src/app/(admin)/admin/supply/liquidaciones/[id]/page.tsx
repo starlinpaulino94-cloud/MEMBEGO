@@ -22,7 +22,7 @@ export default async function LiquidacionProveedorPage({ params }: { params: Pro
   return (
     <div className="space-y-6">
       <PageHeader title={l.number} description={`${formatDate(l.periodStart)} – ${formatDate(l.periodEnd)}`} eyebrow={<Link href={RUTA_PORTAL_LIQUIDACIONES} className="hover:underline">Liquidaciones</Link>} action={<ChipLiquidacion estado={l.status as never} />} />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Vendido (valor contractual + tu descuento)" value={dineroSupplyV2(l.grossSales, m)} sub={Number(l.supplierDiscountTotal) > 0 ? `incluye ${dineroSupplyV2(l.supplierDiscountTotal, m)} de descuento tuyo` : undefined} />
         <StatCard label="Comisión de Membego" value={dineroSupplyV2(l.commissionAmount, m)} />
         <StatCard label="Neto para ti" value={<span data-testid="liq-prov-neto">{dineroSupplyV2(l.supplierNet, m)}</span>} accent="brand" />

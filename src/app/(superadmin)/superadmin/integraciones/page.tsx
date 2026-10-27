@@ -150,7 +150,7 @@ export default async function IntegracionesPage() {
         />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           {/* LO QUE PIDE ATENCIÓN, primero y con nombre. El aviso decía «2
               sistemas» y ahí se acababa: con varios satélites conectados había

@@ -111,7 +111,8 @@ export default async function OperacionesPage() {
             >
               <Estado valor={comp.estado} testid={`estado-${comp.clave}`} />
               <span className="font-medium">{comp.etiqueta}</span>
-              <span className="min-w-0 flex-1 text-sm text-muted-foreground">{comp.detalle}</span>
+              {/* `min-w-48`: en un móvil el detalle baja de línea; con `min-w-0` quedaba en una columna de una palabra por renglón. */}
+              <span className="min-w-48 flex-1 text-sm text-muted-foreground">{comp.detalle}</span>
             </div>
           ))}
         </CardContent>
@@ -227,7 +228,7 @@ export default async function OperacionesPage() {
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Secciones</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <CardContent className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {[
             { href: `${RUTA_OPERACIONES}/incidentes`, label: 'Incidentes financieros', texto: 'Lo que no cuadra, con dueño y severidad.' },
             { href: `${RUTA_OPERACIONES}/conciliaciones`, label: 'Conciliaciones', texto: 'Qué dijo cada lado y cuánto se diferencia.' },

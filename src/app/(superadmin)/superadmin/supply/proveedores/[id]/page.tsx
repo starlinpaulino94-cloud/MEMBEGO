@@ -73,7 +73,7 @@ export default async function ProveedorDetallePage({ params }: { params: Promise
         action={<ChipProveedor estado={p.status} />}
       />
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard label="Supply disponible" value={p.resumen.disponibles.toLocaleString('es-DO')} sub={`${p.resumen.recibidas.toLocaleString('es-DO')} recibidas`} />
         <StatCard label="Valor disponible" value={formatMoneyRD(p.resumen.valorDisponible)} accent="brand" />
         <StatCard label="Compras" value={p.purchaseOrders.length.toLocaleString('es-DO')} sub={`${p.agreements.filter((a) => a.status === 'ACTIVE').length} acuerdos vigentes`} />
@@ -124,7 +124,7 @@ export default async function ProveedorDetallePage({ params }: { params: Promise
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
               <StatCard label="Saldo a pagar" value={<span data-testid="fin-saldo">{dineroSupplyV2(fin.saldoAPagar, fin.currency)}</span>} accent={Number(fin.saldoAPagar) > 0 ? 'warning' : 'success'} />
               <StatCard label="Facturas pendientes" value={<span data-testid="fin-facturas">{fin.facturasPendientes.toLocaleString('es-DO')}</span>} sub={dineroSupplyV2(fin.facturasPendientesMonto, fin.currency)} href={`${RUTA_FINANZAS}/facturas?proveedor=${p.id}`} hrefLabel="Ver facturas" />
               <StatCard label="Depósito disponible" value={<span data-testid="fin-deposito">{dineroSupplyV2(fin.depositoDisponible, fin.currency)}</span>} href={`${RUTA_FINANZAS}/depositos?proveedor=${p.id}`} hrefLabel="Ver depósitos" />

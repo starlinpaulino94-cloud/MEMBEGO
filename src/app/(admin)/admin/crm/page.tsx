@@ -82,7 +82,7 @@ export default async function ProspectosPage({ searchParams }: { searchParams: P
       {prospectos.length === 0 ? (
         <EmptyState title="Nada por este canal" description="No hay prospectos que hayan llegado por aquí." />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {ETAPAS.map((etapa) => {
             const columna = prospectos.filter((p) => p.etapa === etapa)
             return (

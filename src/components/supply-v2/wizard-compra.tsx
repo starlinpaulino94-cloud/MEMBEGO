@@ -314,7 +314,7 @@ export function WizardCompra({ proveedores: iniciales }: { proveedores: Proveedo
           {paso === 4 && acuerdo && producto && (
             <section className="space-y-3" aria-labelledby="paso-compra">
               <h2 id="paso-compra" className="text-h3">¿Cuánto?</h2>
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div>
                   <Label htmlFor="wizardCantidad">Cantidad</Label>
                   <Input id="wizardCantidad" type="number" min={1} step={1} inputMode="numeric" value={cantidad} onChange={(e) => setCantidad(e.target.value)} placeholder="1000" />
@@ -331,7 +331,7 @@ export function WizardCompra({ proveedores: iniciales }: { proveedores: Proveedo
                   <Input id="wizardImpuesto" type="number" min={0} max={100} step="0.01" inputMode="decimal" value={impuesto} onChange={(e) => setImpuesto(e.target.value)} />
                 </div>
               </div>
-              <dl className="grid gap-1 rounded-lg border border-border p-3 text-sm sm:grid-cols-3">
+              <dl className="grid grid-cols-1 gap-1 rounded-lg border border-border p-3 text-sm sm:grid-cols-3">
                 <div>
                   <dt className="text-muted-foreground">Subtotal</dt>
                   <dd className="font-medium tabular-nums">{dinero(subtotal, moneda)}</dd>
@@ -352,7 +352,7 @@ export function WizardCompra({ proveedores: iniciales }: { proveedores: Proveedo
           {paso === 5 && (
             <section className="space-y-3" aria-labelledby="paso-pago">
               <h2 id="paso-pago" className="text-h3">¿Cómo se pagará?</h2>
-              <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Forma de pago">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Forma de pago">
                 {PAYMENT_MODES_SLICE1.map((m) => (
                   <label key={m} className={`cursor-pointer rounded-lg border p-3 text-sm ${pago === m ? 'border-primary bg-primary/10' : 'border-border hover:bg-muted'}`}>
                     <input type="radio" name="pago" value={m} checked={pago === m} onChange={() => setPago(m)} className="mr-2" />
@@ -380,7 +380,7 @@ export function WizardCompra({ proveedores: iniciales }: { proveedores: Proveedo
               <input type="hidden" name="taxRate" value={impuesto} />
               <input type="hidden" name="paymentMode" value={pago} />
               <input type="hidden" name="notes" value={notas} />
-              <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+              <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
                 <Fila k="Proveedor" v={proveedor.commercialName} />
                 <Fila k="Producto" v={producto.name} />
                 <Fila k="Cantidad" v={Number(cantidad).toLocaleString('es-DO')} />

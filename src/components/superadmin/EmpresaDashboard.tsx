@@ -106,7 +106,7 @@ export function EmpresaDashboard({
   return (
     <div className="space-y-6">
       {/* KPI Row */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Ingresos totales"
           value={fmtMoney(stats.ingresosTotales)}
@@ -159,7 +159,7 @@ export function EmpresaDashboard({
         ))}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Membresías por estado */}
         <Card className="lg:col-span-1">
           <CardHeader className="pb-3">

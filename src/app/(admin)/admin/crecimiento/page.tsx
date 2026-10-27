@@ -51,7 +51,7 @@ export default async function CrecimientoPage() {
           referidos sin ver qué los premia. Esto no cambia ninguna ruta —cada
           módulo sigue donde estaba— pero por fin hay una pantalla que enseña
           el programa completo. */}
-      <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
           {
             href: '/admin/invitaciones',
@@ -100,7 +100,7 @@ export default async function CrecimientoPage() {
         </CardHeader>
         <CardContent>
           <form action={guardarGrowthConfigAction} className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Toggle name="landingActiva" checked={config.landingActiva} label="Mostrar landing antes del registro" />
               <label className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-sm">
                 <span className="text-foreground">Duración por defecto del enlace</span>

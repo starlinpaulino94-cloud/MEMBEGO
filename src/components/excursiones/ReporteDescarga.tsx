@@ -105,7 +105,7 @@ export function ReporteDescarga({
 
       <form method="GET" className="space-y-3">
         {/* Rango de Fechas */}
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <Label htmlFor="rep-desde" className="text-xs">Fecha Desde</Label>
             <Input
@@ -131,7 +131,7 @@ export function ReporteDescarga({
         </div>
 
         {/* Filtros de Vendedor y Tipo */}
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <Label htmlFor="rep-vendedor" className="text-xs">Vendedor</Label>
             <select
@@ -172,7 +172,7 @@ export function ReporteDescarga({
         </div>
 
         {/* Filtros de Producto, Canal y Estado */}
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div>
             <Label htmlFor="rep-excursion" className="text-xs">Excursión / Combo</Label>
             <select

@@ -213,7 +213,7 @@ export default async function IntegracionPage({
           </div>
 
           {conectada && configuracion.length > 0 && (
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {configuracion.map((c) => (
                 <div
                   key={c.etiqueta}
@@ -267,7 +267,7 @@ export default async function IntegracionPage({
         </StatusBanner>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           {/* Lo primero que hay que saber de una integración es qué VA A HACER.
               Va en la columna ancha y arriba: quien entra a decidir si conectar

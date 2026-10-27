@@ -232,7 +232,7 @@ function DetalleDeCaso({ caso, fmtFecha }: { caso: CasoDeConciliacion; fmtFecha:
       <div className="mt-2 space-y-2 rounded-lg border border-border/60 bg-muted/30 p-3">
         {caso.diagnostico && <p className="text-xs text-foreground">{caso.diagnostico}</p>}
         {caso.hechos && caso.hechos.length > 0 && (
-          <dl className="grid gap-x-4 gap-y-1 text-xs sm:grid-cols-[max-content_1fr]">
+          <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-xs sm:grid-cols-[max-content_1fr]">
             {caso.hechos.map((h) => (
               <div key={h.etiqueta} className="contents">
                 <dt className="text-muted-foreground">{h.etiqueta}</dt>

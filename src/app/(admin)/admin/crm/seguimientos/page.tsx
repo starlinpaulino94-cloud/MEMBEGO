@@ -76,7 +76,7 @@ export default async function SeguimientosPage() {
   }
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[1fr_minmax(280px,380px)]">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_minmax(280px,380px)]">
       <div className="space-y-5">
         <section aria-label="Pendientes" className="space-y-2">
           <h2 className="text-sm font-semibold">

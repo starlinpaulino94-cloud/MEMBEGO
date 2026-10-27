@@ -211,7 +211,7 @@ test('el título coincide con el del menú', () => {
 })
 
 test('las tarjetas son una lista para quien no ve la pantalla', () => {
-  assert.match(PAGE, /<ul className="grid list-none gap-4 md:grid-cols-2">/)
+  assert.match(PAGE, /<ul className="grid grid-cols-1 list-none gap-4 md:grid-cols-2">/)
 })
 
 // ───────────── M78 · el CSV ─────────────

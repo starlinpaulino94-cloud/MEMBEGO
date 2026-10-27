@@ -115,7 +115,7 @@ export function FormPrograma({ proveedores }: { proveedores: { id: string; nombr
 
           <section className="space-y-3">
             <h2 className="text-h3">¿Quién lo administra y quién pone el dinero?</h2>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <Label htmlFor="progOwner">Lo administra</Label>
                 <select id="progOwner" value={owner} onChange={(e) => setOwner(e.target.value as SupplyV2LoyaltyOwner)} className={SELECT} data-testid="programa-owner">
@@ -195,7 +195,7 @@ export function FormPrograma({ proveedores }: { proveedores: { id: string; nombr
           {conPuntos && (
             <section className="space-y-3" data-testid="programa-regla-puntos">
               <h2 className="text-h3">Regla de puntos</h2>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <Label htmlFor="progPuntos">Puntos que se ganan</Label>
                   <Input id="progPuntos" name="pointsPerUnit" type="number" min={1} step={1} inputMode="numeric" required defaultValue={1} data-testid="programa-puntos-por-unidad" />
@@ -226,7 +226,7 @@ export function FormPrograma({ proveedores }: { proveedores: { id: string; nombr
 
           <section className="space-y-3">
             <h2 className="text-h3">Vigencia</h2>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <Label htmlFor="progDesde">Desde</Label>
                 <Input id="progDesde" name="startsAt" type="date" defaultValue={hoy} required data-testid="programa-desde" />

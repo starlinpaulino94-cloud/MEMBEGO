@@ -210,7 +210,7 @@ export function FormPromocion({ campaignId, offerId, moneda, funding, presupuest
       <input type="hidden" name="campaignId" value={campaignId} />
       <input type="hidden" name="offerId" value={offerId} />
       <input type="hidden" name="valueType" value={valueType} />
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <div>
           <Label htmlFor={`tipoValor-${offerId}`}>Tipo de valor</Label>
           <select id={`tipoValor-${offerId}`} value={valueType} onChange={(e) => setValueType(e.target.value as 'FIXED_AMOUNT' | 'PERCENTAGE')} className="h-10 w-full rounded-lg border border-input bg-transparent px-3 text-sm" data-testid="promocion-tipo-valor">
@@ -289,7 +289,7 @@ export function FormCupones({ campaignId, promociones, moneda }: { campaignId: s
       {elegidos.map((c) => (
         <input key={c.id} type="hidden" name="customerIds" value={c.id} />
       ))}
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <Label htmlFor="cuponPromocion">Promoción que abre</Label>
           <select id="cuponPromocion" name="benefitId" className="h-10 w-full rounded-lg border border-input bg-transparent px-3 text-sm" required data-testid="cupon-promocion">
@@ -476,7 +476,7 @@ export function FormAsignarCampana({ campaignId }: { campaignId: string }) {
           </ul>
         )}
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <Label htmlFor="usosCampana">Usos por promoción</Label>
           <Input id="usosCampana" name="usesAllowed" type="number" min={1} step={1} inputMode="numeric" placeholder="1" />

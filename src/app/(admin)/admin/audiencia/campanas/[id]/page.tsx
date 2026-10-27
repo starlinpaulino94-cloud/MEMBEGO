@@ -67,7 +67,7 @@ export default async function CampanaDetallePage({ params }: Props) {
         }
       />
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Detalles</CardTitle>
@@ -172,7 +172,7 @@ export default async function CampanaDetallePage({ params }: Props) {
           <CardHeader>
             <CardTitle>Entregas</CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-4">
+          <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-4">
             {campana.entregasPorEstado.map((e) => (
               <div key={e.estado} className="rounded-lg border bg-muted/40 p-3">
                 <div className="text-2xl font-bold tabular-nums">{fmt(e.n)}</div>

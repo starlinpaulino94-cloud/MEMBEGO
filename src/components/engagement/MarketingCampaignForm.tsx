@@ -101,7 +101,7 @@ export function MarketingCampaignForm({
   }, [state.success, existing, router])
 
   return (
-    <form action={formAction} className="grid gap-8 lg:grid-cols-[1fr_20rem]">
+    <form action={formAction} className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_20rem]">
       <div className="max-w-2xl space-y-6">
         {existing && <input type="hidden" name="id" value={existing.id} />}
 
@@ -183,7 +183,7 @@ export function MarketingCampaignForm({
         <div className="space-y-5 rounded-xl border border-border p-5">
           <h3 className="font-semibold text-foreground">¿Cuándo se muestra?</h3>
 
-          <div className="grid gap-5 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="fechaInicio">Inicio</Label>
               <Input
@@ -230,7 +230,7 @@ export function MarketingCampaignForm({
             </div>
           </div>
 
-          <div className="grid gap-5 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="horaInicio">Hora inicio (Happy Hour, opcional)</Label>
               <Input
@@ -256,7 +256,7 @@ export function MarketingCampaignForm({
         <div className="space-y-5 rounded-xl border border-border p-5">
           <h3 className="font-semibold text-foreground">Urgencia y acción</h3>
 
-          <div className="grid gap-5 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="maxReclamos">Cupos totales (opcional)</Label>
               <Input
@@ -284,7 +284,7 @@ export function MarketingCampaignForm({
             </div>
           </div>
 
-          <div className="grid gap-5 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="ctaTexto">Texto del botón</Label>
               <Input
@@ -343,7 +343,7 @@ export function MarketingCampaignForm({
             />
           </div>
 
-          <div className="grid gap-5 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="colorPrimario">Color primario</Label>
               <Input

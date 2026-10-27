@@ -89,7 +89,7 @@ export default async function PublicacionesPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {posts.map((p) => {
             const meta = TIPO_META[p.tipo] ?? TIPO_META.NOTICIA
             return (

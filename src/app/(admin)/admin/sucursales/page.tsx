@@ -76,7 +76,7 @@ export default async function SucursalesPage() {
           }
         />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {sucursales.map((s) => (
             <Card key={s.id} className={`card-interactive ${!s.activa ? 'opacity-60' : ''}`}>
               <CardContent className="p-5">

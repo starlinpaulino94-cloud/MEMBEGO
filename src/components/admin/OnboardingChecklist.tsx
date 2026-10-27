@@ -41,9 +41,11 @@ export function OnboardingChecklist({ onboarding }: { onboarding: OnboardingEmpr
         {onboarding.items.map((item) => (
           <div
             key={item.key}
-            className="flex items-center justify-between gap-3 rounded-lg bg-card p-2.5 text-sm shadow-sm"
+            className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-lg bg-card p-2.5 text-sm shadow-sm"
           >
-            <span className="flex items-center gap-2">
+            {/* `flex-wrap` + base de 12rem: en un móvil el botón baja de línea. Antes se quedaba al lado, el texto
+                iba palabra por renglón y el botón se salía de la tarjeta. */}
+            <span className="flex min-w-0 flex-1 basis-48 items-center gap-2">
               {item.done ? (
                 <CheckCircle2 className="h-4 w-4 shrink-0 text-success" />
               ) : (

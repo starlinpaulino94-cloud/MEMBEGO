@@ -52,7 +52,7 @@ export default async function MiCuentaMembegoPage({ searchParams }: { searchPara
         </Card>
       ) : (
         <>
-          <section aria-label="Resumen de la cuenta" className="grid gap-4 md:grid-cols-3">
+          <section aria-label="Resumen de la cuenta" className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <Card className="md:col-span-2">
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-base">

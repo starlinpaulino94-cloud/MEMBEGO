@@ -136,7 +136,7 @@ function Reglas({ datos }: { datos: ReglasParaElEquipo }) {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <dl className="grid gap-3 text-sm sm:grid-cols-2">
+              <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <div>
                   <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Qué frena</dt>
                   <dd className="mt-1 text-foreground/90">{r.descripcion}</dd>

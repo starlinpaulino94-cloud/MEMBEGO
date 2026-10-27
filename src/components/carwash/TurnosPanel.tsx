@@ -89,7 +89,7 @@ export function TurnosPanel({ panel }: { panel: PanelTurnos }) {
         </p>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
         <div className="space-y-6">
           <Entrada empleados={panel.empleados} />
           <Adentro abiertos={panel.abiertos} filas={panel.filas} />
@@ -101,7 +101,7 @@ export function TurnosPanel({ panel }: { panel: PanelTurnos }) {
               <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 Por persona
               </h2>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {panel.porEmpleado.map((e) => (
                   <div key={e.userId} className="rounded-2xl border border-border/70 bg-card p-4">
                     <p className="truncate font-semibold text-foreground">{e.nombre}</p>
@@ -308,7 +308,7 @@ function FilaTurno({ f }: { f: TurnoFila }) {
       {abiertoManual && (
         <form action={formAction} className="mt-3 space-y-2 border-t border-border/60 pt-3">
           <input type="hidden" name="id" value={f.id} />
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <label className="block">
               <span className="mb-1 block text-xs text-muted-foreground">Entrada</span>
               <input
@@ -328,7 +328,7 @@ function FilaTurno({ f }: { f: TurnoFila }) {
               />
             </label>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <input
               name="costoHora"
               inputMode="decimal"

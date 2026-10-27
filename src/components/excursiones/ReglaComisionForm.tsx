@@ -105,7 +105,7 @@ export function ReglaComisionForm({
     <form action={formAction} className="space-y-4 rounded-2xl border border-border bg-card p-5">
       <h2 className="text-h3 text-foreground">Nueva regla</h2>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <Label htmlFor="rc-ambito">¿A qué se aplica?</Label>
           <select
@@ -443,7 +443,7 @@ export function ReglaComisionForm({
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <Label htmlFor="rc-desde">Vigente desde</Label>
           <Input id="rc-desde" name="vigenciaDesde" type="date" />

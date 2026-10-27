@@ -32,7 +32,7 @@ export default async function DepositoPage({ params }: { params: Promise<{ id: s
         nav={<NavSupplyV2 activa="finanzas" />}
         action={<ChipDeposito estado={d.status} />}
       />
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard label="Original" value={dineroSupplyV2(d.originalAmount, m)} />
         <StatCard label="Disponible" value={<span data-testid="deposito-disponible">{dineroSupplyV2(d.availableAmount, m)}</span>} accent="brand" sub={cuadra ? 'los movimientos reconstruyen este saldo' : 'ATENCIÓN: los movimientos no reconstruyen el saldo'} />
         <StatCard label="Aplicado" value={dineroSupplyV2(d.appliedAmount, m)} sub={`${d.applications.filter((a) => !a.reversedAt).length} aplicación(es) viva(s)`} />

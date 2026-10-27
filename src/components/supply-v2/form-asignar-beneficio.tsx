@@ -79,7 +79,7 @@ export function FormAsignarBeneficio({ benefitId, perCustomerLimit, hasta }: { b
           <p className="text-caption text-muted-foreground">Ningún cliente coincide con esa búsqueda.</p>
         )}
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <Label htmlFor="usosBeneficio">Usos para este cliente</Label>
           <Input id="usosBeneficio" name="usesAllowed" type="number" min={1} max={perCustomerLimit} step={1} defaultValue={1} inputMode="numeric" />

@@ -133,7 +133,7 @@ export function EmpresaCreateForm({
       {/* Datos de la empresa */}
       <div className="space-y-4">
         <h3 className="text-sm font-semibold text-foreground">Datos de la empresa</h3>
-        <div className="grid gap-6 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="name">Nombre de la empresa *</Label>
             <Input id="name" name="name" required defaultValue={inicial?.name} placeholder="Ej: CarTown Wash" />
@@ -269,7 +269,7 @@ export function EmpresaCreateForm({
                 ? 'Se creará una cuenta aparte solo para practicar. Puede compartirse entre varias personas del entrenamiento: dentro no hay nada real que romper.'
                 : 'Se creará una cuenta con acceso al panel de la empresa. Comparte estas credenciales con el responsable del negocio.'}
             </p>
-            <div className="grid gap-6 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor="adminNombre">Nombre del administrador *</Label>
                 <Input id="adminNombre" name="adminNombre" required defaultValue={inicial?.adminNombre} placeholder="Nombre y apellido" />

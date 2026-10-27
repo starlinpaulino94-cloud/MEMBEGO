@@ -105,7 +105,7 @@ export function PlanCampos({
           )}
         </Campo>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Campo id="precio" etiqueta="Precio (RD$)" error={errores.precio}>
             {(control) => (
               <Input name="precio" type="number" min="0" step="0.01" required defaultValue={valores.precio} placeholder="0.00" {...control} />

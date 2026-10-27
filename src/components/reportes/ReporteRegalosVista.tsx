@@ -101,7 +101,7 @@ export function ReporteRegalosVista({
           title="Regalos entre clientes"
           description="Un cliente le paga algo a otro: usos de su propia compra, una promoción o un plan. El receptor tiene que aceptarlo."
         />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 print:gap-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 print:gap-2">
           <KpiReporte
             label="Enviados"
             kpi={r.enviados}
@@ -200,7 +200,7 @@ export function ReporteRegalosVista({
           title="Gift cards"
           description="Monto abierto que el destinatario consume mostrando su código. El dinero entra cuando se confirma el pago."
         />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4">
           <KpiReporte
             label="Emitidas"
             kpi={r.emitidas}
@@ -242,7 +242,7 @@ export function ReporteRegalosVista({
           title="Saldo vivo — dinero cobrado que todavía debes"
           description="Es un PASIVO, no un ingreso del periodo. Ya se cobró cuando se vendió la gift card; sumarlo a los ingresos del mes lo contaría dos veces. Es una foto de hoy."
         />
-        <div className="grid gap-4 sm:grid-cols-3 print:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 print:grid-cols-3">
           <Celda label="Gift cards activas" valor={entero(r.saldoVivo.tarjetas)} />
           <Celda
             label="Saldo pendiente de entregar"
@@ -261,7 +261,7 @@ export function ReporteRegalosVista({
           title="Foto de hoy — no depende del periodo"
           description="Lo que está esperando ahora mismo."
         />
-        <div className="grid gap-4 sm:grid-cols-3 print:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 print:grid-cols-3">
           <Celda label="Regalos sin responder" valor={entero(r.esperando.regalosPendientes)} />
           <Celda
             label="Vencen esta semana"

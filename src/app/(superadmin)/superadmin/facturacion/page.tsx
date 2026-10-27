@@ -45,7 +45,7 @@ export default async function FacturacionPage({ searchParams }: { searchParams: 
     <div className="space-y-6">
       <PageHeader title="Cobros a empresas" description="Merchant Billing: lo que cada empresa le debe a Membego por los pedidos que la plataforma le trajo. Separado de lo que Membego paga a sus proveedores (Supply)." action={<BarridoAcciones />} />
 
-      <section aria-label="Resumen de cobros" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <section aria-label="Resumen de cobros" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardContent className="p-4">
             <p className="text-xs text-muted-foreground">Por cobrar</p>

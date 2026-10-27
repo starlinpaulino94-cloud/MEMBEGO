@@ -243,7 +243,7 @@ export default async function SuperadminDashboard({
 
         <section className="order-1 lg:order-2">
           <h2 className="text-h4 mb-3 text-foreground">Salud de la plataforma</h2>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <AlertTile
               label="Pagos por validar"
               value={d.porValidar}

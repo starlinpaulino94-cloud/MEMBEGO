@@ -37,7 +37,7 @@ export function AgendaConfigForm({ config }: { config: AgendaConfigData | null }
   return (
     <form action={formAction} className="space-y-6">
       {/* Encendido y confirmación */}
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="flex items-start gap-3 rounded-2xl border border-border/70 bg-card p-4">
           <input
             type="checkbox"
@@ -71,7 +71,7 @@ export function AgendaConfigForm({ config }: { config: AgendaConfigData | null }
       {/* Capacidad: los dos límites que pediste + duración del turno */}
       <div className="rounded-2xl border border-border/70 bg-card p-4">
         <h3 className="text-sm font-semibold text-foreground">Capacidad</h3>
-        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <label className="text-xs font-medium text-muted-foreground">
             Duración del turno
             <select name="duracionMin" defaultValue={String(config?.duracionMin ?? 30)} className={inputClase}>
@@ -110,7 +110,7 @@ export function AgendaConfigForm({ config }: { config: AgendaConfigData | null }
       {/* Reglas de reserva */}
       <div className="rounded-2xl border border-border/70 bg-card p-4">
         <h3 className="text-sm font-semibold text-foreground">Reglas de reserva</h3>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="text-xs font-medium text-muted-foreground">
             Anticipación mínima (horas)
             <input

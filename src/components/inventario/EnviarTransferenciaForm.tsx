@@ -211,7 +211,7 @@ export function EnviarTransferenciaForm({ sucursales }: { sucursales: SucursalOp
   return (
     <form onSubmit={enviar} className="space-y-6" aria-label="Nueva transferencia con envío">
       <Card>
-        <CardContent className="grid gap-4 p-4 sm:grid-cols-3">
+        <CardContent className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-3">
           <div className="space-y-1.5">
             <Label htmlFor="tr-origen">Sucursal que envía</Label>
             <select

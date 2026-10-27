@@ -99,7 +99,7 @@ export function IncidenciasPanel({
         <Kpi label="Costo asumido" valor={fmtRD(panel.kpis.costo)} pie="reposiciones y regalos" />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[340px_1fr]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[340px_1fr]">
         <Registrar entregados={entregados} />
 
         <section>
@@ -313,7 +313,7 @@ function Fila({ f }: { f: PanelIncidencias['filas'][number] }) {
       {abierto && (
         <form action={formAction} className="mt-3 space-y-2 border-t border-border/60 pt-3">
           <input type="hidden" name="id" value={f.id} />
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <select name="estado" defaultValue={f.estado} className={input}>
               {INCIDENCIA_ESTADOS.map((e) => (
                 <option key={e} value={e}>

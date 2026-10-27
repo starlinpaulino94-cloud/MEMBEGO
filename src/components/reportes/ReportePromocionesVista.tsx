@@ -100,7 +100,7 @@ export function ReportePromocionesVista({
           title="El ciclo, en tres cifras"
           description="Cada una tiene su propio reloj: la adquisición se fecha cuando el cliente la pide, la entrega cuando el beneficio queda disponible, y el uso cuando se canjea en el mostrador."
         />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 print:gap-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 print:gap-2">
           <KpiReporte
             label="Adquiridas"
             kpi={r.adquiridas}
@@ -137,7 +137,7 @@ export function ReportePromocionesVista({
           )}
         </div>
 
-        <div className="mt-4 grid gap-4 sm:grid-cols-3 print:grid-cols-3">
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3 print:grid-cols-3">
           <Celda
             label="De pedida a entregada"
             valor={r.tasaEntrega == null ? 'Sin dato' : `${r.tasaEntrega} %`}
@@ -226,7 +226,7 @@ export function ReportePromocionesVista({
           title="Foto de hoy — no depende del periodo"
           description="El catálogo y la cola de trabajo, ahora mismo. No se comparan contra el periodo anterior porque el pasado de una foto de hoy no existe."
         />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4">
           <Celda label="Publicadas" valor={entero(r.catalogo.publicadas)} />
           <Celda
             label="Comprables"
@@ -240,7 +240,7 @@ export function ReportePromocionesVista({
           />
           <Celda label="Archivadas" valor={entero(r.catalogo.archivadas)} />
         </div>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2 print:grid-cols-2">
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 print:grid-cols-2">
           <Celda
             label="Comprobantes por validar"
             valor={entero(r.esperando.enValidacion)}
@@ -259,7 +259,7 @@ export function ReportePromocionesVista({
           title="La vitrina pública"
           description="Vistas y compartidos acumulados DESDE SIEMPRE: estos contadores no guardan fecha, así que no se pueden recortar al periodo. Además llevan un tope por navegador, así que son un suelo y no un conteo exacto."
         />
-        <div className="grid gap-4 sm:grid-cols-2 print:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 print:grid-cols-2">
           <Celda label="Vistas acumuladas" valor={entero(r.vitrina.vistas)} />
           <Celda label="Compartidos acumulados" valor={entero(r.vitrina.compartidos)} />
         </div>

@@ -85,7 +85,7 @@ export function ConvertirEnCliente({
         Se crea su ficha en el directorio (o se enlaza a una que ya exista con el mismo teléfono o correo) y el
         prospecto queda cerrado.
       </p>
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         <Input name="nombre" required defaultValue={nombre} placeholder="Nombre" aria-label="Nombre" />
         <Input name="telefono" defaultValue={telefono ?? ''} placeholder="Teléfono" aria-label="Teléfono" />
         <Input name="email" type="email" placeholder="Correo (opcional)" aria-label="Correo" />
@@ -160,7 +160,7 @@ export function FormSeguimiento({
           </select>
         </label>
       )}
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <label className="block space-y-1">
           <span className="text-xs font-medium text-muted-foreground">Tipo</span>
           <select name="tipo" required className={`${SELECT} w-full`} defaultValue={TIPOS_SEGUIMIENTO[0]}>

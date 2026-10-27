@@ -73,7 +73,7 @@ export default async function ReservaDetallePage({
 
       <section className="rounded-2xl border border-border bg-card p-5">
         <h2 className="text-h3 text-foreground">La excursión</h2>
-        <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+        <dl className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <dt className="text-caption text-muted-foreground">Excursión</dt>
             <dd className="text-foreground">{excursion?.nombre ?? '—'}</dd>

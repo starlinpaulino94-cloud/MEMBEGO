@@ -41,7 +41,7 @@ export default async function VentasProveedorPage({ searchParams }: { searchPara
         eyebrow={<Link href={RUTA_PORTAL_PROVEEDOR} className="hover:underline">Entregas Membego</Link>}
         action={<Button asChild variant="outline"><Link href={RUTA_PORTAL_LIQUIDACIONES} data-testid="link-liquidaciones">Liquidaciones y pagos</Link></Button>}
       />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Pendientes de entregar" value={<span data-testid="ventas-pendientes">{r.pendientesDeEntrega.toLocaleString('es-DO')}</span>} sub="beneficios vendidos que aún no entregaste" accent="warning" />
         <StatCard label="Entregadas" value={<span data-testid="ventas-entregadas">{r.entregadas.toLocaleString('es-DO')}</span>} accent="success" />
         <StatCard label="Monto pendiente de pago" value={<span data-testid="ventas-monto-pendiente">{dineroSupplyV2(r.montoPendienteDePago, r.currency)}</span>} sub="neto por entregas hechas, aún no pagado" />

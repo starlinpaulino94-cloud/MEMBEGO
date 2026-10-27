@@ -98,7 +98,7 @@ export function ComprasPanel({
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[340px_1fr]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[340px_1fr]">
         <div className="space-y-6">
           <NuevaOrden proveedores={panel.proveedores} />
           <FormProveedor editando={editando} />

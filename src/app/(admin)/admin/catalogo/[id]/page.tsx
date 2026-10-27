@@ -127,7 +127,7 @@ export default async function ItemCatalogoPage({ params }: { params: Promise<{ i
         </ul>
       </nav>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card id="informacion">
           <CardHeader>
             <CardTitle>Información</CardTitle>
@@ -188,7 +188,7 @@ export default async function ItemCatalogoPage({ params }: { params: Promise<{ i
       </div>
 
       {panorama && (
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <PanoramaComercial
             itemNombre={item.name}
             itemSlug={item.slug}

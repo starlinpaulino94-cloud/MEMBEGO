@@ -79,7 +79,7 @@ export function AnaliticaPlataformaVista({
 
       <section>
         <SectionHeader title="El comercio" description="Pedidos Membego completados en el periodo, todas las empresas." />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 print:grid-cols-3 print:gap-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 print:grid-cols-3 print:gap-2">
           <KpiReporte label="GMV" kpi={p.gmv} formato={dinero} definicion="Lo que valieron los pedidos Membego completados en el periodo, de todos los orígenes (marketplace, Supply…)." />
           <KpiReporte label="Pedidos" kpi={p.pedidos} formato={num} definicion="Pedidos completados en el periodo." />
           <KpiReporte label="Ticket promedio" kpi={p.ticket} formato={dinero} definicion="GMV ÷ pedidos." />
@@ -175,7 +175,7 @@ export function AnaliticaPlataformaVista({
 
       <section>
         <SectionHeader title="Qué pasa con los pedidos" description="Los pedidos creados en el periodo y cómo van." />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 print:gap-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 print:gap-2">
           <Celda label="Creados" valor={num(p.embudo.creados)} nota="Pedidos que llegaron" />
           <Celda label="Completados" valor={num(p.embudo.completados)} nota={p.embudo.tasaDeCierre === null ? 'Sin pedidos' : `Tasa de cierre ${p.embudo.tasaDeCierre} %`} />
           <Celda label="Cancelados o reembolsados" valor={num(p.embudo.cancelados)} nota="Se cayeron" />
@@ -185,7 +185,7 @@ export function AnaliticaPlataformaVista({
 
       <section>
         <SectionHeader title="Ofertas con presupuesto" description="Obtenidas en el periodo." />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 print:grid-cols-5 print:gap-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5 print:grid-cols-5 print:gap-2">
           <Celda label="Activas ahora" valor={num(p.ofertas.activas)} nota="Foto de hoy" />
           <Celda label="Obtenidas" valor={num(p.ofertas.obtenidas)} nota="Cupones reclamados" />
           <Celda label="Canjeadas" valor={num(p.ofertas.canjeadas)} nota={pct(p.ofertas.obtenidas > 0 ? Math.round((p.ofertas.canjeadas / p.ofertas.obtenidas) * 1000) / 10 : null) + ' de lo obtenido'} />
@@ -219,7 +219,7 @@ export function AnaliticaPlataformaVista({
 
       <section>
         <SectionHeader title="Salud de los cobros" description="Cuentas de Merchant Billing por estado (foto de hoy)." action={<Link href="/superadmin/facturacion" className="print:hidden text-small font-semibold text-primary underline">Ver cuentas</Link>} />
-        <div className="grid gap-4 sm:grid-cols-3 print:grid-cols-3 print:gap-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 print:grid-cols-3 print:gap-2">
           <Celda label="Al día" valor={num(p.cuentas.activas)} nota="Cuentas activas" />
           <Celda label="En gracia" valor={num(p.cuentas.enGracia)} nota="Pasaron su límite de crédito" />
           <Celda label="Suspendidas" valor={num(p.cuentas.suspendidas)} nota="No pueden crear ni publicar ofertas" />
@@ -228,7 +228,7 @@ export function AnaliticaPlataformaVista({
 
       <section>
         <SectionHeader title="Descubrimiento" description="Búsquedas en el mapa «cerca de mí»." />
-        <div className="grid gap-4 sm:grid-cols-2 print:grid-cols-2 print:gap-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 print:grid-cols-2 print:gap-2">
           <Celda label="Búsquedas" valor={num(p.busquedas.total)} nota="En el periodo" />
           <Celda label="Sin resultados" valor={num(p.busquedas.sinResultados)} nota={p.busquedas.total > 0 ? `${Math.round((p.busquedas.sinResultados / p.busquedas.total) * 1000) / 10} % de las búsquedas` : 'Sin búsquedas'} />
         </div>
@@ -243,7 +243,7 @@ export function AnaliticaPlataformaVista({
         />
         {supply ? (
           <>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 print:gap-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 print:gap-2">
               <Celda label="GMV de Supply" valor={dinero(Number(supply.gmv))} nota="Ventas de ofertas adquiridas, este mes" />
               <Celda label="Margen bruto" valor={dinero(Number(supply.grossMargin))} nota={supply.marginPct === null ? 'Sin ventas' : `${supply.marginPct} % del ingreso`} />
               <Celda label="Unidades canjeadas" valor={`${num(supply.unitsRedeemed)} de ${num(supply.unitsSold)}`} nota={`Vencidas sin canjear: ${num(supply.unitsExpired)}${supply.breakageRate === null ? '' : ` (${supply.breakageRate} %)`}`} />

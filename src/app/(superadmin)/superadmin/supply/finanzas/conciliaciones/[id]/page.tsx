@@ -35,14 +35,14 @@ export default async function ConciliacionPage({ params, searchParams }: { param
     <div className="space-y-6">
       <PageHeader title={r.number} description={`${RECONCILIATION_KIND_LABELS[r.kind]} · ${r.supplier.commercialName} · ${formatDate(r.periodStart)} – ${formatDate(r.periodEnd)}`} eyebrow={<Link href={`${RUTA_FINANZAS}/conciliaciones`} className="hover:underline">Conciliaciones</Link>} nav={<NavSupplyV2 activa="finanzas" />} action={<ChipConciliacion estado={r.status} />} />
       {comision && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="conciliacion-comision">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="conciliacion-comision">
           <StatCard label="Bruto vendido (Membego)" value={<span data-testid="conc-bruto">{dineroSupplyV2(r.grossSalesInternal ?? '0', m)}</span>} sub={r.grossClaimed ? `proveedor: ${dineroSupplyV2(r.grossClaimed, m)}` : SIN_INFORMACION_DEL_PROVEEDOR} />
           <StatCard label="Comisión (Membego)" value={<span data-testid="conc-comision">{dineroSupplyV2(r.commissionInternal ?? '0', m)}</span>} sub={r.commissionClaimed ? `proveedor: ${dineroSupplyV2(r.commissionClaimed, m)}` : SIN_INFORMACION_DEL_PROVEEDOR} />
           <StatCard label="Neto devengado (Membego)" value={<span data-testid="conc-neto">{dineroSupplyV2(r.netInternal ?? '0', m)}</span>} sub={r.netClaimed ? `proveedor: ${dineroSupplyV2(r.netClaimed, m)}` : SIN_INFORMACION_DEL_PROVEEDOR} accent="brand" />
           <StatCard label="Pagos aplicados (Membego)" value={<span data-testid="conc-pagos">{dineroSupplyV2(r.paymentsInternal ?? '0', m)}</span>} />
         </div>
       )}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard label={comision ? 'Neto según Membego' : 'Saldo según Membego'} value={<span data-testid="conciliacion-interno">{dineroSupplyV2(r.internalAmount, m)}</span>} sub={comision ? 'neto de las entregas a comisión del periodo' : 'deuda reconocida − pagos − depósito aplicado, en el periodo'} />
         <StatCard label="Saldo según el proveedor" value={<span data-testid="conciliacion-proveedor">{r.supplierAmount ? dineroSupplyV2(r.supplierAmount, m) : SIN_INFORMACION_DEL_PROVEEDOR}</span>} />
         <StatCard label="Diferencia" value={<span data-testid="conciliacion-diferencia">{r.differenceAmount ? dineroSupplyV2(r.differenceAmount, m) : '—'}</span>} accent={r.status === 'DISCREPANCY' ? 'warning' : r.status === 'MATCHED' ? 'success' : undefined} />

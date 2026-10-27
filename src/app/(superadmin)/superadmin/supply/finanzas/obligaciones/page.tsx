@@ -38,7 +38,7 @@ export default async function ObligacionesPage({ searchParams }: { searchParams:
       />
       <Card>
         <CardContent className="pt-6">
-          <form method="get" className="grid gap-3 sm:grid-cols-4">
+          <form method="get" className="grid grid-cols-1 gap-3 sm:grid-cols-4">
             <div><Label htmlFor="proveedor">Proveedor</Label><select id="proveedor" name="proveedor" defaultValue={proveedor} className={select}><option value="">Todos</option>{proveedores.map((p) => <option key={p.id} value={p.id}>{p.commercialName}</option>)}</select></div>
             <div><Label htmlFor="estado">Estado</Label><select id="estado" name="estado" defaultValue={estadoCrudo} className={select}><option value="VIVAS">Pendientes y parciales</option><option value="">Todas</option>{ESTADOS.map((e) => <option key={e} value={e}>{OBLIGATION_STATUS_LABELS[e]}</option>)}</select></div>
             <div className="flex items-end gap-2"><Button type="submit" variant="outline">Filtrar</Button><Button asChild variant="ghost"><Link href={`${RUTA_FINANZAS}/obligaciones`}>Limpiar</Link></Button></div>

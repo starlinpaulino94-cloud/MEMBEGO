@@ -41,13 +41,13 @@ export default async function OfertaDetallePage({ params }: { params: Promise<{ 
         <Card data-testid="oferta-comision">
           <CardHeader><CardTitle>Venta a comisión · sin lote</CardTitle></CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <StatCard label="Comisión de Membego" value={<span data-testid="comision-pct">{o.comision.commissionPercentage} %</span>} sub={o.comision.agreementCode ? `${o.comision.agreementCode} · regla ${o.comision.agreementScope === 'ITEM' ? 'por producto' : o.comision.agreementScope === 'CATEGORY' ? 'por categoría' : 'de todo el catálogo'}` : 'sin acuerdo'} accent="brand" />
               <StatCard label="Disponibilidad" value={<span data-testid="comision-libres">{o.comision.libres === null ? 'Sin tope' : o.comision.libres.toLocaleString('es-DO')}</span>} sub={o.comision.availabilityMode ? `${AVAILABILITY_MODE_LABELS[o.comision.availabilityMode]}${o.comision.availabilityQuantity ? ` · ${o.comision.availabilityQuantity.toLocaleString('es-DO')} declaradas` : ''} · ${o.comision.reservadas} reservadas` : ''} />
               <StatCard label="Vendidas · entregadas" value={<><span data-testid="comision-vendidas">{o.comision.vendidas.toLocaleString('es-DO')}</span> · <span data-testid="comision-entregadas">{o.comision.entregadas.toLocaleString('es-DO')}</span></>} sub={`${o.comision.pendientesDeEntrega} pendientes de entrega · ${o.comision.vencidas} vencidas`} accent="success" />
               <StatCard label="GMV · comisión · neto" value={<span data-testid="comision-gmv">{dinero(o.comision.gmv)}</span>} sub={`${dinero(o.comision.comision)} comisión · ${dinero(o.comision.netoProveedor)} neto del proveedor`} />
             </div>
-            <dl className="grid gap-2 text-sm sm:grid-cols-3">
+            <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
               <Dato label="Comisión acumulada"><span data-testid="comision-monto">{dinero(o.comision.comision)}</span></Dato>
               <Dato label="Neto del proveedor acumulado"><span data-testid="comision-neto">{dinero(o.comision.netoProveedor)}</span></Dato>
               <Dato label="Neto devengado (entregas)"><span data-testid="comision-devengado">{dinero(o.comision.netoDevengado)}</span></Dato>
@@ -84,7 +84,7 @@ export default async function OfertaDetallePage({ params }: { params: Promise<{ 
       </Card>
 
       {o.sourceType === 'PREPURCHASED_SUPPLY' && (
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Asignadas" value={<span data-testid="oferta-asignadas">{(a?.allocatedQuantity ?? 0).toLocaleString('es-DO')}</span>} sub={`de ${o.quantityLimit.toLocaleString('es-DO')} destinadas`} />
         <StatCard label="Disponibles en la oferta" value={<span data-testid="oferta-disponibles">{o.disponibles.toLocaleString('es-DO')}</span>} accent="brand" />
         <StatCard label="Reservadas" value={<span data-testid="oferta-reservadas">{(a?.reservedQuantity ?? 0).toLocaleString('es-DO')}</span>} sub="checkouts en curso" />
@@ -92,7 +92,7 @@ export default async function OfertaDetallePage({ params }: { params: Promise<{ 
       </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card>
           <CardHeader><CardTitle>Precio</CardTitle></CardHeader>
           <CardContent className="space-y-2 text-sm">

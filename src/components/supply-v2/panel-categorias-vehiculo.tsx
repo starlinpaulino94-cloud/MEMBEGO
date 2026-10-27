@@ -134,7 +134,7 @@ function FilaCategoria({ c }: { c: CategoriaVehiculoFila }) {
         El código <strong>{c.code}</strong> no se edita: viaja a semillas e informes, y cambiarlo rompería la
         correspondencia con lo que ya se escribió fuera de la base.
       </p>
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div>
           <Label htmlFor={`nombre-${c.id}`}>Nombre</Label>
           <Input id={`nombre-${c.id}`} name="nombre" defaultValue={c.nombre} maxLength={60} required />
@@ -189,7 +189,7 @@ function FormNueva() {
 
   return (
     <form action={crear} className="space-y-3 rounded-lg border border-border p-3" data-testid="form-nueva-categoria">
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <Label htmlFor="nuevaCode">Código</Label>
           <Input id="nuevaCode" name="code" placeholder="PATANA" maxLength={32} required />

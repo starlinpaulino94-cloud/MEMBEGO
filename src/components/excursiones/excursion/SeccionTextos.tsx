@@ -14,7 +14,7 @@ export function SeccionUbicacion({ v, poner }: SeccionProps) {
         <MapPin className="h-5 w-5 text-primary" aria-hidden />
         Ubicación y punto de salida
       </h3>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Campo id="exc-ubicacion" etiqueta="Ciudad o región" opcional>
           {(control) => (
             <Input name="ubicacion" value={v.ubicacion} onChange={(e) => poner({ ubicacion: e.target.value })} placeholder="Ej.: Bayahíbe, La Romana" className="h-11 text-sm" {...control} />
@@ -45,7 +45,7 @@ export function SeccionIncluye({ v, poner }: SeccionProps) {
         <Info className="h-5 w-5 text-primary" aria-hidden />
         Inclusiones y políticas
       </h3>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Campo id="exc-incluye" etiqueta="¿Qué incluye?" opcional>
           {(control) => (
             <Textarea

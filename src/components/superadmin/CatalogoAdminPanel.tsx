@@ -231,7 +231,7 @@ export function CatalogoAdminPanel({
           El catálogo está vacío. Los conectores se siembran con una migración.
         </p>
       ) : (
-        <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {visibles.map((c) => (
             <TarjetaConector key={c.id} conector={c} />
           ))}

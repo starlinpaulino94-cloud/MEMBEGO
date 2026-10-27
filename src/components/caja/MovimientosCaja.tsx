@@ -51,7 +51,7 @@ export function MovimientosCaja({
         Afectan el arqueo al cerrar.
       </p>
 
-      <form ref={formRef} action={formAction} className="grid gap-3 sm:grid-cols-[auto_1fr_auto_auto] sm:items-end">
+      <form ref={formRef} action={formAction} className="grid grid-cols-1 gap-3 sm:grid-cols-[auto_1fr_auto_auto] sm:items-end">
         <input type="hidden" name="cajaSesionId" value={cajaSesionId} />
         <div className="space-y-1.5">
           <Label htmlFor="mov-tipo">Tipo</Label>

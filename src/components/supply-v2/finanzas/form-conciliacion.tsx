@@ -40,7 +40,7 @@ export function FormConciliacion({ proveedores }: { proveedores: { id: string; c
   const inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0, 10)
   return (
     <form action={enviar} className="space-y-3" data-testid="form-conciliacion">
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <Label htmlFor="concProveedor">Proveedor</Label>
           <select id="concProveedor" name="supplierId" required className="h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm" defaultValue={proveedores[0]?.id ?? ''} data-testid="conciliacion-proveedor">
@@ -104,7 +104,7 @@ export function FormConciliacionComision({ proveedores }: { proveedores: { id: s
   const inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0, 10)
   return (
     <form action={enviar} className="space-y-3" data-testid="form-conciliacion-comision">
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <Label htmlFor="conccProveedor">Proveedor</Label>
           <select id="conccProveedor" name="supplierId" required className="h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm" defaultValue={proveedores[0]?.id ?? ''} data-testid="conciliacion-proveedor">

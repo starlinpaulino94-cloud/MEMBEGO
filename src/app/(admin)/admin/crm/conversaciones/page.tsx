@@ -76,7 +76,7 @@ export default async function ConversacionesPage({
   const filtro = { canal, estado, q: q || null }
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(280px,360px)_1fr]">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(280px,360px)_1fr]">
       <div className={hilo ? 'hidden lg:block' : ''}>
         <ListaConversaciones items={items} seleccionadaId={hilo?.conversacion.id ?? null} filtro={filtro} resumen={resumen} prefs={prefs} />
       </div>

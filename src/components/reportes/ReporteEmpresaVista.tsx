@@ -224,7 +224,7 @@ export function ReporteEmpresaVista({
         />
         {personalizar}
         <div
-          className={`mt-4 grid gap-4 sm:grid-cols-2 ${REJILLA[cifras.length] ?? 'lg:grid-cols-5'} print:gap-2`}
+          className={`mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 ${REJILLA[cifras.length] ?? 'lg:grid-cols-5'} print:gap-2`}
         >
           {cifras.map((c) => tarjetas[c.clave])}
         </div>
@@ -280,7 +280,7 @@ export function ReporteEmpresaVista({
       />
 
       {/* ── 3 · Los dos repartos ────────────────────────────────────────── */}
-      <div className="grid gap-6 lg:grid-cols-2 print:grid-cols-2 print:gap-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 print:grid-cols-2 print:gap-3">
         <PanelGrafico
           titulo="De dónde viene el dinero"
           pregunta="¿Por qué vía está entrando lo que se cobra?"
@@ -376,7 +376,7 @@ export function ReporteEmpresaVista({
             title="Qué dicen estos números"
             description="Solo aparece lo que tiene algo que decir: una sección que siempre está encendida enseña a ignorarla."
           />
-          <ul className="grid gap-3 sm:grid-cols-2 print:grid-cols-2">
+          <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 print:grid-cols-2">
             {insights.map((i) => {
               const Icono =
                 i.tono === 'bueno' ? TrendingUp : i.tono === 'malo' ? TrendingDown : Minus
@@ -427,7 +427,7 @@ export function ReporteEmpresaVista({
       )}
 
       {/* ── 5 · El detalle ──────────────────────────────────────────────── */}
-      <div className="grid gap-6 lg:grid-cols-2 print:grid-cols-2 print:gap-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 print:grid-cols-2 print:gap-3">
         <Card className="print:border-black">
           <CardHeader>
             <CardTitle className="text-h4">Clientes más activos</CardTitle>

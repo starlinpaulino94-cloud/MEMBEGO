@@ -87,7 +87,7 @@ export default async function MetodosPagoPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {metodos.map((m) => (
             <Card key={m.id} className={m.activo ? '' : 'opacity-60'}>
               <CardContent className="p-5">

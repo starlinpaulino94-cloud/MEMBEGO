@@ -428,7 +428,7 @@ function FormVariante({
       <input type="hidden" name="excursionId" value={excursionId} />
       {variante ? <input type="hidden" name="varianteId" value={variante.id} /> : null}
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <Label htmlFor={`var-nombre-${variante?.id ?? 'nueva'}`}>Nombre de la variante *</Label>
           <Input
@@ -454,7 +454,7 @@ function FormVariante({
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {/* Tarifas Turistas */}
         <div className="rounded-xl border border-border bg-card p-3.5 space-y-2.5">
           <div className="flex items-center justify-between border-b pb-1.5">

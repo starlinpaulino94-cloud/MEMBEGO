@@ -43,7 +43,7 @@ export default async function VisitasPage({ searchParams }: { searchParams: Prom
     <div className="space-y-6">
       <PageHeader title="Visitas" description="Visitas atribuidas a Membego: lo incluido, las compras adicionales reportadas, la comisión solo sobre extras y los reportes de los clientes." eyebrow="Membego Supply" nav={<NavSupplyV2 activa="visitas" />} />
       {/* El embudo (§52–§53): canje → visita → con extras → confirmada → disputada, últimos 30 días. */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" data-testid="embudo-visitas">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5" data-testid="embudo-visitas">
         <StatCard label="Canjes (30 d)" value={embudo.redenciones} sub={`${embudo.visitas} visitas abiertas`} />
         <StatCard label="Visitas cerradas" value={embudo.cerradas} sub={pct(embudo.cerradas, embudo.visitas)} />
         <StatCard label="Con compras adicionales" value={embudo.conExtras} sub={`${pct(embudo.conExtras, embudo.cerradas)} de las cerradas · ${dineroVisita(embudo.extrasTotal)}`} />

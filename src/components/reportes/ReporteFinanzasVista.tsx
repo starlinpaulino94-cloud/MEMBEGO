@@ -155,7 +155,7 @@ export function ReporteFinanzasVista({
 
       <section>
         <SectionHeader title="Lo que entró" description="Dinero cobrado en el periodo." />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 print:gap-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 print:gap-2">
           <KpiReporte label="Ingreso de caja" kpi={r.ingresosCaja} formato={dinero} />
           <KpiReporte label="Cobros de membresías" kpi={r.cobrosMembresias} formato={dinero} />
           <KpiReporte label="Total cobrado" kpi={r.ingresoTotal} formato={dinero} />
@@ -220,7 +220,7 @@ export function ReporteFinanzasVista({
           title="Intentos de pago en línea"
           description="Cada vez que alguien intentó pagar con la pasarela, terminara bien o mal."
         />
-        <div className="mb-3 grid gap-4 sm:grid-cols-2 print:grid-cols-2">
+        <div className="mb-3 grid grid-cols-1 gap-4 sm:grid-cols-2 print:grid-cols-2">
           {/* La tasa desaparece con filtro (es de la pasarela); los descuentos
               no: van con los cobros de membresía y se recortan con ellos. */}
           {!r.filtro && (
@@ -278,7 +278,7 @@ export function ReporteFinanzasVista({
           title="Operaciones deshechas"
           description="Anuladas y revertidas. No restan del ingreso: se miran aparte, porque un negocio que anula mucho tiene un problema que el total esconde."
         />
-        <div className="grid gap-4 sm:grid-cols-2 print:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 print:grid-cols-2">
           <Celda label="Operaciones" valor={entero(r.deshechas.total)} />
           <Celda label="Monto implicado" valor={dinero(r.deshechas.monto)} />
         </div>
@@ -296,7 +296,7 @@ export function ReporteFinanzasVista({
             para verla.
           </p>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 print:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 print:grid-cols-2">
             <Celda
               label="Estimación a 30 días"
               valor={dinero(r.recurrenteEstimado.monto)}

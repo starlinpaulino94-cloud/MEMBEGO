@@ -49,7 +49,7 @@ export function EsqueletoReporte({
       </div>
 
       {conNavegacion && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="rounded-2xl border border-border/60 bg-card p-4">
               <Skeleton className="h-5 w-2/5" />
@@ -60,7 +60,7 @@ export function EsqueletoReporte({
       )}
 
       {/* La fila de cifras: cada tarjeta con su rótulo, su número y su sparkline */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: kpis }).map((_, i) => (
           <div key={i} className="rounded-xl border border-border bg-card p-5">
             <Skeleton className="h-3 w-24" />

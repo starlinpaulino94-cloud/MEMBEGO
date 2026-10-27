@@ -49,7 +49,7 @@ export default async function VentasAdicionalesPage({ searchParams }: { searchPa
           {todas ? 'Solo con compras' : 'Todas las visitas'}
         </Link>
       </nav>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Visitas" value={resumen.visitas} sub={`${resumen.conExtras} con compras`} />
         <StatCard label="Ventas adicionales" value={d(resumen.extrasTotal)} sub={`${resumen.ventas} ventas`} />
         <StatCard label="Comisión de Membego" value={d(resumen.comisionTotal)} sub="solo sobre extras" />

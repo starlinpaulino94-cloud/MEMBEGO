@@ -138,14 +138,14 @@ export function ReporteCitasVista({
         </StatusBanner>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 print:gap-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 print:gap-2">
         <KpiReporte label="Citas agendadas" kpi={r.agendadas} formato={entero} />
         <KpiReporte label="Completadas" kpi={r.completadas} formato={entero} />
         <KpiReporte label="Canceladas" kpi={r.canceladas} formato={entero} invertido />
         <KpiReporte label="No asistió" kpi={r.noAsistio} formato={entero} invertido />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 print:gap-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 print:gap-2">
         <div className="rounded-xl border border-border bg-card p-5 print:border-black print:p-2">
           <p className="text-overline">Tasa de asistencia</p>
           <p className="mt-1.5 text-h1 tabular-nums text-foreground print:text-base print:font-bold">
@@ -209,7 +209,7 @@ export function ReporteCitasVista({
                 No se canceló ninguna cita del periodo.
               </p>
             ) : (
-              <div className="grid gap-3 sm:grid-cols-3 print:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 print:grid-cols-3">
                 <Celda label="Canceló el cliente" valor={entero(r.quienCancela.cliente)} />
                 <Celda label="Canceló el negocio" valor={entero(r.quienCancela.negocio)} />
                 <Celda

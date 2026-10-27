@@ -59,7 +59,7 @@ export default async function MetricasPage() {
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Cifra etiqueta="Prospectos" valor={String(m.prospectos.total)} nota={`${m.prospectos.nuevos7d} en 7 días · ${m.prospectos.nuevos30d} en 30`} />
         <Cifra
           etiqueta="Conversión"
@@ -78,7 +78,7 @@ export default async function MetricasPage() {
         />
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <section aria-label="Por canal" className="rounded-xl border border-border/60 bg-card p-4">
           <h2 className="text-sm font-semibold">De dónde llegan</h2>
           <ul className="mt-3 space-y-2">

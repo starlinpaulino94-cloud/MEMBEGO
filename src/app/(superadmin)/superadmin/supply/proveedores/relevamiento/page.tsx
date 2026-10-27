@@ -42,7 +42,7 @@ export default async function RelevamientoPage({ searchParams }: { searchParams:
         eyebrow={<Link href={`${BASE_SUPPLY_V2}/proveedores`} className="hover:underline">Proveedores</Link>}
         nav={<NavSupplyV2 activa="proveedores" />}
       />
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="relevamiento-resumen">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="relevamiento-resumen">
         {CLASES.map((c) => (
           <StatCard key={c.clase} label={c.label} value={cuenta(c.clase)} sub={c.ayuda} href={`${ruta}?clase=${c.clase}`} hrefLabel={`Ver ${c.label.toLowerCase()}`} />
         ))}

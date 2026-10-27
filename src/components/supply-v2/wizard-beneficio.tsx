@@ -183,7 +183,7 @@ export function WizardBeneficio({ opciones }: { opciones: OpcionesBeneficio }) {
           {paso === 3 && (
             <section className="space-y-3">
               <h2 className="text-h3">¿Cuánto rebaja?</h2>
-              <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Tipo de valor">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Tipo de valor">
                 {(['FIXED_AMOUNT', 'PERCENTAGE'] as const).map((t) => (
                   <label key={t} className={`cursor-pointer rounded-lg border p-3 text-sm ${valueType === t ? 'border-primary bg-primary/10' : 'border-border hover:bg-muted'}`} data-testid={`beneficio-tipo-${t}`}>
                     <input type="radio" name="valueTypeUi" value={t} checked={valueType === t} onChange={() => setValueType(t)} className="mr-2" />
@@ -191,7 +191,7 @@ export function WizardBeneficio({ opciones }: { opciones: OpcionesBeneficio }) {
                   </label>
                 ))}
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {funding !== 'SUPPLIER' && (
                   <div>
                     <Label htmlFor="beneficioValorMembego">Parte de Membego {valueType === 'PERCENTAGE' ? '(%)' : `(${moneda})`}</Label>
@@ -224,7 +224,7 @@ export function WizardBeneficio({ opciones }: { opciones: OpcionesBeneficio }) {
           {paso === 4 && (
             <section className="space-y-3">
               <h2 className="text-h3">¿A qué aplica?</h2>
-              <div className="grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Alcance">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Alcance">
                 {(['SPECIFIC_OFFER', 'CATALOG_ITEM', 'SUPPLIER'] as const).map((s) => (
                   <label key={s} className={`cursor-pointer rounded-lg border p-3 text-sm ${scope === s ? 'border-primary bg-primary/10' : 'border-border hover:bg-muted'}`} data-testid={`beneficio-alcance-${s}`}>
                     <input type="radio" name="scopeUi" value={s} checked={scope === s} onChange={() => setScope(s)} className="mr-2" />
@@ -292,7 +292,7 @@ export function WizardBeneficio({ opciones }: { opciones: OpcionesBeneficio }) {
           {paso === 6 && (
             <section className="space-y-3">
               <h2 className="text-h3">Vigencia y usos</h2>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <Label htmlFor="beneficioInicio">Desde</Label>
                   <Input id="beneficioInicio" type="date" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} required />
@@ -340,7 +340,7 @@ export function WizardBeneficio({ opciones }: { opciones: OpcionesBeneficio }) {
               <input type="hidden" name="startsAt" value={startsAt} />
               <input type="hidden" name="endsAt" value={endsAt} />
 
-              <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+              <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
                 <Fila k="Nombre" v={name} />
                 <Fila k="Quién financia" v={BENEFIT_FUNDING_LABELS[funding]} />
                 <Fila k="Valor" v={valueType === 'FIXED_AMOUNT' ? `${funding !== 'SUPPLIER' ? `Membego ${dinero(Number(membegoValue) || 0, moneda)}` : ''}${funding === 'SHARED' ? ' · ' : ''}${funding !== 'MEMBEGO' ? `Proveedor ${dinero(Number(supplierValue) || 0, moneda)}` : ''}` : `${funding !== 'SUPPLIER' ? `Membego ${membegoValue || 0} %` : ''}${funding === 'SHARED' ? ' · ' : ''}${funding !== 'MEMBEGO' ? `Proveedor ${supplierValue || 0} %` : ''}`} />
@@ -353,7 +353,7 @@ export function WizardBeneficio({ opciones }: { opciones: OpcionesBeneficio }) {
 
               <div className="rounded-lg border border-border bg-muted/30 p-3" data-testid="beneficio-ejemplo">
                 <p className="text-sm font-medium">Ejemplo con {oferta ? `la oferta «${oferta.title}»` : 'un precio de muestra'} de {dinero(precio, moneda)}</p>
-                <dl className="mt-2 grid gap-2 text-sm sm:grid-cols-3">
+                <dl className="mt-2 grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
                   <Dato k="Precio Membego (GMV)" v={dinero(precio, moneda)} />
                   <Dato k="Descuento del proveedor" v={`−${dinero(descuentoProveedor, moneda)}`} />
                   <Dato k="Valor contractual" v={dinero(contractual, moneda)} />

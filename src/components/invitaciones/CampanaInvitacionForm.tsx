@@ -169,7 +169,7 @@ export function CampanaInvitacionForm({
       <div className="space-y-5 rounded-xl border border-border p-5">
         <h3 className="font-semibold text-foreground">Meta y fechas</h3>
 
-        <div className="grid gap-5 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div className="space-y-2">
             <Label htmlFor="metaRegistros">Registros necesarios</Label>
             <Input
@@ -262,7 +262,7 @@ export function CampanaInvitacionForm({
       <div className="space-y-5 rounded-xl border border-border p-5">
         <h3 className="font-semibold text-foreground">Apariencia (opcional)</h3>
 
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <div className="space-y-2">
             <Label>Imagen (compartir / OG)</Label>
             <CampanaImagenUpload
@@ -287,7 +287,7 @@ export function CampanaInvitacionForm({
           </div>
         </div>
 
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="colorPrimario">Color primario</Label>
             <Input
@@ -459,7 +459,7 @@ function BeneficioFields({
           escáner.
         </p>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor={`${prefix}Tipo`}>Tipo de beneficio</Label>
           <Select name={`${prefix}Tipo`} value={tipo} onValueChange={onTipoChange}>

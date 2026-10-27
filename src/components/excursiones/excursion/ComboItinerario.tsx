@@ -115,7 +115,7 @@ export function ComboItinerario({ combo, duracionHoras }: { combo: ComboEstado; 
             </span>
             <span className="text-xs text-muted-foreground">Guardadas automáticamente en el catálogo</span>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {combinaciones.map((c, i) => (
               <div key={c.id || i} className="space-y-1 rounded-lg border border-border/80 bg-background/90 p-2.5 text-xs shadow-2xs">
                 <div className="flex items-center justify-between font-semibold">
