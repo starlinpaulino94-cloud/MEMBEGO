@@ -31,10 +31,10 @@ export default async function ClientesCarwashPage() {
   return (
     <div className="space-y-6">
       <Link
-        href="/admin/app/carwash"
+        href="/admin/dashboard"
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="h-4 w-4" /> Car Wash
+        <ArrowLeft className="h-4 w-4" /> Resumen
       </Link>
 
       <PageHeader
