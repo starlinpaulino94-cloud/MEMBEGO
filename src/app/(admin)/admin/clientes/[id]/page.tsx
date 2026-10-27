@@ -244,7 +244,7 @@ export default async function ClienteDetailPage({
       />
 
       {vista === 'resumen' && (
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* QR + info */}
         <Card>
           <CardHeader>
@@ -296,7 +296,7 @@ export default async function ClienteDetailPage({
               </div>
             ) : (
               <>
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <Info label="Plan" value={membership.plan.nombre} />
                   <Info
                     label="Precio"
@@ -432,7 +432,7 @@ export default async function ClienteDetailPage({
           <CardHeader>
             <CardTitle>Vehículos</CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-2">
+          <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {cliente.vehiculos.map((v) => (
               <div key={v.id} className="rounded-lg border p-3 text-sm">
                 <p className="font-medium">

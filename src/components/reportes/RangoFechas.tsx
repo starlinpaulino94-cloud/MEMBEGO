@@ -102,9 +102,12 @@ export function RangoFechas({
           entero.
         </p>
       )}
-      <div className="print:hidden flex flex-wrap items-center gap-2">
+      {/* En un móvil los desplegables se anclan a la BARRA (`relative` aquí, `sm:relative` en cada
+          `<details>`): anclados a su botón, el de «Agrupar» abría a media pantalla y su texto se
+          salía por la derecha. */}
+      <div className="print:hidden relative flex flex-wrap items-center gap-2">
       {/* ── Periodo ─────────────────────────────────────────────────────── */}
-      <details className="group relative">
+      <details className="group sm:relative">
         <summary className="inline-flex min-h-10 cursor-pointer list-none items-center gap-2 rounded-lg border border-border bg-card px-3 text-small font-semibold text-foreground hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <CalendarDays className="h-4 w-4 text-muted-foreground" aria-hidden />
           <span>{rango.etiqueta}</span>
@@ -113,7 +116,7 @@ export function RangoFechas({
           </span>
         </summary>
 
-        <div className="absolute left-0 z-dropdown mt-2 w-[min(92vw,30rem)] rounded-xl border border-border bg-popover p-4 elevation-2">
+        <div className="absolute left-0 z-dropdown mt-2 w-full sm:w-[min(92vw,30rem)] rounded-xl border border-border bg-popover p-4 elevation-2">
           <Grupo titulo="Rápidos">
             {rapidos.map((p) => (
               <Chip key={p.clave} href={con({ rango: p.clave })} activo={rango.preset === p.clave}>
@@ -156,14 +159,14 @@ export function RangoFechas({
       </details>
 
       {/* ── Comparar contra ─────────────────────────────────────────────── */}
-      <details className="group relative">
+      <details className="group sm:relative">
         <summary className="inline-flex min-h-10 cursor-pointer list-none items-center gap-2 rounded-lg border border-border bg-card px-3 text-small text-foreground hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <GitCompareArrows className="h-4 w-4 text-muted-foreground" aria-hidden />
           <span>
             vs. <span className="font-semibold">{comparacionActual.label.toLowerCase()}</span>
           </span>
         </summary>
-        <div className="absolute left-0 z-dropdown mt-2 w-[min(92vw,22rem)] rounded-xl border border-border bg-popover p-3 elevation-2">
+        <div className="absolute left-0 z-dropdown mt-2 w-full sm:w-[min(92vw,22rem)] rounded-xl border border-border bg-popover p-3 elevation-2">
           <p className="text-overline">Comparar contra</p>
           <div className="mt-2 flex flex-col gap-1">
             {COMPARACIONES.map((c) => (
@@ -189,13 +192,13 @@ export function RangoFechas({
       </details>
 
       {/* ── Cada cuánto ─────────────────────────────────────────────────── */}
-      <details className="group relative">
+      <details className="group sm:relative">
         <summary className="inline-flex min-h-10 cursor-pointer list-none items-center gap-2 rounded-lg border border-border bg-card px-3 text-small text-foreground hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <BarChart3 className="h-4 w-4 text-muted-foreground" aria-hidden />
           <span className="font-semibold">{granularidadActual.label.toLowerCase()}</span>
           {!rango.granularidadPedida && <span className="text-caption font-normal">(auto)</span>}
         </summary>
-        <div className="absolute left-0 z-dropdown mt-2 w-[min(92vw,22rem)] rounded-xl border border-border bg-popover p-3 elevation-2">
+        <div className="absolute left-0 z-dropdown mt-2 w-full sm:w-[min(92vw,22rem)] rounded-xl border border-border bg-popover p-3 elevation-2">
           <p className="text-overline">Agrupar la serie</p>
           <div className="mt-2 flex flex-col gap-1">
             {GRANULARIDADES.map((g) => (

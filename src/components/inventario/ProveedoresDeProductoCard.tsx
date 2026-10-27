@@ -133,7 +133,7 @@ export function ProveedoresDeProductoCard({ varianteId, proveedores, opciones }:
       {opciones.length === 0 ? (
         <p className="text-xs text-muted-foreground">No hay proveedores activos. Crea uno en «Proveedores» para vincularlo a este producto.</p>
       ) : (
-        <form onSubmit={enviar} className="grid gap-3 sm:grid-cols-[1fr_10rem_8rem_auto] sm:items-end" aria-label="Agregar proveedor al producto">
+        <form onSubmit={enviar} className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_10rem_8rem_auto] sm:items-end" aria-label="Agregar proveedor al producto">
           <div className="space-y-1.5">
             <Label htmlFor="pp-proveedor">Proveedor</Label>
             <select id="pp-proveedor" value={proveedorId} onChange={(e) => setProveedorId(e.target.value)} className={campo}>

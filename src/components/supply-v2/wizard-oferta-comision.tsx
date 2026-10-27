@@ -134,7 +134,7 @@ export function WizardOfertaComision({ productos, productoInicial }: { productos
                 </div>
               )}
               {producto && (
-                <dl className="grid gap-2 rounded-lg border border-border p-3 text-sm sm:grid-cols-4" data-testid="comision-regla">
+                <dl className="grid grid-cols-1 gap-2 rounded-lg border border-border p-3 text-sm sm:grid-cols-4" data-testid="comision-regla">
                   <Dato k="Proveedor" v={producto.proveedor} />
                   <Dato k="Comisión de Membego" v={`${producto.commissionPercentage} %`} />
                   <Dato k="Acuerdo que la fija" v={`${producto.agreementCode} (${ALCANCE[producto.agreementScope]})`} />
@@ -148,7 +148,7 @@ export function WizardOfertaComision({ productos, productoInicial }: { productos
           {paso === 2 && producto && (
             <section className="space-y-3">
               <h2 className="text-h3">¿Cuánto puede entregar el proveedor?</h2>
-              <div className="grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Disponibilidad">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Disponibilidad">
                 {(['UNLIMITED', 'FIXED_QUANTITY', 'CAPACITY'] as const).map((m) => (
                   <label key={m} className={`cursor-pointer rounded-lg border p-3 text-sm ${modo === m ? 'border-primary bg-primary/10' : 'border-border hover:bg-muted'}`} data-testid={`comision-modo-${m}`}>
                     <input type="radio" name="modo" value={m} checked={modo === m} onChange={() => setModo(m)} className="mr-2" />
@@ -170,7 +170,7 @@ export function WizardOfertaComision({ productos, productoInicial }: { productos
           {paso === 3 && producto && (
             <section className="space-y-3">
               <h2 className="text-h3">¿A qué precio?</h2>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <Label htmlFor="ofertaPrecioPublicoC">Precio público ({moneda})</Label>
                   <Input id="ofertaPrecioPublicoC" type="number" min={0} step="0.01" inputMode="decimal" value={precioPublico} onChange={(e) => setPrecioPublico(e.target.value)} />
@@ -181,7 +181,7 @@ export function WizardOfertaComision({ productos, productoInicial }: { productos
                 </div>
               </div>
               {sale > pub && <p className="text-sm text-destructive">El precio Membego no puede ser mayor que el público.</p>}
-              <dl className="grid gap-2 rounded-lg border border-border p-3 text-sm sm:grid-cols-4" data-testid="comision-reparto">
+              <dl className="grid grid-cols-1 gap-2 rounded-lg border border-border p-3 text-sm sm:grid-cols-4" data-testid="comision-reparto">
                 <Dato k="Descuento" v={`${descuento} %`} />
                 <Dato k="Cliente paga (GMV)" v={dinero(sale, moneda)} />
                 <Dato k={`Comisión Membego (${pct} %)`} v={dinero(comision, moneda)} />
@@ -194,7 +194,7 @@ export function WizardOfertaComision({ productos, productoInicial }: { productos
           {paso === 4 && (
             <section className="space-y-3">
               <h2 className="text-h3">¿Cuándo estará vigente?</h2>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <Label htmlFor="ofertaInicioC">Inicio</Label>
                   <Input id="ofertaInicioC" type="date" value={inicio} onChange={(e) => setInicio(e.target.value)} required />
@@ -212,7 +212,7 @@ export function WizardOfertaComision({ productos, productoInicial }: { productos
           {paso === 5 && (
             <section className="space-y-3">
               <h2 className="text-h3">Reglas y presentación</h2>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="sm:col-span-2">
                   <Label htmlFor="ofertaTituloC">Título que verá el cliente</Label>
                   <Input id="ofertaTituloC" maxLength={160} value={titulo} onChange={(e) => setTitulo(e.target.value)} required data-testid="comision-titulo" />
@@ -243,7 +243,7 @@ export function WizardOfertaComision({ productos, productoInicial }: { productos
               <input type="hidden" name="perCustomerLimit" value={limite} />
               <input type="hidden" name="startsAt" value={inicio} />
               <input type="hidden" name="endsAt" value={fin} />
-              <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+              <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
                 <Fila k="Producto" v={`${producto.name} · ${producto.proveedor}`} />
                 <Fila k="Título" v={titulo} />
                 <Fila k="Modelo" v="Vender a comisión (sin lote)" />

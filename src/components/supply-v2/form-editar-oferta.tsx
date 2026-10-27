@@ -81,7 +81,7 @@ export function FormEditarOferta({
       <Card>
         <CardContent className="space-y-4 pt-6">
           <p className="text-sm font-medium">Precio</p>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <Label htmlFor="publicPrice">Precio público ({simbolo})</Label>
               <Input id="publicPrice" name="publicPrice" defaultValue={inicial.publicPrice} inputMode="decimal" required data-testid="editar-precio-publico" />
@@ -143,7 +143,7 @@ export function FormEditarOferta({
 
       <Card>
         <CardContent className="space-y-4 pt-6">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <Label htmlFor="perCustomerLimit">Máximo por persona</Label>
               <Input id="perCustomerLimit" name="perCustomerLimit" type="number" min={1} max={unidades} defaultValue={inicial.perCustomerLimit} required data-testid="editar-limite" />

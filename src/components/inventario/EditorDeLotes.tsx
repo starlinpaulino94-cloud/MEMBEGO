@@ -86,7 +86,7 @@ export function EditorDeLotes({
         Este producto lleva lotes: indica de qué lote es lo que llegó{exigeVencimiento ? ' y cuándo vence' : ''}. Escribe {CODIGO_SIN_LOTE} si no trae.
       </p>
       {lotes.map((x, j) => (
-        <div key={j} className="grid gap-2 sm:grid-cols-[1.4fr_1fr_6rem_auto]">
+        <div key={j} className="grid grid-cols-1 gap-2 sm:grid-cols-[1.4fr_1fr_6rem_auto]">
           <div>
             <Label htmlFor={`${idBase}-lote-${indice}-${j}`} className="sr-only">
               Código del lote {j + 1} de {nombre}

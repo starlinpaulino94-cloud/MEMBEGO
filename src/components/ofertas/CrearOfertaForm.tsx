@@ -55,7 +55,7 @@ export function CrearOfertaForm({ clientes }: { clientes: ClienteOption[] }) {
 
       <div className="rounded-2xl border border-border/70 bg-card p-4">
         <h2 className="text-sm font-semibold text-foreground">La regla de usos</h2>
-        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <label className="text-xs font-medium text-muted-foreground">
             Cantidad de usos
             <input

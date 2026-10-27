@@ -407,7 +407,7 @@ export function EditorInicio({
         </Button>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
         <div className="min-w-0 space-y-6">
           {/* ── Arquitectura del feed ───────────────────────────────────── */}
           <section className="rounded-xl border border-border bg-card p-5 elevation-1">
@@ -560,7 +560,7 @@ export function EditorInicio({
             </div>
 
             {slide ? (
-              <div className="mt-4 grid gap-5 md:grid-cols-[280px_minmax(0,1fr)]">
+              <div className="mt-4 grid grid-cols-1 gap-5 md:grid-cols-[280px_minmax(0,1fr)]">
                 <div>
                   <p className="mb-1.5 text-label-md text-muted-foreground">
                     Creatividad del Banner
@@ -626,7 +626,7 @@ export function EditorInicio({
                       className={CAMPO}
                     />
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
                       <label className="mb-1 block text-label-md text-muted-foreground" htmlFor={`ed-tipo-${i}`}>
                         Destino
@@ -729,7 +729,7 @@ export function EditorInicio({
                 <span className="text-label-md text-muted-foreground">Cambios auditados</span>
               </div>
 
-              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="rounded-lg bg-muted/60 p-3">
                   <label
                     className="block text-label-md text-muted-foreground"

@@ -152,7 +152,7 @@ export default async function SuperadminPlanesPage({
         return (
           <section key={company.id} className="space-y-4">
             <h2 className="text-lg font-semibold text-foreground border-b pb-2">{company.name}</h2>
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               {company.planes.map((plan) => (
                 <Card key={plan.id} className={!plan.activo ? 'opacity-60' : ''}>
                   <CardHeader>

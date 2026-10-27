@@ -216,7 +216,7 @@ export function OrdenCompraForm({ proveedores, sucursales, inicial }: { proveedo
       aria-label={inicial ? 'Editar orden de compra' : 'Nueva orden de compra'}
     >
       <Card>
-        <CardContent className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-4">
+        <CardContent className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-1.5">
             <Label htmlFor="oc-proveedor">Proveedor</Label>
             <select id="oc-proveedor" value={proveedorId} onChange={(e) => setProveedorId(e.target.value)} className={campo}>

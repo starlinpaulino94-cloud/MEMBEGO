@@ -145,7 +145,7 @@ export function WizardOferta({ productos, productoInicial }: { productos: Produc
                 </div>
               )}
               {producto && (
-                <dl className="grid gap-2 rounded-lg border border-border p-3 text-sm sm:grid-cols-4" data-testid="oferta-producto-resumen">
+                <dl className="grid grid-cols-1 gap-2 rounded-lg border border-border p-3 text-sm sm:grid-cols-4" data-testid="oferta-producto-resumen">
                   <Dato k="Proveedor" v={producto.proveedor} />
                   <Dato k="Disponible" v={producto.disponibles.toLocaleString('es-DO')} />
                   <Dato k="Costo promedio" v={dinero(producto.costoPromedio, moneda)} />
@@ -162,7 +162,7 @@ export function WizardOferta({ productos, productoInicial }: { productos: Produc
                 <Label htmlFor="ofertaCantidad">Unidades</Label>
                 <Input id="ofertaCantidad" type="number" min={1} max={producto.disponibles} step={1} inputMode="numeric" value={cantidad} onChange={(e) => setCantidad(e.target.value)} placeholder="100" />
               </div>
-              <dl className="grid gap-2 rounded-lg border border-border p-3 text-sm sm:grid-cols-3">
+              <dl className="grid grid-cols-1 gap-2 rounded-lg border border-border p-3 text-sm sm:grid-cols-3">
                 <Dato k="Disponibles antes" v={producto.disponibles.toLocaleString('es-DO')} />
                 <Dato k="Se asignarán" v={q.toLocaleString('es-DO')} />
                 <Dato k="Quedarán sin asignar" v={Math.max(0, producto.disponibles - q).toLocaleString('es-DO')} />
@@ -221,7 +221,7 @@ export function WizardOferta({ productos, productoInicial }: { productos: Produc
 
               {modo === 'FIXED' && sale > pub && <p className="text-sm text-destructive">El precio Membego no puede ser mayor que el público.</p>}
               {modo === 'PERCENTAGE' && pctEscrito > 100 && <p className="text-sm text-destructive">Un porcentaje no puede superar 100.</p>}
-              <dl className="grid gap-2 rounded-lg border border-border p-3 text-sm sm:grid-cols-4" data-testid="oferta-precio-resumen">
+              <dl className="grid grid-cols-1 gap-2 rounded-lg border border-border p-3 text-sm sm:grid-cols-4" data-testid="oferta-precio-resumen">
                 <Dato k="Descuento" v={`${pct} %`} />
                 <Dato k="Ahorro del cliente" v={dinero(ahorro, moneda)} />
                 <Dato k="Costo estimado Membego" v={dinero(producto.costoPromedio, moneda)} />
@@ -234,7 +234,7 @@ export function WizardOferta({ productos, productoInicial }: { productos: Produc
           {paso === 4 && (
             <section className="space-y-3">
               <h2 className="text-h3">¿Cuándo estará vigente?</h2>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <Label htmlFor="ofertaInicio">Inicio</Label>
                   <Input id="ofertaInicio" type="date" value={inicio} onChange={(e) => setInicio(e.target.value)} required />
@@ -252,7 +252,7 @@ export function WizardOferta({ productos, productoInicial }: { productos: Produc
           {paso === 5 && (
             <section className="space-y-3">
               <h2 className="text-h3">Reglas y presentación</h2>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="sm:col-span-2">
                   <Label htmlFor="ofertaTitulo">Título que verá el cliente</Label>
                   <Input id="ofertaTitulo" maxLength={160} value={titulo} onChange={(e) => setTitulo(e.target.value)} required />
@@ -287,7 +287,7 @@ export function WizardOferta({ productos, productoInicial }: { productos: Produc
               <input type="hidden" name="perCustomerLimit" value={limite} />
               <input type="hidden" name="startsAt" value={inicio} />
               <input type="hidden" name="endsAt" value={fin} />
-              <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+              <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
                 <Fila k="Producto" v={`${producto.name} · ${producto.proveedor}`} />
                 <Fila k="Título" v={titulo} />
                 <Fila k="Unidades destinadas" v={q.toLocaleString('es-DO')} />

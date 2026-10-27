@@ -89,7 +89,7 @@ export function OrdenDetalle({
         <p className="rounded-xl bg-muted/40 p-3 text-sm text-muted-foreground">{orden.notas}</p>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
         {editable ? (
           <AgregarLinea ordenId={orden.id} productos={productos} />
         ) : (

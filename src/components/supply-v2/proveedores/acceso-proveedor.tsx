@@ -63,7 +63,7 @@ export function AccesoProveedor(p: AccesoProveedorProps) {
         </p>
       )}
 
-      <ul className="grid gap-1 text-sm sm:grid-cols-2" data-testid="acceso-preparacion">
+      <ul className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-2" data-testid="acceso-preparacion">
         {p.preparacion.pasos.map((paso) => (
           <li key={paso.paso} className="flex items-center gap-2">
             {paso.hecho ? <CheckCircle2 className="size-4 text-success" aria-hidden /> : <Circle className="size-4 text-muted-foreground" aria-hidden />}

@@ -105,7 +105,7 @@ export default async function DesarrolladoresResumenPage() {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Columna izquierda: el estado de tus herramientas, de un vistazo. */}
         <div className="space-y-4">
           <StatCard
@@ -175,7 +175,7 @@ export default async function DesarrolladoresResumenPage() {
                 Tres herramientas, en el orden en que se usan: una clave para consultar, un
                 webhook para que te avisemos, y los registros para cuando algo no cuadra.
               </p>
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 {CAMINOS.map((c) => (
                   <Link
                     key={c.href}

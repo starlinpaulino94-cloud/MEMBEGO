@@ -81,7 +81,7 @@ export default async function ObservabilidadPage() {
       )}
 
       {/* ── Negocio ──────────────────────────────────────────────────────── */}
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Metrica
           icono={<Users className="h-4 w-4" />}
           titulo="Visitas"
@@ -118,7 +118,7 @@ export default async function ObservabilidadPage() {
         <CardHeader>
           <CardTitle className="text-base">Pasarela de pago</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-3">
+        <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Dato etiqueta="Aprobados" valor={m.negocio.pagosAprobados24h} />
           <Dato etiqueta="Rechazados" valor={m.negocio.pagosRechazados24h} />
           <div>
@@ -167,7 +167,7 @@ export default async function ObservabilidadPage() {
             Base de datos
           </CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-3">
+        <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Dato
             etiqueta="Latencia"
             valor={m.sistema.latenciaBdMs === null ? null : `${m.sistema.latenciaBdMs} ms`}

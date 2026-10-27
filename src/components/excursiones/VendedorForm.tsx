@@ -69,7 +69,7 @@ export function VendedorForm({
           <Briefcase className="h-4 w-4 text-primary" />
           Información General
         </h4>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="vf-nombre">Nombre / Contacto Principal *</Label>
             <Input id="vf-nombre" name="nombre" defaultValue={vendedor.nombre} required />
@@ -79,7 +79,7 @@ export function VendedorForm({
             <Input id="vf-apellido" name="apellido" defaultValue={vendedor.apellido ?? ''} />
           </div>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="vf-telefono">Teléfono *</Label>
             <Input id="vf-telefono" name="telefono" type="tel" defaultValue={vendedor.telefono ?? ''} required />
@@ -89,7 +89,7 @@ export function VendedorForm({
             <Input id="vf-whatsapp" name="whatsapp" type="tel" defaultValue={vendedor.whatsapp ?? ''} />
           </div>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="vf-email">Correo Electrónico</Label>
             <Input id="vf-email" name="email" type="email" defaultValue={vendedor.email ?? ''} />
@@ -99,7 +99,7 @@ export function VendedorForm({
             <Input id="vf-documento" name="documento" defaultValue={vendedor.documento ?? ''} />
           </div>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="vf-tipo">Tipo de Vendedor</Label>
             <select
@@ -149,7 +149,7 @@ export function VendedorForm({
             <span>Datos Corporativos & Crédito B2B</span>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <Label htmlFor="vf-razonSocial">Razón Social de la Empresa</Label>
               <Input
@@ -170,7 +170,7 @@ export function VendedorForm({
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
               <Label htmlFor="vf-diasCredito">Días de Crédito (Net)</Label>
               <select
@@ -208,7 +208,7 @@ export function VendedorForm({
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <Label htmlFor="vf-emailFacturacion">Email de Facturación / Cuentas por Cobrar</Label>
               <Input

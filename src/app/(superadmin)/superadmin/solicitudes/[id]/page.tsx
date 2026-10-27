@@ -90,7 +90,7 @@ export default async function SolicitudDetallePage({
           {v.ok ? '' : (v as { error: string }).error} El JSON crudo sigue guardado en la base.
         </div>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Bloque titulo="El negocio">
             <Dato k="Nombre" v={datos.negocio.nombre} />
             <Dato k="Tipo" v={datos.negocio.tipo === 'Otro' ? `Otro: ${datos.negocio.tipoOtro ?? ''}` : datos.negocio.tipo} />

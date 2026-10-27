@@ -104,7 +104,7 @@ export default async function AutomatizacionesPage() {
         proposito="Lo que hace que tus reglas envíen mensajes de verdad y no solo los anoten."
       />
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {REGLAS.map((r) => (
           <Card key={r.titulo}>
             <CardHeader>

@@ -80,7 +80,7 @@ function FormHorario({
           ))}
         </div>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <Label htmlFor={`hor-hora-${idBase}`}>Hora de salida *</Label>
           <Input id={`hor-hora-${idBase}`} name="horaSalida" type="time" defaultValue={horario?.horaSalida ?? ''} required />

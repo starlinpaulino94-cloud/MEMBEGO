@@ -56,7 +56,7 @@ function Tarifa({
         </div>
         <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${principal ? 'bg-primary/10 text-primary' : 'bg-success/15 text-success'}`}>{insignia}</span>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">{children}</div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{children}</div>
     </div>
   )
 }
@@ -80,7 +80,7 @@ export function SeccionPrecios({
     return (
       <div className="space-y-4 rounded-2xl border bg-card p-5 shadow-sm sm:p-6">
         <h3 className="text-base font-bold text-foreground">Moneda e impuestos</h3>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Moneda v={v} poner={poner} />
           <Campo id="exc-impuesto" etiqueta="Impuesto (%)" opcional error={errores.impuestoPct}>
             {(control) => (
@@ -167,7 +167,7 @@ export function SeccionPrecios({
           <Moneda v={v} poner={poner} className="w-32" />
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Tarifa titulo="Tarifa turistas / general" detalle="Boleto estándar internacional" etiqueta="🌍" insignia="Principal" tono="principal">
             <Campo id="exc-precio-adulto" etiqueta="Adulto" error={errores.precioAdulto}>
               {(control) => (

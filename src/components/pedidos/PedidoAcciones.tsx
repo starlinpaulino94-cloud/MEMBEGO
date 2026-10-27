@@ -134,7 +134,7 @@ export function PedidoAcciones({ pedidoId, moneda, total, ajuste, tieneInventari
                 ejecutar(() => ajustarMontoPedido({ pedidoId, ajuste: n, motivo: motivoAjuste }), 'Monto ajustado. El cliente debe confirmarlo de nuevo.', () => setMotivoAjuste(''))
               }}
             >
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="aj-valor">Ajuste ({moneda})</Label>
                   <Input id="aj-valor" name="ajuste" inputMode="decimal" autoComplete="off" placeholder="-50 (rebaja) o 25 (recargo)" value={ajusteNuevo} onChange={(e) => setAjusteNuevo(e.target.value)} />
@@ -178,7 +178,7 @@ export function PedidoAcciones({ pedidoId, moneda, total, ajuste, tieneInventari
                 ejecutar(() => registrarPagoPedido({ pedidoId, metodo, monto: n, referencia: referencia.trim() || null }), 'Pago registrado.', () => setReferencia(''))
               }}
             >
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="pg-metodo">Método</Label>
                   <select id="pg-metodo" value={metodo} onChange={(e) => setMetodo(e.target.value as (typeof METODOS)[number])} className={campoSelector}>

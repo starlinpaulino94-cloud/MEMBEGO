@@ -59,7 +59,7 @@ export function ConciliacionVista({ hallazgos, generadoEn, controles }: { hallaz
     >
       <section>
         <SectionHeader title="Resumen" description="Cuántas reglas encontraron algo y cuántos casos hay." />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 print:gap-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 print:gap-2">
           <Celda label="Reglas con hallazgos" valor={`${num(resumen.reglasConHallazgos)} de ${num(resumen.reglas)}`} nota={resumen.reglasConHallazgos === 0 ? 'Todo cuadra' : 'Revisa las de severidad alta primero'} />
           <Celda label="Casos" valor={num(resumen.casos)} nota="Suma de todas las reglas" />
           <Celda label="Severidad alta" valor={num(resumen.porSeveridad.ALTA)} nota="Dinero o inventario que no cuadra" />

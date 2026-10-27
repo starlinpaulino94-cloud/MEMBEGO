@@ -63,7 +63,7 @@ export default async function PortalProveedorPage({ searchParams }: { searchPara
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard label="Entregas de hoy" value={<span data-testid="entregas-hoy">{resumen.entregasHoy.toLocaleString('es-DO')}</span>} accent="success" />
         <StatCard label="Pendientes de entregar" value={<span data-testid="pendientes">{resumen.pendientes.toLocaleString('es-DO')}</span>} sub="beneficios vendidos que aún no se han usado" />
         <StatCard label="Incidencias de hoy" value={<span data-testid="incidencias-hoy">{resumen.incidenciasHoy.toLocaleString('es-DO')}</span>} />
@@ -81,7 +81,7 @@ export default async function PortalProveedorPage({ searchParams }: { searchPara
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard label="Pendientes de entregar" value={<span data-testid="portal-ventas-pendientes">{ventas.pendientesDeEntrega.toLocaleString('es-DO')}</span>} />
             <StatCard label="Entregadas" value={<span data-testid="portal-ventas-entregadas">{ventas.entregadas.toLocaleString('es-DO')}</span>} />
             <StatCard label="Monto pendiente de pago" value={<span data-testid="portal-ventas-pendiente-pago">{dineroSupplyV2(ventas.montoPendienteDePago, ventas.currency)}</span>} sub="neto por entregas hechas" />

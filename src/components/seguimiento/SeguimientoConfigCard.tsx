@@ -40,7 +40,7 @@ export function SeguimientoConfigCard({
         </span>
       </summary>
       <form action={action} className="space-y-4 border-t border-border/60 p-4">
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="space-y-1.5">
             <Label htmlFor="umbralPorVencerDias">&quot;Por vencer&quot; = vence en (días)</Label>
             <Input
@@ -113,7 +113,7 @@ export function SeguimientoConfigCard({
             <p className="text-xs text-muted-foreground">
               Desmarca las que NO quieras seguir (desaparecen del panel y de los recordatorios).
             </p>
-            <div className="grid gap-1.5 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
               {promos.map((p) => (
                 <label key={p.id} className="flex items-center gap-2 text-sm text-foreground">
                   {/* Marcado = rastrear. El servidor excluye las NO marcadas

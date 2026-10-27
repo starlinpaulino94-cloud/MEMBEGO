@@ -305,7 +305,7 @@ export function SistemaConectadoCard({ sistema }: { sistema: ResumenSistema }) {
 
             {/* Los códigos y cuerpos crudos: es lo que se le reenvía al equipo
                 del otro sistema para que no tenga que creernos. */}
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {(
                 [
                   ['GET', r.get],

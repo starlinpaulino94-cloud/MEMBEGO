@@ -104,7 +104,7 @@ export function ReporteClientesVista({
           title="Lo que pasó en el periodo"
           description="Altas, actividad y dinero fechados por cuándo ocurrieron."
         />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 print:gap-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 print:gap-2">
           <KpiReporte label="Clientes nuevos" kpi={r.nuevos} formato={entero} />
           <KpiReporte label="Con actividad" kpi={r.conActividad} formato={entero} />
           <KpiReporte label="Con algún cobro" kpi={r.quePagaron} formato={entero} />
@@ -125,7 +125,7 @@ export function ReporteClientesVista({
           title="¿Los nuevos volvieron?"
           description="Un alta que nunca vuelve no es un cliente, es un formulario. Se cuenta si vino alguna vez, no solo dentro del periodo: quien se registró el día 30 todavía no ha tenido tiempo."
         />
-        <div className="grid gap-4 sm:grid-cols-3 print:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 print:grid-cols-3">
           <Celda label="Altas del periodo" valor={entero(r.nuevos.valor)} />
           <Celda label="De esos, vinieron" valor={entero(r.nuevosQueVolvieron)} />
           <Celda
@@ -143,7 +143,7 @@ export function ReporteClientesVista({
           title="Foto de hoy — no depende del periodo"
           description="Cuántos hay ahora mismo. No se comparan contra el periodo anterior porque el pasado de una foto de hoy no existe."
         />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4">
           <Celda label="Clientes en total" valor={entero(r.base)} />
           <Celda
             label="Con membresía vigente"

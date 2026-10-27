@@ -62,7 +62,7 @@ export default async function BeneficioPage({ params }: { params: Promise<{ id: 
         action={<ChipBeneficio estado={b.status} />}
       />
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader><CardTitle>Qué rebaja y a quién</CardTitle></CardHeader>
           <CardContent className="space-y-3">
@@ -70,7 +70,7 @@ export default async function BeneficioPage({ params }: { params: Promise<{ id: 
               <ChipFinanciacion funding={b.funding} />
               <span className="text-sm text-muted-foreground">{BENEFIT_FUNDING_EXPLICACION[b.funding]}</span>
             </div>
-            <dl className="grid gap-2 text-sm sm:grid-cols-2" data-testid="beneficio-ficha">
+            <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2" data-testid="beneficio-ficha">
               <Dato k="Valor" v={valor} />
               <Dato k="Tipo de valor" v={BENEFIT_VALUE_TYPE_LABELS[b.valueType]} />
               {b.maxMembegoAmount && <Dato k="Tope de la parte de Membego" v={dinero(b.maxMembegoAmount)} />}

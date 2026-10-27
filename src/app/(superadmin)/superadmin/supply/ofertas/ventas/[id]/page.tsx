@@ -33,7 +33,7 @@ export default async function VentaPage({ params }: { params: Promise<{ id: stri
         <Card data-testid="venta-financiacion">
           <CardHeader><CardTitle>Financiación de esta venta</CardTitle></CardHeader>
           <CardContent>
-            <dl className="grid gap-2 text-sm sm:grid-cols-4">
+            <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-4">
               <Fila label="Valor contractual"><span data-testid="venta-contractual">{dineroSupplyV2(t.order.contractualValue, m)}</span></Fila>
               <Fila label="Descuento del proveedor">{dineroSupplyV2(t.order.supplierDiscountTotal, m)}</Fila>
               <Fila label="Bono de Membego"><span data-testid="venta-subsidio">{dineroSupplyV2(t.order.membegoSubsidyTotal, m)}</span></Fila>
@@ -56,7 +56,7 @@ export default async function VentaPage({ params }: { params: Promise<{ id: stri
               <CardTitle>Derecho {i + 1} · {d.producto} · {d.proveedor}</CardTitle>
               <ChipDerecho estado={d.status as SupplyV2EntitlementStatus} />
             </CardHeader>
-            <CardContent className="grid gap-6 lg:grid-cols-2">
+            <CardContent className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <div>
                 <p className="mb-2 text-caption font-medium uppercase text-muted-foreground">Foto económica (congelada)</p>
                 {d.venta ? (

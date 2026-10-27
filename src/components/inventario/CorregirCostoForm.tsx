@@ -45,7 +45,7 @@ export function CorregirCostoForm({ varianteId, costoActual }: { varianteId: str
   }
 
   return (
-    <form onSubmit={corregir} className="grid gap-3 sm:grid-cols-[10rem_1fr_auto] sm:items-end" aria-label="Corregir el costo">
+    <form onSubmit={corregir} className="grid grid-cols-1 gap-3 sm:grid-cols-[10rem_1fr_auto] sm:items-end" aria-label="Corregir el costo">
       <div className="space-y-1.5">
         <Label htmlFor="cc-costo">{costoActual ? 'Costo nuevo' : 'Costo del producto'}</Label>
         <Input id="cc-costo" name="costo" inputMode="decimal" autoComplete="off" value={costo} onChange={(e) => setCosto(e.target.value)} placeholder="Ej: 12.50" />

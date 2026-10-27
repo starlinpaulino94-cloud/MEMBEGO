@@ -81,7 +81,7 @@ export function EmpresaEditForm({
     <form action={action} className="space-y-6">
       <input type="hidden" name="id" value={company.id} />
 
-      <div className="grid gap-6 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="name">Nombre de la empresa *</Label>
           <Input id="name" name="name" defaultValue={company.name} required />

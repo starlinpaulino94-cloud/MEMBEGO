@@ -78,7 +78,7 @@ export function AplicarDeposito({ invoiceId, depositos, pendiente: due, moneda, 
     <form action={enviar} className="space-y-2 rounded-lg border border-border p-3" data-testid="form-aplicar-deposito">
       <input type="hidden" name="invoiceId" value={invoiceId} />
       <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <div>
           <Label htmlFor="depositoAplicar">Depósito</Label>
           <select id="depositoAplicar" name="depositId" className="h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm" value={depositoId} onChange={(e) => setDepositoId(e.target.value)}>
@@ -137,7 +137,7 @@ export function PagarFactura({ invoiceId, invoiceNumber, supplierId, proveedores
     <form action={enviar} className="space-y-2 rounded-lg border border-border p-3" data-testid="form-aplicar-pago">
       <input type="hidden" name="invoiceId" value={invoiceId} />
       <input type="hidden" name="idempotencyKey" value={idempotencyKeys.aplicacion} />
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <div>
           <Label htmlFor="pagoAplicar">Pago confirmado</Label>
           <select id="pagoAplicar" name="paymentId" className="h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm" value={pagoId} onChange={(e) => setPagoId(e.target.value)}>

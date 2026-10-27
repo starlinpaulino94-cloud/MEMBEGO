@@ -104,7 +104,7 @@ export function PromocionCampos({
       {modo === 'editar' && <input type="hidden" name="activo" value={String(activo)} />}
 
       <FormSection title="Qué ofreces" description="El tipo, el título y lo que verá el cliente.">
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <Campo id="tipo" etiqueta="Tipo de promoción" error={errores.tipo}>
             {(control) => (
               <Select name="tipo" value={tipo} onValueChange={(t) => onTipo?.(t)}>
@@ -159,7 +159,7 @@ export function PromocionCampos({
       </FormSection>
 
       <FormSection title="Cuándo" description="La ventana en que se puede aprovechar.">
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <Campo id="vigenciaDesde" etiqueta="Inicio (fecha y hora)" ayuda="Vacío = desde ahora." error={errores.vigenciaDesde}>
             {(control) => <Input name="vigenciaDesde" type="datetime-local" defaultValue={valores.vigenciaDesde} {...control} />}
           </Campo>
@@ -190,7 +190,7 @@ export function PromocionCampos({
         </div>
 
         {esComprable && (
-          <div className="grid gap-5 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <Campo id="precio" etiqueta="Precio (RD$)" ayuda="0 = gratis (se activa sin pago)." error={errores.precio}>
               {(control) => <Input name="precio" type="number" min={0} step="0.01" defaultValue={valores.precio} required {...control} />}
             </Campo>
@@ -209,7 +209,7 @@ export function PromocionCampos({
 
         <div className="mt-5 space-y-8">
           <FormSection title="Límites" description="Cuántas veces, y con qué prioridad.">
-            <div className="grid gap-5 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               <Campo id="codigo" etiqueta="Código promocional / cupón" opcional>
                 {(control) => <Input name="codigo" defaultValue={valores.codigo} placeholder="Ej: BIENVENIDA25" {...control} />}
               </Campo>
@@ -224,7 +224,7 @@ export function PromocionCampos({
 
           {esComprable && (
             <FormSection title="Condiciones de la venta" description="Quién puede adquirirla, cuánto dura y cuándo se canjea.">
-              <div className="grid gap-5 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <Campo
                   id="limitePorCliente"
                   etiqueta="Límite por cliente"
@@ -270,7 +270,7 @@ export function PromocionCampos({
                 )}
               </Campo>
 
-              <div className="grid gap-5 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <Campo id="horaDesde" etiqueta="Horario desde" opcional>
                   {(control) => <Input name="horaDesde" type="time" defaultValue={valores.horaDesde} {...control} />}
                 </Campo>

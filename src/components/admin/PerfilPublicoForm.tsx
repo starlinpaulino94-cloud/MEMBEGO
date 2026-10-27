@@ -180,7 +180,7 @@ export function PerfilPublicoForm({
         title="Información del negocio"
         description="Qué ofreces, cuándo abres y en qué filtros del directorio apareces."
       >
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="description">Descripción</Label>
             <Textarea
@@ -229,7 +229,7 @@ export function PerfilPublicoForm({
         title="Ubicación"
         description="Dónde estás. El punto del mapa es lo que te hace aparecer en «Cerca de mí»."
       >
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="direccion">Dirección</Label>
             <Input
@@ -320,7 +320,7 @@ export function PerfilPublicoForm({
         title="Contacto y redes sociales"
         description="Por dónde te escriben. Aparece en tu página pública."
       >
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="telefono">Teléfono</Label>
             <Input
@@ -397,7 +397,7 @@ export function PerfilPublicoForm({
         title="Configuración"
         description="Moneda, formato y las políticas que el cliente acepta al comprarte."
       >
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="moneda">Moneda</Label>
             <select

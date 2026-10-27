@@ -48,7 +48,7 @@ export async function ComercioResumen({
         </h2>
         <span className="text-caption text-muted-foreground">Catálogo → Inventario → Ofertas → Pedidos</span>
       </div>
-      <ul className="mt-3 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <ul className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {verPedidos ? (
           <>
             <li><Link href="/admin/pedidos-membego?estado=AWAITING_MERCHANT" className={cn(tarjeta, comercio.pedidosNuevos > 0 ? 'border-primary/40 bg-primary/5' : 'border-border')}>

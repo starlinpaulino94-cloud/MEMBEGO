@@ -72,7 +72,7 @@ export function ColaRegistrarForm() {
       action={action}
       className="space-y-3 rounded-2xl border border-border/70 bg-card p-4"
     >
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {/* Pista (F4): el teclado del celular abre en MAYÚSCULAS y sin corrector,
             que es como se escribe una placa. Sin esto había que pulsar shift en
             cada letra y el corrector "arreglaba" la placa. */}
@@ -161,7 +161,7 @@ export function ColaRegistrarForm() {
       ) : modo === 'buscar' ? (
         <Buscador onElegir={setElegido} onCancelar={() => setModo('ninguno')} />
       ) : (
-        <div className="grid gap-2 rounded-xl border border-border/70 bg-muted/20 p-3 sm:grid-cols-[1fr_1fr_auto]">
+        <div className="grid grid-cols-1 gap-2 rounded-xl border border-border/70 bg-muted/20 p-3 sm:grid-cols-[1fr_1fr_auto]">
           <Input
             aria-label="Nombre del cliente"
             name="clienteNombre"

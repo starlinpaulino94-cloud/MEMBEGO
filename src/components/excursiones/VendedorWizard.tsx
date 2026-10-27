@@ -94,7 +94,7 @@ export function VendedorWizard({ supervisores }: { supervisores: SupervisorOpcio
 
       {paso === 1 ? (
         <div className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <Label htmlFor="ven-nombre">Nombre *</Label>
               <Input id="ven-nombre" value={datos.nombre ?? ''} onChange={set('nombre')} required />
@@ -104,7 +104,7 @@ export function VendedorWizard({ supervisores }: { supervisores: SupervisorOpcio
               <Input id="ven-apellido" value={datos.apellido ?? ''} onChange={set('apellido')} />
             </div>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <Label htmlFor="ven-telefono">Teléfono *</Label>
               <Input id="ven-telefono" type="tel" value={datos.telefono ?? ''} onChange={set('telefono')} placeholder="809-555-0000" required />
@@ -114,7 +114,7 @@ export function VendedorWizard({ supervisores }: { supervisores: SupervisorOpcio
               <Input id="ven-whatsapp" type="tel" value={datos.whatsapp ?? ''} onChange={set('whatsapp')} placeholder="Si es distinto al teléfono" />
             </div>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <Label htmlFor="ven-email">Correo</Label>
               <Input id="ven-email" type="email" value={datos.email ?? ''} onChange={set('email')} />
@@ -127,7 +127,7 @@ export function VendedorWizard({ supervisores }: { supervisores: SupervisorOpcio
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <Label htmlFor="ven-tipo">Tipo de vendedor</Label>
               <select
@@ -167,7 +167,7 @@ export function VendedorWizard({ supervisores }: { supervisores: SupervisorOpcio
               <p className="text-xs font-semibold text-foreground uppercase tracking-wide">
                 Datos Corporativos & Crédito B2B
               </p>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <Label htmlFor="ven-razonSocial">Razón Social</Label>
                   <Input
@@ -188,7 +188,7 @@ export function VendedorWizard({ supervisores }: { supervisores: SupervisorOpcio
                 </div>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div>
                   <Label htmlFor="ven-diasCredito">Días de Crédito</Label>
                   <select

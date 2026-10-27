@@ -229,14 +229,14 @@ export function ResumenPanel({ datos, bloques, ve, company, fecha, trasCabecera,
       {bloques.hoy.length > 0 ? (
         <section aria-labelledby="h-hoy" className="grid gap-3">
           <h2 id="h-hoy" className="text-overline text-muted-foreground">Hoy · requiere acción</h2>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{bloques.hoy.map((b) => <div key={b} className="contents">{tarjetas[b]}</div>)}</div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">{bloques.hoy.map((b) => <div key={b} className="contents">{tarjetas[b]}</div>)}</div>
         </section>
       ) : null}
 
       {bloques.mes.length > 0 ? (
         <section aria-labelledby="h-mes" className="grid gap-3">
           <h2 id="h-mes" className="text-overline text-muted-foreground">Este mes · {datos.ventanaMes}</h2>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{bloques.mes.map((c) => <div key={c} className="contents">{cifras[c]}</div>)}</div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">{bloques.mes.map((c) => <div key={c} className="contents">{cifras[c]}</div>)}</div>
         </section>
       ) : null}
 

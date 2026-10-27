@@ -257,7 +257,7 @@ export function WizardCampana({ ofertas, proveedores }: { ofertas: OfertaParaCam
           {paso === 4 && (
             <section className="space-y-3">
               <h2 className="text-h3">¿Qué tipo de promoción?</h2>
-              <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Tipo de promoción">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Tipo de promoción">
                 {TIPOS_DE_PROMOCION.map((t) => (
                   <label key={t.clave} className={`cursor-pointer rounded-lg border p-3 text-sm ${tipo === t.clave ? 'border-primary bg-primary/10' : 'border-border hover:bg-muted'}`} data-testid={`campana-tipo-${t.clave}`}>
                     <input type="radio" name="tipoUi" value={t.clave} checked={tipo === t.clave} onChange={() => elegirTipo(t.clave)} className="mr-2" />
@@ -266,7 +266,7 @@ export function WizardCampana({ ofertas, proveedores }: { ofertas: OfertaParaCam
                   </label>
                 ))}
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {funding !== 'SUPPLIER' && (
                   <div>
                     <Label htmlFor="campanaValorMembego">Parte de Membego {esPorcentaje ? '(%)' : `(${moneda})`}</Label>
@@ -340,7 +340,7 @@ export function WizardCampana({ ofertas, proveedores }: { ofertas: OfertaParaCam
           {paso === 7 && (
             <section className="space-y-3">
               <h2 className="text-h3">Vigencia y límites</h2>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <Label htmlFor="campanaInicio">Desde</Label>
                   <Input id="campanaInicio" type="date" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} required />
@@ -402,7 +402,7 @@ export function WizardCampana({ ofertas, proveedores }: { ofertas: OfertaParaCam
               <input type="hidden" name="requiresCoupon" value={exigeCupon ? 'si' : 'no'} />
               <input type="hidden" name="requiresAssignment" value={exigeAsignacion ? 'si' : 'no'} />
 
-              <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+              <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
                 <Fila k="Nombre" v={name} />
                 <Fila k="Organiza" v={CAMPAIGN_ORGANIZER_LABELS[organizer]} />
                 <Fila k="Ofertas participantes" v={`${elegidas.length}: ${seleccionadas.slice(0, 3).map((o) => o.title).join(', ')}${elegidas.length > 3 ? '…' : ''}`} />
@@ -416,7 +416,7 @@ export function WizardCampana({ ofertas, proveedores }: { ofertas: OfertaParaCam
 
               <div className="rounded-lg border border-border bg-muted/30 p-3" data-testid="campana-ejemplo">
                 <p className="text-sm font-medium">Ejemplo con {seleccionadas[0] ? `«${seleccionadas[0].title}»` : 'un precio de muestra'} de {dinero(precio, moneda)}</p>
-                <dl className="mt-2 grid gap-2 text-sm sm:grid-cols-3">
+                <dl className="mt-2 grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
                   <Dato k="Precio Membego (GMV)" v={dinero(precio, moneda)} />
                   <Dato k="Descuento del proveedor" v={`−${dinero(descuentoProveedor, moneda)}`} />
                   <Dato k="Valor contractual" v={dinero(contractual, moneda)} />

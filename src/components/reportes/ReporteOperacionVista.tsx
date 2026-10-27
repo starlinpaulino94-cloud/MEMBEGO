@@ -117,7 +117,7 @@ export function ReporteOperacionVista({
         </StatusBanner>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 print:gap-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 print:gap-2">
         <KpiReporte label="Canjes" kpi={r.canjes} formato={entero} />
         <KpiReporte label="Descontaron un uso" kpi={r.descontados} formato={entero} />
         <Celda
@@ -232,7 +232,7 @@ export function ReporteOperacionVista({
             empleado, así que no hay forma de repartirlos. Quita el filtro para verlos.
           </p>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-3 print:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 print:grid-cols-3">
             <Celda label="Generados" valor={entero(r.qrGenerados)} />
             <Celda label="Usados" valor={entero(r.qrUsados)} />
             <Celda
@@ -249,7 +249,7 @@ export function ReporteOperacionVista({
           title="Visitas revertidas"
           description="Anuladas después de registrarse. No se restan de los canjes: el servicio se dio, y que después se anulara la factura es un hecho posterior."
         />
-        <div className="grid gap-4 sm:grid-cols-2 print:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 print:grid-cols-2">
           <Celda label="Revertidas en el periodo" valor={entero(r.revertidas)} />
         </div>
       </section>

@@ -67,7 +67,7 @@ export default async function AdminMarketingPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4">
+        <div className="grid grid-cols-1 gap-4">
           {campanas.map((c) => {
             const badge = campanaEstadoUi(c.estado)
             const cupos =

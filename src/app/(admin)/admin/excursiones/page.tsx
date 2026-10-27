@@ -159,7 +159,7 @@ export default async function ExcursionesPanelPage({
 
       <section className="space-y-3">
         <h2 className="text-h3 text-foreground">Módulos</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {DISPONIBLES.map((m) => (
             <Link
               key={m.href}

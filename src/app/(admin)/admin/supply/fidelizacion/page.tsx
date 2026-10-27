@@ -70,7 +70,7 @@ export default async function FidelizacionProveedorPage() {
                     <ChipPrograma estado={p.estado} />
                   </div>
 
-                  <dl className="grid gap-3 sm:grid-cols-4">
+                  <dl className="grid grid-cols-1 gap-3 sm:grid-cols-4">
                     <div>
                       <dt className="text-caption text-muted-foreground">Miembros activos</dt>
                       <dd className="text-h3 tabular-nums" data-testid="programa-prov-miembros">{p.miembrosActivos.toLocaleString('es-DO')}</dd>

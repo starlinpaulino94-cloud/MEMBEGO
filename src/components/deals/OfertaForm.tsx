@@ -171,7 +171,7 @@ export function OfertaForm({ productos, promociones = [], cuota, moneda, ofertaI
             </div>
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="discountType">Tipo de descuento</Label>
               <select id="discountType" className={campoSelector} value={v.discountType} onChange={(e) => set('discountType', e.target.value as ValoresDeOferta['discountType'])}>
@@ -210,7 +210,7 @@ export function OfertaForm({ productos, promociones = [], cuota, moneda, ofertaI
             </div>
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="maxClaims">Cuántos clientes pueden obtenerla</Label>
               <Input id="maxClaims" inputMode="numeric" value={v.maxClaims} onChange={(e) => set('maxClaims', e.target.value)} required />
@@ -226,7 +226,7 @@ export function OfertaForm({ productos, promociones = [], cuota, moneda, ofertaI
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="startsAt">Empieza (opcional)</Label>
               <Input id="startsAt" type="date" value={v.startsAt} onChange={(e) => set('startsAt', e.target.value)} />

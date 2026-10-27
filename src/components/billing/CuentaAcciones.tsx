@@ -94,7 +94,7 @@ export function CuentaAcciones({ companyId, moneda, config, status, holdManual }
               )
             }}
           >
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="mv-tipo">Tipo</Label>
                 <select id="mv-tipo" value={tipo} onChange={(e) => setTipo(e.target.value as typeof tipo)} className={campoSelector}>
@@ -149,7 +149,7 @@ export function CuentaAcciones({ companyId, moneda, config, status, holdManual }
               )
             }}
           >
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor="cf-modelo">Modelo de cobro</Label>
                 <select id="cf-modelo" value={cfg.feeModel} onChange={(e) => setCfg({ ...cfg, feeModel: e.target.value })} className={campoSelector}>

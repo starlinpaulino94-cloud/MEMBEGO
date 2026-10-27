@@ -26,7 +26,7 @@ export interface CategoriaReporte {
 export function NavegacionReportes({ categorias }: { categorias: CategoriaReporte[] }) {
   return (
     <nav aria-label="Reportes disponibles" className="print:hidden">
-      <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {categorias.map((c) => (
           <li key={c.href}>
             <Link

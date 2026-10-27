@@ -109,7 +109,7 @@ export default async function CampanasPage({
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {campanas.map((c) => {
             const vistas = c.promociones.reduce((s, p) => s + p.viewCount, 0)
             const compartidas = c.promociones.reduce((s, p) => s + p.shareCount, 0)

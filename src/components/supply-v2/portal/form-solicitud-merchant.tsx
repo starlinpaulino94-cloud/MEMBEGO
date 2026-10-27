@@ -84,7 +84,7 @@ export function FormSolicitudMerchant({ prellenado, solicitudId, respondiendoA }
       <Card>
         <CardHeader><CardTitle>Contacto y ubicación</CardTitle></CardHeader>
         <CardContent className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <Label htmlFor="telefono">Teléfono</Label>
               <Input id="telefono" name="telefono" defaultValue={prellenado.telefono} required maxLength={40} inputMode="tel" data-testid="sol-telefono" />
@@ -106,7 +106,7 @@ export function FormSolicitudMerchant({ prellenado, solicitudId, respondiendoA }
             <Label>Sucursales</Label>
             <input type="hidden" name="sucursales" value={JSON.stringify(sucursales)} />
             {sucursales.map((s, i) => (
-              <div key={i} className="grid gap-2 sm:grid-cols-[1fr_2fr_auto]">
+              <div key={i} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_2fr_auto]">
                 <Input aria-label="Nombre de la sucursal" value={s.nombre} onChange={(e) => setSucursales((l) => l.map((x, j) => (j === i ? { ...x, nombre: e.target.value } : x)))} maxLength={80} />
                 <Input aria-label="Dirección de la sucursal" value={s.direccion} onChange={(e) => setSucursales((l) => l.map((x, j) => (j === i ? { ...x, direccion: e.target.value } : x)))} maxLength={200} />
                 <Button type="button" variant="ghost" size="sm" onClick={() => setSucursales((l) => l.filter((_, j) => j !== i))} disabled={sucursales.length === 1}>Quitar</Button>

@@ -131,7 +131,7 @@ function FilaEmpresa({ empresa }: { empresa: EmpresaConnect }) {
       {abierto && (
         <tr className="border-t border-border/60 bg-muted/30">
           <td colSpan={6} className="px-4 py-4">
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               {FEATURES.map((f) => {
                 const actual = empresa.limites[f.clave as keyof typeof empresa.limites]
                 return (

@@ -104,7 +104,7 @@ export function ResultadosMembegoVista({
 
       <section>
         <SectionHeader title="Lo que produjo" description="Pedidos Membego completados en el periodo." />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 print:grid-cols-3 print:gap-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 print:grid-cols-3 print:gap-2">
           <KpiReporte label="Ventas" kpi={r.ventas} formato={dinero} definicion="Lo que valieron los pedidos Membego completados en el periodo, sin impuestos." />
           <KpiReporte label="Pedidos" kpi={r.pedidos} formato={entero} definicion="Pedidos del marketplace completados (cerrados con el QR) en el periodo." />
           <KpiReporte label="Ticket promedio" kpi={r.ticket} formato={dinero} definicion="Ventas ÷ pedidos." />
@@ -116,7 +116,7 @@ export function ResultadosMembegoVista({
 
       <section>
         <SectionHeader title="Lo que te costó" description="Comisiones frente a lo vendido." />
-        <div className="grid gap-4 sm:grid-cols-3 print:grid-cols-3 print:gap-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 print:grid-cols-3 print:gap-2">
           <Celda
             label="Ventas por cada peso pagado"
             valor={r.retorno.valor === null ? 'Sin dato' : dinero(r.retorno.valor)}
@@ -176,7 +176,7 @@ export function ResultadosMembegoVista({
 
       <section>
         <SectionHeader title="Qué pasó con los pedidos" description="Los pedidos que se crearon en el periodo y cómo van." />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 print:gap-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 print:gap-2">
           <Celda label="Creados" valor={entero(r.embudo.creados)} nota="Pedidos que llegaron" />
           <Celda label="Completados" valor={entero(r.embudo.completados)} nota="Cerrados con el QR" />
           <Celda label="Cancelados o reembolsados" valor={entero(r.embudo.cancelados)} nota="Se cayeron" />

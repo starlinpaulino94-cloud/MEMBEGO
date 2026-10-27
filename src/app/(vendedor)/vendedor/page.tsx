@@ -63,7 +63,7 @@ export default async function VendedorInicioPage() {
   return (
     <div className="space-y-6">
       {/* ── SECCIÓN SUPERIOR: BALANCE & MÉTRICAS PRINCIPALES ── */}
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5 shadow-sm flex flex-col justify-between">
           <div>
             <span className="text-xs font-bold uppercase tracking-wider text-primary">Comisión por cobrar</span>
@@ -90,7 +90,7 @@ export default async function VendedorInicioPage() {
       </div>
 
       {/* ── GRID PRINCIPAL RESPONSIVO: QR A LA IZQ / EMBUDO Y METAS A LA DER ── */}
-      <div className="grid gap-6 lg:grid-cols-12 items-start">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 items-start">
         {/* Columna Izquierda: Tarjeta QR y Enlaces */}
         <div className="space-y-6 lg:col-span-6">
           {vendedor.slug ? (

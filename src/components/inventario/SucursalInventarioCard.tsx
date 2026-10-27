@@ -319,7 +319,7 @@ export function SucursalInventarioCard({
         {puedeAjustar ? (
           <>
             <form onSubmit={registrar} className="space-y-3 border-t pt-4" aria-label={`Registrar movimiento en ${saldo.nombre}`}>
-              <div className="grid gap-3 sm:grid-cols-[1.4fr_1fr]">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1.4fr_1fr]">
                 <div className="space-y-1.5">
                   <Label htmlFor={`op-${k}`}>Movimiento</Label>
                   <select
@@ -346,7 +346,7 @@ export function SucursalInventarioCard({
               </div>
               <p className="text-xs text-muted-foreground">{def.ayuda}</p>
               {entra && lotes && (
-                <div className="grid gap-3 sm:grid-cols-[1.2fr_1fr]">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1.2fr_1fr]">
                   <div className="space-y-1.5">
                     <Label htmlFor={`lote-${k}`}>{conSeries ? (operacion === 'ENTRADA' ? 'Serie *' : 'Serie (opcional)') : operacion === 'ENTRADA' ? 'Lote *' : 'Lote (opcional)'}</Label>
                     <Input
@@ -406,7 +406,7 @@ export function SucursalInventarioCard({
                 </div>
               )}
               {def.claseMotivo ? (
-                <div className="grid gap-3 sm:grid-cols-[1fr_1.4fr]">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1.4fr]">
                   <div className="space-y-1.5">
                     <Label htmlFor={`motivo-codigo-${k}`}>Motivo *</Label>
                     <select
@@ -456,7 +456,7 @@ export function SucursalInventarioCard({
             {lotes && !conSeries && lotes.deSucursal.some((l) => l.disponible > 0) && (
               <form onSubmit={moverLotes} className="space-y-3 border-t pt-4" aria-label={`Mover unidades entre lotes en ${saldo.nombre}`}>
                 <p className="text-sm font-medium">Mover unidades de un lote a otro</p>
-                <div className="grid gap-3 sm:grid-cols-[1fr_1fr_8rem]">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_8rem]">
                   <div className="space-y-1.5">
                     <Label htmlFor={`mover-de-${k}`}>Del lote</Label>
                     <select id={`mover-de-${k}`} name="deLote" defaultValue="" className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm">

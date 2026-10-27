@@ -110,7 +110,7 @@ export default async function RegistrosPage({
       />
 
       {/* Filtros */}
-      <Form action="/admin/registros" className="grid gap-3 rounded-2xl border border-border/70 bg-card p-4 sm:grid-cols-2 lg:grid-cols-4">
+      <Form action="/admin/registros" className="grid grid-cols-1 gap-3 rounded-2xl border border-border/70 bg-card p-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="relative sm:col-span-2 lg:col-span-2">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input name="q" defaultValue={sp.q ?? ''} placeholder="Nº, código TX o cliente…" className="pl-9" />

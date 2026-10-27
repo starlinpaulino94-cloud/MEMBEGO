@@ -197,7 +197,7 @@ export function CapturaConteo({ conteoId }: { conteoId: string }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="grid items-end gap-3 sm:grid-cols-[1fr_auto]">
+        <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[1fr_auto]">
           <div className="relative">
             <Label htmlFor="cc-buscar" className="sr-only">
               Escanear o buscar un producto para contar

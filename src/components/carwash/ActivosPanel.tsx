@@ -114,7 +114,7 @@ export function ActivosPanel({
         <Kpi label="Gasto" valor={fmtRD(panel.kpis.costoPeriodo)} pie="en mantenimiento" />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[340px_1fr]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[340px_1fr]">
         <FormActivo editando={editando} />
 
         <section>
@@ -333,7 +333,7 @@ function FormMantenimiento({ activoId }: { activoId: string }) {
   return (
     <form action={formAction} className="mt-3 space-y-2 border-t border-border/60 pt-3">
       <input type="hidden" name="activoId" value={activoId} />
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <select name="tipo" defaultValue="PREVENTIVO" className={input}>
           {MANTENIMIENTO_TIPOS.map((t) => (
             <option key={t} value={t}>

@@ -223,7 +223,7 @@ export default function CampanaForm({ segmentos, sucursales, campanaId, initial 
         title="Frecuencia"
         description="Cuántos envíos tolera un cliente antes de que la campaña deje de ayudar."
       >
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="maxPorDia">Máximo por día</Label>
             <Input
@@ -248,7 +248,7 @@ export default function CampanaForm({ segmentos, sucursales, campanaId, initial 
       </FormSection>
 
       <FormSection title="Programación" description="Cuándo sale y con qué prioridad.">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="programadaEn">Programar para</Label>
             <Input

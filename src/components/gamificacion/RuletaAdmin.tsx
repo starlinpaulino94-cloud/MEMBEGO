@@ -53,7 +53,7 @@ export function RuletaAdmin({
   const [editando, setEditando] = useState<PremioRow | null>(null)
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[22rem_1fr]">
+    <div className="grid grid-cols-1 gap-8 lg:grid-cols-[22rem_1fr]">
       <div className="lg:sticky lg:top-6 lg:h-fit">
         <PremioForm
           key={editando?.id ?? 'nuevo'}

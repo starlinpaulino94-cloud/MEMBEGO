@@ -96,7 +96,7 @@ function FormExtra({ extra, alCerrar }: { extra?: ExtraConfigurable; alCerrar: (
   return (
     <form action={enviar} className="space-y-2 rounded-lg border border-border p-3" data-testid="form-extra">
       {extra && <input type="hidden" name="id" value={extra.id} />}
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <div>
           <Label htmlFor={`extraNombre-${sufijo}`}>Nombre</Label>
           <Input id={`extraNombre-${sufijo}`} name="name" defaultValue={extra?.name ?? ''} required minLength={2} maxLength={160} readOnly={extra?.deMembego} data-testid="extra-nombre" />

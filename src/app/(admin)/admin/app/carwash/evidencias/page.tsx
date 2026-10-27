@@ -149,7 +149,7 @@ export default async function EvidenciasPage({
           description="Sube la primera con «Nueva foto» — ideal: una al recibir el vehículo y otra al entregarlo."
         />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {evidencias.map((e) => (
             <figure
               key={e.id}

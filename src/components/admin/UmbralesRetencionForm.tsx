@@ -58,7 +58,7 @@ export function UmbralesRetencionForm({ umbrales }: { umbrales: UmbralesRetencio
 
   return (
     <form action={action} className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {CAMPOS.map((c) => (
           <label key={c.clave} className="space-y-1.5 text-sm font-medium text-foreground">
             {c.label}

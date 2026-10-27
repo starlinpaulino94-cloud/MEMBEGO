@@ -104,7 +104,7 @@ export function ReporteMembresiasVista({
         </StatusBanner>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 print:gap-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 print:gap-2">
         <KpiReporte label="Activaciones" kpi={r.activadas} formato={entero} />
         <KpiReporte label="Renovaciones" kpi={r.renovadas} formato={entero} />
         <KpiReporte label="Cancelaciones" kpi={r.canceladas} formato={entero} invertido />
@@ -114,7 +114,7 @@ export function ReporteMembresiasVista({
       {/* El RESTO del ciclo, que la tabla ya guardaba y el reporte callaba:
           nacimientos pendientes, pagos rechazados y ajustes manuales (vigencia
           extendida, lavados corregidos). */}
-      <div className="grid gap-4 sm:grid-cols-3 print:grid-cols-3 print:gap-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 print:grid-cols-3 print:gap-2">
         <KpiReporte label="Creadas (pendientes de pago)" kpi={r.creadas} formato={entero} />
         <KpiReporte label="Pagos rechazados" kpi={r.rechazadas} formato={entero} invertido />
         <KpiReporte label="Ajustes manuales" kpi={r.ajustadas} formato={entero} />
@@ -131,7 +131,7 @@ export function ReporteMembresiasVista({
         </Link>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 print:grid-cols-2 print:gap-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 print:grid-cols-2 print:gap-2">
         <div className="rounded-xl border border-border bg-card p-5 print:border-black print:p-2">
           <p className="text-overline">Tasa de renovación</p>
           <p className="mt-1.5 text-h1 tabular-nums text-foreground print:text-base print:font-bold">
@@ -171,7 +171,7 @@ export function ReporteMembresiasVista({
               }
             />
             {totalCambios > 0 && (
-              <div className="grid gap-3 sm:grid-cols-4 print:grid-cols-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-4 print:grid-cols-4">
                 <Celda label="Subieron" valor={entero(cambios.subida)} />
                 <Celda label="Bajaron" valor={entero(cambios.bajada)} />
                 <Celda label="Mismo precio" valor={entero(cambios.lateral)} />

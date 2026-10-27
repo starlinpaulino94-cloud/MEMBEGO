@@ -159,7 +159,7 @@ export default async function CampanaGlobalDetallePage({
         <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted-foreground">
           Lo que se crea en cada empresa
         </h2>
-        <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
           {resumen.map(([k, v]) => (
             <div key={k} className="flex justify-between gap-4 border-b border-border/40 py-1.5">
               <dt className="text-small text-muted-foreground">{k}</dt>

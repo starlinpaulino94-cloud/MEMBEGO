@@ -66,7 +66,7 @@ export default async function VendedorMetasPage() {
           description="Tu supervisor o la administración no ha establecido metas específicas para tu cuenta o tu categoría en este período."
         />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 items-start">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 items-start">
           {misMetas.map((m) => (
             <article key={m.id} className="rounded-2xl border border-border/80 bg-card p-5 space-y-3 shadow-sm hover:border-primary/30 transition-all">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-3">

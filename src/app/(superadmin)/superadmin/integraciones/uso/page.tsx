@@ -105,7 +105,7 @@ export default async function UsoApiPage({
           description="Cuando un sistema satélite tenga una credencial y llame a la API, su uso aparecerá aquí."
         />
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {ordenados.map((s) => (
             <SateliteUsoCard key={s.sistemaId} satelite={s} dias={dias} />
           ))}

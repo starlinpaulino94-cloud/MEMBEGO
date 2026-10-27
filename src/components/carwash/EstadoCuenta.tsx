@@ -86,7 +86,7 @@ export function EstadoCuenta({ cuenta }: { cuenta: CuentaDetalle }) {
           </p>
         )}
 
-      <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
         <div className="space-y-6">
           <Flota cuenta={cuenta} />
           <CargoManual cuentaId={cuenta.id} />

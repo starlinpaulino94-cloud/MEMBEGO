@@ -66,7 +66,7 @@ export function MetaForm({
       <h2 className="text-h3 text-foreground">Nueva meta</h2>
 
       {/* Ámbito de la Meta */}
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <Label htmlFor="meta-ambito">Ámbito de aplicación</Label>
           <select
@@ -179,7 +179,7 @@ export function MetaForm({
         </div>
       ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <Label htmlFor="meta-periodo">Período de evaluación</Label>
           <select
@@ -213,7 +213,7 @@ export function MetaForm({
         <legend className="px-1 text-caption font-semibold uppercase tracking-wide text-muted-foreground">
           Qué se le pide (al menos una)
         </legend>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div>
             <Label htmlFor="meta-registros">Clientes captados</Label>
             <Input id="meta-registros" name="metaRegistros" type="number" min="1" placeholder="—" />

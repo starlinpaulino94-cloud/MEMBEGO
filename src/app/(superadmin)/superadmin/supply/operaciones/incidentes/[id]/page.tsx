@@ -42,7 +42,7 @@ export default async function IncidenteDetallePage({ params }: { params: Promise
         action={<Link href={`${RUTA_OPERACIONES}/incidentes`} className="text-sm underline">← Incidentes</Link>}
       />
 
-      <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[2fr_1fr]">
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-base">Qué decía cada lado</CardTitle></CardHeader>
           <CardContent className="space-y-3">

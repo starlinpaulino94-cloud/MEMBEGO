@@ -169,7 +169,7 @@ export function CatalogoIntegraciones({ entradas }: { entradas: EntradaCatalogo[
       ) : (
         <div className="space-y-8">
           {disponibles.length > 0 && (
-            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
               {disponibles.map((e) => (
                 <TarjetaIntegracion key={e.slug} entrada={e} />
               ))}
@@ -184,7 +184,7 @@ export function CatalogoIntegraciones({ entradas }: { entradas: EntradaCatalogo[
                   Todavía no se pueden conectar. Están aquí para que veas hacia dónde va Membego.
                 </p>
               </div>
-              <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
                 {previstas.map((e) => (
                   <TarjetaIntegracion key={e.slug} entrada={e} />
                 ))}

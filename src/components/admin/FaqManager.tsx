@@ -78,7 +78,7 @@ export function FaqManager({
         <CardContent className="pt-6">
           <form action={createAction} className="space-y-3">
             {companyId && <input type="hidden" name="companyId" value={companyId} />}
-            <div className="grid gap-3 sm:grid-cols-[1fr_6rem]">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_6rem]">
               <div className="space-y-1.5">
                 <Label htmlFor="pregunta">Pregunta</Label>
                 <Input id="pregunta" name="pregunta" placeholder="¿Cómo activo mi membresía?" required />
@@ -161,7 +161,7 @@ function EditFaqCard({ faq, onDone }: { faq: Faq; onDone: () => void }) {
       <CardContent className="pt-6">
         <form action={action} className="space-y-3">
           <input type="hidden" name="id" value={faq.id} />
-          <div className="grid gap-3 sm:grid-cols-[1fr_6rem]">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_6rem]">
             <div className="space-y-1.5">
               <Label>Pregunta</Label>
               <Input name="pregunta" defaultValue={faq.pregunta} required />

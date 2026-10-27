@@ -119,7 +119,7 @@ export default async function ColaPage() {
 
       <ColaRegistrarForm />
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {columnas.map((col) => (
           <section key={col.estado} className="rounded-2xl border border-border/70 bg-card p-4">
             <h2 className="mb-3 flex items-center justify-between text-sm font-bold uppercase tracking-wide text-muted-foreground">

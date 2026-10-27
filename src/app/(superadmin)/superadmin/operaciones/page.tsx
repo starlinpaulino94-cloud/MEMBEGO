@@ -384,7 +384,7 @@ export default async function OperacionesPage({
           )}
         </div>
       ) : (
-        <ul className="grid list-none gap-4 md:grid-cols-2">
+        <ul className="grid grid-cols-1 list-none gap-4 md:grid-cols-2">
           {d.filas.map((e) => (
             <li key={e.id}>
               <TarjetaEmpresa e={e} />

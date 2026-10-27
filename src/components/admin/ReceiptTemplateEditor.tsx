@@ -141,7 +141,7 @@ export function ReceiptTemplateEditor({
           de ejemplo.
         </p>
 
-        <div className="grid gap-6 lg:grid-cols-[1fr_minmax(260px,320px)]">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_minmax(260px,320px)]">
           {/* ── Formulario ── */}
           <div className="space-y-6">
             {/* Papel */}
@@ -167,7 +167,7 @@ export function ReceiptTemplateEditor({
             </div>
 
             {/* Encabezado */}
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="rt-rnc" className="text-xs">RNC / identificador fiscal (opcional)</Label>
                 <Input
@@ -206,7 +206,7 @@ export function ReceiptTemplateEditor({
             </div>
 
             {/* Pie */}
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="rt-pie" className="text-xs">Mensaje de agradecimiento</Label>
                 <Input
@@ -248,7 +248,7 @@ export function ReceiptTemplateEditor({
             {/* Campos visibles */}
             <div className="space-y-2">
               <Label className="text-xs">Campos visibles</Label>
-              <div className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
                 {TOGGLES.map((t) => (
                   <label key={t.key} className="flex items-center justify-between gap-3 text-sm">
                     <span className="text-foreground">{t.label}</span>

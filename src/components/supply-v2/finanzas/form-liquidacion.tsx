@@ -41,7 +41,7 @@ export function FormLiquidacion({ proveedores, supplierId, periodStart, periodEn
   return (
     <form action={enviar} className="space-y-3" data-testid="form-liquidacion">
       <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <Label htmlFor="liqProveedor">Proveedor</Label>
           <select id="liqProveedor" name="supplierId" required className={select} defaultValue={supplierId ?? proveedores[0]?.id ?? ''} data-testid="liquidacion-proveedor">

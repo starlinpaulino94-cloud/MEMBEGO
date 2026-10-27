@@ -57,7 +57,7 @@ export default async function EmpleadoDetailPage({
           <CardTitle>{empleado.name}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Info label="Correo" value={empleado.email} />
             <Info label="Rol" value="Empleado" />
             <Info label="Creado" value={fmtDate(empleado.createdAt)} />

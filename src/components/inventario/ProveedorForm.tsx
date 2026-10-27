@@ -91,7 +91,7 @@ export function ProveedorForm({ proveedor }: { proveedor?: ProveedorEditable }) 
       </CardHeader>
       <CardContent>
         <form onSubmit={guardar} className="space-y-4" aria-label={editando ? 'Editar proveedor' : 'Nuevo proveedor'}>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor={`pv-nombre-${proveedor?.id ?? 'nuevo'}`}>Nombre *</Label>
               <Input id={`pv-nombre-${proveedor?.id ?? 'nuevo'}`} value={nombre} maxLength={MAX_NOMBRE_PROVEEDOR} onChange={(e) => setNombre(e.target.value)} placeholder="Ej: Distribuidora Norte" />

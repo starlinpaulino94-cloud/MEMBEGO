@@ -79,7 +79,7 @@ export default async function ReportesInventarioPage() {
       <PageHeader title="Reportes de existencias" description="Lo que pasó con cada producto, lo que tienes parado y lo que se te acaba o te sobra." />
       <NavegacionInventario actual="reportes" />
 
-      <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3" aria-label="Informes">
+      <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3" aria-label="Informes">
         {informes.filter((i) => !i.soloCostos || verCostos).map((i) => (
           <li key={i.href}>
             <Link href={i.href} className="block h-full rounded-xl transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">

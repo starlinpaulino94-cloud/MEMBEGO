@@ -142,7 +142,7 @@ function VincularEmpresa({ onCreado }: { onCreado?: (p: ProveedorCreado) => void
         )}
       </div>
       {elegida && (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <Label htmlFor="contactoVinculo">Contacto comercial</Label>
             <Input id="contactoVinculo" name="contactName" maxLength={120} />
@@ -176,7 +176,7 @@ function ProveedorExterno({ onCreado, compacto }: { onCreado?: (p: ProveedorCrea
 
   return (
     <form action={accion} className="space-y-3" data-testid="form-proveedor-externo">
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="sm:col-span-2">
           <Label htmlFor="commercialName">Nombre comercial</Label>
           <Input id="commercialName" name="commercialName" required maxLength={160} placeholder="Little Pizza" autoFocus />

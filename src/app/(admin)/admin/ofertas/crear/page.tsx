@@ -49,7 +49,7 @@ export default async function CrearBeneficioPage() {
       {tipos.length === 0 ? (
         <EmptyState title="No tienes acceso a ningún tipo de beneficio" description="Pídele a quien administra tu equipo que te dé acceso." />
       ) : (
-        <ul className="grid gap-4 md:grid-cols-2" aria-label="Tipos de beneficio que puedes crear">
+        <ul className="grid grid-cols-1 gap-4 md:grid-cols-2" aria-label="Tipos de beneficio que puedes crear">
           {tipos.map((t) => (
             <li key={t.key}>
               <Link

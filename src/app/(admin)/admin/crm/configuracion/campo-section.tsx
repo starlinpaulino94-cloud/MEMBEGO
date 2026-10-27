@@ -163,7 +163,7 @@ export function CampoSection({ companyId, initialCampos }: CampoSectionProps) {
 
         <div className="rounded-xl border border-border p-3 space-y-3">
           <p className="text-small font-medium text-foreground">Agregar campo</p>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input
               aria-label="Nombre del campo"
               placeholder="Nombre del campo"

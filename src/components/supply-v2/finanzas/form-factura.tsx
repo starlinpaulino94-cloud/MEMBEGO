@@ -68,7 +68,7 @@ export function FormFactura({ proveedores, ordenes, supplierId, purchaseOrderId,
   return (
     <form action={enviar} className="space-y-4" data-testid="form-factura">
       <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <Label htmlFor="facturaProveedor">Proveedor</Label>
           <select id="facturaProveedor" name="supplierId" required className={select} value={proveedor} onChange={(e) => { setProveedor(e.target.value); setOrdenId('') }} data-testid="factura-proveedor">
@@ -142,7 +142,7 @@ export function FormFactura({ proveedores, ordenes, supplierId, purchaseOrderId,
           </table>
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="sm:col-span-3">
             <Label htmlFor="facturaDescripcion">Concepto</Label>
             <Input id="facturaDescripcion" name="description" maxLength={200} required data-testid="factura-concepto" />

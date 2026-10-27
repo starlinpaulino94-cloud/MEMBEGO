@@ -47,7 +47,7 @@ export function EstadoPasarelas({
 
   return (
     <div className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Fila
           icono={<Landmark className="h-4 w-4" />}
           titulo="Transferencia bancaria"

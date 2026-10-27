@@ -46,7 +46,7 @@ export function ColaPagos({ datos, conteos, paginaciones, params, fmtMoney, esSu
     const { membresias, compras } = cortarSucursal(datos.membresias, datos.compras, datos.totalMembresias, paginaciones.suc)
     return (
       <Seccion titulo={`Pagos en sucursal por confirmar (${conteos.sucursal})`} icono={<Store className="h-4 w-4 text-primary" aria-hidden />}>
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {membresias.map((m) => <TarjetaSucursalMembresia key={m.id} m={m} {...comun} />)}
           {compras.map((c) => <TarjetaSucursalCompra key={c.id} c={c} {...comun} />)}
         </div>
@@ -58,7 +58,7 @@ export function ColaPagos({ datos, conteos, paginaciones, params, fmtMoney, esSu
   if (datos.cola === 'compras' && conteos.compras > 0) {
     return (
       <Seccion titulo={`Compras de promociones (${conteos.compras})`}>
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {datos.filas.map((c) => <TarjetaCompraPendiente key={c.id} c={c} {...comun} />)}
         </div>
         <TablaPaginacion paginacion={paginaciones.pr} total={conteos.compras} params={params} etiqueta="compras" clave="pr" />
@@ -69,7 +69,7 @@ export function ColaPagos({ datos, conteos, paginaciones, params, fmtMoney, esSu
   if (datos.cola === 'cambios' && conteos.cambios > 0) {
     return (
       <Seccion titulo={`Cambios de plan solicitados (${conteos.cambios})`}>
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {datos.filas.map((c) => <TarjetaCambioPlan key={c.id} c={c} {...comun} />)}
         </div>
         <TablaPaginacion paginacion={paginaciones.cp} total={conteos.cambios} params={params} etiqueta="cambios de plan" clave="cp" />
@@ -80,7 +80,7 @@ export function ColaPagos({ datos, conteos, paginaciones, params, fmtMoney, esSu
   if (datos.cola === 'transferencias' && conteos.transferencias > 0) {
     return (
       <Seccion titulo={`Transferencias por validar (${conteos.transferencias})`}>
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           {datos.filas.map((m) => <TarjetaPagoPendiente key={m.id} m={m} {...comun} />)}
         </div>
         <TablaPaginacion paginacion={paginaciones.tr} total={conteos.transferencias} params={params} etiqueta="transferencias" clave="tr" />

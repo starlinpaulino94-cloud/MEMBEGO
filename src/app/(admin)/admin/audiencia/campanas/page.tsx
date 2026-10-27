@@ -74,7 +74,7 @@ export default async function CampanasPage() {
           }
         />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {campanas.map((c) => (
             <Card key={c.id}>
               <CardContent className="space-y-3 p-5">

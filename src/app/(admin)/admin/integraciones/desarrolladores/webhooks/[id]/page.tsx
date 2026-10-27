@@ -86,7 +86,7 @@ export default async function EntregasWebhookPage({
         cuántas de las últimas cincuenta. Un contador que cambia de significado
         según cuánto quepa en pantalla no es un contador.
       */}
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatCard label="Entregadas" value={resumen.enviadas} />
         <StatCard label="Reintentando" value={resumen.pendientes} />
         <StatCard label="Se agotaron" value={resumen.descartadas} />

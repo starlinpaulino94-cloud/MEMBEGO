@@ -104,7 +104,7 @@ export default async function CampanaDetallePage({
         <code className="rounded bg-muted px-2 py-0.5 text-xs">{url}</code>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard icon={Users} label="Participantes" value={participantes} />
         <StatCard icon={Target} label="Metas alcanzadas" value={metasAlcanzadas} />
         <StatCard icon={Trophy} label="Premios reclamados" value={premiosReclamados} />

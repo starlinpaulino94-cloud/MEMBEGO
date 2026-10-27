@@ -58,7 +58,7 @@ export function ExcursionesConfigForm({
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="politicaAtribucion" className="text-xs font-semibold">
               Política de atribución
@@ -149,7 +149,7 @@ export function ExcursionesConfigForm({
           </div>
         </div>
 
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           {/* Reducción de pasajeros */}
           <div className="rounded-xl border border-border/80 bg-muted/20 p-4 space-y-3">
             <label htmlFor="permitirReduccionPasajeros" className="inline-flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 cursor-pointer hover:bg-muted transition-colors">
@@ -262,7 +262,7 @@ export function ExcursionesConfigForm({
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="tipoReembolso" className="text-xs font-semibold">
               Tipo de reembolso
@@ -350,7 +350,7 @@ export function ExcursionesConfigForm({
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-3 items-center">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 items-center">
           <div>
             <Label htmlFor="diasGraciaCheckin" className="text-xs font-semibold">
               Días de gracia
@@ -413,7 +413,7 @@ export function ExcursionesConfigForm({
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
             <Label htmlFor="anticipacionMinimaReservaHoras" className="text-xs font-semibold">
               Anticipación mínima (horas)
@@ -484,7 +484,7 @@ export function ExcursionesConfigForm({
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <label htmlFor="enviarConfirmacionReserva" className="inline-flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 cursor-pointer hover:bg-muted transition-colors self-end">
             <input
               type="checkbox"
@@ -547,7 +547,7 @@ export function ExcursionesConfigForm({
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-5">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-5">
           {['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'DEPOSITO', 'LINK'].map((metodo) => (
             <label key={metodo} htmlFor={`pago_${metodo}`} className="inline-flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 cursor-pointer hover:bg-muted transition-colors">
               <input
@@ -578,7 +578,7 @@ export function ExcursionesConfigForm({
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
             <Label htmlFor="tasa_DOP_USD" className="text-xs font-semibold">
               DOP → USD

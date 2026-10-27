@@ -101,7 +101,7 @@ export function ComunicacionConfigForm({
           <CardTitle className="text-base">Datos de contacto</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-[8rem_1fr]">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-[8rem_1fr]">
             <div className="space-y-2">
               <Label htmlFor="codigoPais">Código de país *</Label>
               <Input
@@ -222,7 +222,7 @@ export function ComunicacionConfigForm({
           <CardTitle className="text-base">Horario de atención</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2 max-w-md">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 max-w-md">
             <div className="space-y-2">
               <Label htmlFor="horaInicio">Hora de inicio</Label>
               <Input

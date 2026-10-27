@@ -37,7 +37,7 @@ export default async function CuentaDeEmpresaPage({ params, searchParams }: { pa
       </Link>
       <PageHeader title={empresa.name} description="Cuenta Membego de la empresa: lo que debe por los pedidos del marketplace." />
 
-      <section aria-label="Resumen de la cuenta" className="grid gap-4 md:grid-cols-3">
+      <section aria-label="Resumen de la cuenta" className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <Card>
           <CardContent className="space-y-1 p-4">
             <p className="text-xs text-muted-foreground">{Number(resumen.saldo) < 0 ? 'Saldo a favor de la empresa' : 'Debe a Membego'}</p>
@@ -66,7 +66,7 @@ export default async function CuentaDeEmpresaPage({ params, searchParams }: { pa
 
       {!resumen.existe && <p className="text-sm text-muted-foreground">Esta empresa aún no tiene cuenta: se crea con estos valores al completar su primer pedido del marketplace (o al asentar el primer movimiento).</p>}
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_24rem]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_24rem]">
         <div className="space-y-6">
           <Card>
             <CardHeader className="pb-2">

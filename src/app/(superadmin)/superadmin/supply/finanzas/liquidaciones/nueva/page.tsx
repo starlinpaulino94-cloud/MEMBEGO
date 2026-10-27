@@ -37,7 +37,7 @@ export default async function NuevaLiquidacionPage({ searchParams }: { searchPar
       <Card>
         <CardHeader><CardTitle>Vista previa</CardTitle></CardHeader>
         <CardContent className="space-y-3">
-          <form method="get" className="grid gap-3 sm:grid-cols-4">
+          <form method="get" className="grid grid-cols-1 gap-3 sm:grid-cols-4">
             <div><label className="text-sm" htmlFor="pvProveedor">Proveedor</label><select id="pvProveedor" name="proveedor" defaultValue={supplierId ?? ''} className={select}>{proveedores.map((p) => <option key={p.id} value={p.id}>{p.commercialName}</option>)}</select></div>
             <div><label className="text-sm" htmlFor="pvDesde">Desde</label><input id="pvDesde" name="desde" type="date" defaultValue={iso(desde)} className={select} /></div>
             <div><label className="text-sm" htmlFor="pvHasta">Hasta (exclusivo)</label><input id="pvHasta" name="hasta" type="date" defaultValue={iso(hasta)} className={select} /></div>

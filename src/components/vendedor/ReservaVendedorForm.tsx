@@ -318,7 +318,7 @@ export function ReservaVendedorForm({
       <input type="hidden" name="notas" value={notas} />
       <input type="hidden" name="esResidente" value={String(esResidente)} />
 
-      <div className="grid gap-6 lg:grid-cols-12 items-start w-full min-w-0 max-w-full">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 items-start w-full min-w-0 max-w-full">
         {/* ── COLUMNA PRINCIPAL (PASOS DEL FORMULARIO) ── */}
         <div className="space-y-6 lg:col-span-8 w-full min-w-0 max-w-full">
           {state.error && (

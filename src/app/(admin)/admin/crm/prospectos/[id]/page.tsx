@@ -75,7 +75,7 @@ export default async function ProspectoPage({ params }: { params: Promise<{ id: 
         )}
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <div className="space-y-5">
           {!p.clienteId && <ConvertirEnCliente prospectoId={p.id} nombre={p.etiqueta.startsWith('+') ? '' : p.etiqueta} telefono={p.telefono} />}
           <NotasProspecto prospectoId={p.id} notas={p.notas} />

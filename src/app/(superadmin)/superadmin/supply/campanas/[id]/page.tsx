@@ -58,7 +58,7 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
       />
 
       {/* §24 · lo que la campaña movió de verdad. */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="campana-metricas">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="campana-metricas">
         <StatCard label="Ventas confirmadas" value={<span data-testid="metrica-ventas">{c.metricas.ventasConfirmadas.toLocaleString('es-DO')}</span>} sub={`${c.metricas.pedidos} pedido(s) atribuido(s)${c.metricas.pedidosEnCurso > 0 ? ` · ${c.metricas.pedidosEnCurso} en curso` : ''}`} />
         <StatCard label="GMV" value={<span data-testid="metrica-gmv">{dinero(c.metricas.gmv)}</span>} sub={`valor contractual ${dinero(c.metricas.valorContractual)}`} />
         <StatCard label="Subsidio de Membego" value={<span data-testid="metrica-subsidio">{dinero(c.metricas.subsidioMembego)}</span>} sub="costo promocional" accent={Number(c.metricas.subsidioMembego) > 0 ? 'warning' : undefined} />
@@ -70,7 +70,7 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
         />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader><CardTitle>Qué es esta campaña</CardTitle></CardHeader>
           <CardContent className="space-y-3">
@@ -78,7 +78,7 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
               <ChipFinanciacion funding={c.funding} />
               {c.vigenteAhora && <span className="rounded-full border border-success/30 px-2 py-0.5 text-caption text-success" data-testid="campana-vigente">Vigente ahora mismo</span>}
             </div>
-            <dl className="grid gap-2 text-sm sm:grid-cols-2" data-testid="campana-ficha">
+            <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2" data-testid="campana-ficha">
               <Dato k="Público" v={CAMPAIGN_AUDIENCE_LABELS[c.audience]} />
               <Dato k="Vigencia" v={`${formatDate(c.startsAt)}${c.endsAt ? ` → ${formatDate(c.endsAt)}` : ' → sin fin'}`} />
               {c.horario && <Dato k="Horario" v={c.horario} />}

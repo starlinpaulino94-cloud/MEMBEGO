@@ -222,7 +222,7 @@ export function EntradaMultipleForm({ sucursales, conCostos = false }: { sucursa
   return (
     <form onSubmit={registrar} className="space-y-6" aria-label="Nueva entrada de mercancía">
       <Card>
-        <CardContent className="grid gap-4 p-4 sm:grid-cols-3">
+        <CardContent className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-3">
           <div className="space-y-1.5">
             <Label htmlFor="en-sucursal">Sucursal que recibe</Label>
             <select

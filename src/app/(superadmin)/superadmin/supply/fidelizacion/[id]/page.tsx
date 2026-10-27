@@ -76,11 +76,11 @@ export default async function ProgramaPage({ params }: { params: Promise<{ id: s
         action={<ChipPrograma estado={p.estado} />}
       />
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader><CardTitle>Qué movió el programa</CardTitle></CardHeader>
           <CardContent>
-            <dl className="grid gap-4 sm:grid-cols-3">
+            <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div>
                 <dt className="text-caption text-muted-foreground">Puntos emitidos</dt>
                 <dd className="text-h2 tabular-nums" data-testid="programa-puntos-emitidos">{p.puntos.emitidos.toLocaleString('es-DO')}</dd>
@@ -96,7 +96,7 @@ export default async function ProgramaPage({ params }: { params: Promise<{ id: s
               </div>
             </dl>
             {puedeFinanzas && (
-              <dl className="mt-4 grid gap-4 border-t border-border pt-4 sm:grid-cols-2">
+              <dl className="mt-4 grid grid-cols-1 gap-4 border-t border-border pt-4 sm:grid-cols-2">
                 <div>
                   <dt className="text-caption text-muted-foreground">Costo ya realizado</dt>
                   <dd className="text-h3 tabular-nums" data-testid="programa-costo-efectivo">{p.puntos.costoEfectivo}</dd>
@@ -211,7 +211,7 @@ export default async function ProgramaPage({ params }: { params: Promise<{ id: s
           <CardHeader><CardTitle>Referidos</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             {p.referidos ? (
-              <dl className="grid gap-2 text-sm sm:grid-cols-2" data-testid="referidos-config">
+              <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2" data-testid="referidos-config">
                 <Fila k="Premio para quien invita" v={`${REFERRAL_REWARD_KIND_LABELS[p.referidos.rewardKind]}${p.referidos.rewardPoints ? `: ${p.referidos.rewardPoints} puntos` : ''}`} />
                 <Fila k="Días de espera" v={String(p.referidos.waitingPeriodDays)} />
                 <Fila k="Tope por persona" v={p.referidos.maxPerReferrer ? String(p.referidos.maxPerReferrer) : 'sin tope'} />
@@ -229,7 +229,7 @@ export default async function ProgramaPage({ params }: { params: Promise<{ id: s
         </Card>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {puedeOtorgar && abierto && planesVivos.length > 0 && (
           <Card>
             <CardHeader><CardTitle>Otorgar una membresía sin cobrarla</CardTitle></CardHeader>

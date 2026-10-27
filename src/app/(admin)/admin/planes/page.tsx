@@ -143,7 +143,7 @@ export default async function PlanesPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-6 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
           {planes.map((plan) => (
             <Card
               key={plan.id}

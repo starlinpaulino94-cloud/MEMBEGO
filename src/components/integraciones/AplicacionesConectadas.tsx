@@ -138,7 +138,7 @@ export function AplicacionesConectadas({
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {visibles.map((app) => (
           <Tarjeta key={app.slug} app={app} diagnostico={diagnostico} />
         ))}

@@ -318,7 +318,7 @@ export default async function PromocionesPage({
           baja a una franja de referencia. */}
       {ventas && ventas.total > 0 && (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
               accent="brand"
               label="Ingresos por promociones"
@@ -407,7 +407,7 @@ export default async function PromocionesPage({
           }
         />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {visibles.map((p) => (
             <PromoCard key={p.id} p={p} showCompany={!companyId} />
           ))}

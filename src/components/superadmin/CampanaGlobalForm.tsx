@@ -65,7 +65,7 @@ export function CampanaGlobalForm({
 
       {/* Modo: replicar la misma oferta vs. cadena entre negocios distintos */}
       <input type="hidden" name="modo" value={modo} />
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <button
           type="button"
           onClick={() => setModo('COPIA')}
@@ -92,7 +92,7 @@ export function CampanaGlobalForm({
         </button>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="c-nombre">Nombre de la campaña *</Label>
           <Input id="c-nombre" name="nombre" required maxLength={120} placeholder="Ej. Black Friday MembeGo" />
@@ -134,7 +134,7 @@ export function CampanaGlobalForm({
         </legend>
 
         {tipo === 'PLAN' ? (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="p-nombre">Nombre del plan</Label>
               <Input id="p-nombre" name="p_nombre" maxLength={120} placeholder="Ej. Plan Aliados" />
@@ -183,7 +183,7 @@ export function CampanaGlobalForm({
             </label>
           </div>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="p-titulo">Título</Label>
               <Input id="p-titulo" name="p_titulo" maxLength={120} placeholder="Ej. 20% en tu próximo servicio" />
@@ -284,7 +284,7 @@ export function CampanaGlobalForm({
                 )}
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label>Empresa que lo da *</Label>
                   <select

@@ -59,7 +59,7 @@ export default async function NuevaOfertaPage({ searchParams }: { searchParams: 
         eyebrow={<Link href="/superadmin/supply/ofertas" className="hover:underline">Ofertas</Link>}
         nav={<NavSupplyV2 activa="ofertas" />}
       />
-      <div className="grid gap-4 sm:grid-cols-2" data-testid="elegir-fuente">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2" data-testid="elegir-fuente">
         {opciones.map((o) => (
           <Link key={o.fuente} href={`/superadmin/supply/ofertas/nueva?fuente=${o.fuente}`} className="rounded-xl border border-border bg-card p-5 transition-colors hover:bg-muted/40" data-testid={o.testid}>
             <o.icon className="mb-3 size-6 text-primary" aria-hidden />

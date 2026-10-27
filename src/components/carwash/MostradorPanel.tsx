@@ -48,7 +48,7 @@ export function MostradorPanel({
   tipos: { id: string; nombre: string }[]
 }) {
   return (
-    <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[360px_1fr]">
       <FormAlta tipos={tipos} />
 
       <div className="space-y-6">

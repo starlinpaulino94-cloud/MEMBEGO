@@ -31,9 +31,10 @@ function FilaEnlace({ canal, url }: { canal: string; url: string }) {
 
   return (
     <div className="rounded-xl border border-border/60 p-3">
+      {/* En un móvil el enlace va en su propia línea, debajo del canal y los botones: entre ellos quedaba reducido a «h…». */}
       <div className="flex flex-wrap items-center gap-2">
         <p className="min-w-28 text-sm font-medium text-foreground">{canalLabel(canal)}</p>
-        <code className="min-w-0 flex-1 truncate rounded bg-muted px-2 py-1 text-xs text-muted-foreground">
+        <code className="order-last w-full min-w-0 truncate rounded bg-muted px-2 py-1 text-xs text-muted-foreground sm:order-none sm:w-auto sm:flex-1">
           {url}
         </code>
         <Button variant="outline" size="sm" className="gap-1.5" onClick={copiar}>
@@ -88,7 +89,7 @@ function FilaEnlaceInline({ url }: { url: string }) {
   const [copiado, setCopiado] = useState(false)
   return (
     <>
-      <code className="min-w-0 flex-1 truncate rounded bg-muted px-2 py-1 text-xs text-muted-foreground">
+      <code className="order-last w-full min-w-0 truncate rounded bg-muted px-2 py-1 text-xs text-muted-foreground sm:order-none sm:w-auto sm:flex-1">
         {url}
       </code>
       <Button

@@ -171,7 +171,7 @@ export function RecibirOrdenCompraForm({ ordenId, sucursalNombre, hayRecibido, l
             </li>
           ))}
         </ul>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="ro-referencia">Factura o remisión del proveedor (opcional)</Label>
             <Input id="ro-referencia" value={referencia} maxLength={MAX_REFERENCIA_ORDEN} onChange={(e) => setReferencia(e.target.value)} placeholder="Ej: FAC-00231" />

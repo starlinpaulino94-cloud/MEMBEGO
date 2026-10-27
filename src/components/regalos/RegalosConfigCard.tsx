@@ -41,7 +41,7 @@ export function RegalosConfigCard({ config }: { config: RegalosConfig }) {
         </span>
       </summary>
       <form action={formAction} className="space-y-4 border-t border-border/60 p-4">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <label className="flex items-center justify-between gap-3 rounded-2xl border border-border/70 p-3">
             <span>
               <span className="block text-sm font-medium text-foreground">Transferencias de usos</span>
@@ -74,7 +74,7 @@ export function RegalosConfigCard({ config }: { config: RegalosConfig }) {
         {regalos && <input type="hidden" name="permitirRegalos" value="on" />}
         {giftCards && <input type="hidden" name="permitirGiftCards" value="on" />}
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="maxTransferenciasMes">Transferencias por cliente al mes</Label>
             <Input

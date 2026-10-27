@@ -217,7 +217,7 @@ export default async function ReportesOperativosPage({
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <section className="rounded-2xl border border-border/70 bg-card p-4">
           <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted-foreground">
             Servicios más pedidos
