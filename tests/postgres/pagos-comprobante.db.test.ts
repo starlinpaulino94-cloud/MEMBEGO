@@ -211,7 +211,7 @@ test('H5 · (fase 4) un pago aprobado ANTES de la columna de cumplimiento, con l
   const h = hallazgo(r, 'entrega-sin-registrar')
   assert.ok(h, 'sí se ve, como registro sin cerrar')
   assert.deepEqual([h.cantidad, h.monto, h.severidad, h.href], [1, 1600, 'MEDIA', null])
-  assert.deepEqual(h.casos.map((c) => [c.tipo, c.id, c.acciones]), [['REGISTRO_SIN_CERRAR', i.id, ['MARCAR_ENTREGADA', 'ABRIR_FICHA']]])
+  assert.deepEqual(h.casos.map((c) => [c.tipo, c.id, c.acciones]), [['REGISTRO_SIN_CERRAR', i.id, ['MARCAR_ENTREGADA', 'CERRAR_SIN_ENTREGAR', 'ABRIR_FICHA']]])
 })
 
 test('H6 · (fase 4) un cobro con la entrega FALLIDA y el cliente sin su membresía SE DETECTA, con su acción', async () => {

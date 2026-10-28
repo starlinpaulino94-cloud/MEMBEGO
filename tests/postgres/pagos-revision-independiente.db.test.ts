@@ -251,7 +251,8 @@ test('2 · un cambio de plan pagado con tarjeta no se reintenta en vano: el caso
   const despues = (await conciliar(e.companyId)).hallazgos.find((x) => x.clave === 'entrega-sin-registrar')
   assert.ok(despues)
   const caso = despues.casos.find((x) => x.id === i.id)
-  assert.deepEqual(caso?.acciones, ['MARCAR_ENTREGADA', 'ABRIR_FICHA'])
+  assert.deepEqual(caso?.acciones, ['MARCAR_ENTREGADA', 'CERRAR_SIN_ENTREGAR', 'ABRIR_FICHA'])
+  assert.equal(caso?.cierreCancelaMembresia, true, 'cerrarla sin entregar cancelaría la membresía, y la pantalla lo avisa')
   assert.match(caso?.detalle ?? '', /Se activó 2 horas después del cobro\./)
   assert.doesNotMatch(caso?.detalle ?? '', /Tardó mucho/)
 
