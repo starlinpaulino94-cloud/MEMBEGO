@@ -2,10 +2,12 @@
 
 import { useActionState, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Plus, Trash2, X, Layers } from 'lucide-react'
+import { Plus, Trash2, X, Layers } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { Campo } from '@/components/ui/campo'
+import { FormActions, FormSection } from '@/components/ui/form-section'
+import { SelectNativo } from '@/components/ui/select-nativo'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -125,107 +127,60 @@ export default function SegmentoBuilder({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
-      <div className="space-y-6">
-        <form action={onFormAction} className="space-y-6">
-          <Card>
-            <CardContent className="space-y-4 p-5">
-              <div>
-                <Label htmlFor="nombre">Nombre del segmento</Label>
-                <Input
-                  id="nombre"
-                  value={nombre}
-                  onChange={(e) => setNombre(e.target.value)}
-                  placeholder="Ej. Clientes de Punta Cana"
-                  maxLength={80}
-                />
-              </div>
-              <div>
-                <Label htmlFor="descripcion">Descripción (opcional)</Label>
-                <Textarea
-                  id="descripcion"
-                  value={descripcion}
-                  onChange={(e) => setDescripcion(e.target.value)}
-                  placeholder="Para qué se usa este segmento"
-                  rows={2}
-                  maxLength={300}
-                />
-              </div>
-            </CardContent>
-          </Card>
+    <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <form action={onFormAction} className="min-w-0 space-y-8">
+        <FormSection apilada title="El segmento" description="Cómo lo reconoces en las campañas y para qué sirve.">
+          <Campo id="nombre" etiqueta="Nombre del segmento">
+            {(control) => (
+              <Input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej. Clientes de Punta Cana" maxLength={80} {...control} />
+            )}
+          </Campo>
+          <Campo id="descripcion" etiqueta="Descripción" opcional>
+            {(control) => (
+              <Textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} placeholder="Para qué se usa este segmento" rows={2} maxLength={300} {...control} />
+            )}
+          </Campo>
+        </FormSection>
 
-          <Card>
-            <CardContent className="space-y-4 p-5">
-              <div className="flex items-center gap-2">
-                <Layers className="h-4 w-4 text-muted-foreground" />
-                <h2 className="font-semibold">Condiciones</h2>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Clientes que cumplan: se combinan con el operador de la raíz.
-              </p>
+        <FormSection apilada title="Condiciones" description="Clientes que cumplan: se combinan con el operador de la raíz. Agrega grupos para mezclar «y» con «o».">
+          <GrupoEditor nivel={0} grupo={raiz} esRaiz opciones={opciones} onChange={setRaiz} onQuitarCampo={() => {}} />
+        </FormSection>
 
-              <GrupoEditor
-                nivel={0}
-                grupo={raiz}
-                esRaiz
-                opciones={opciones}
-                onChange={setRaiz}
-                onQuitarCampo={() => {}}
-              />
+        {state.error && (
+          <p role="alert" className="text-small font-medium text-destructive">
+            {state.error}
+          </p>
+        )}
 
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() =>
-                  setRaiz({
-                    ...raiz,
-                    condiciones: [
-                      ...raiz.condiciones,
-                      { campo: 'cliente.cityId', operador: 'eq', valor: '' },
-                    ],
-                  })
-                }
-              >
-                <Plus className="h-4 w-4" /> Agregar condición
-              </Button>
-
-              {state.error && (
-                <p className="text-sm font-medium text-destructive">{state.error}</p>
-              )}
-
-              <div className="flex justify-end gap-2 pt-2">
-                <Button type="button" variant="outline" onClick={() => router.back()}>
-                  Cancelar
-                </Button>
-                <Button type="submit" disabled={pending || !nombre.trim()}>
-                  {pending && <Loader2 className="h-4 w-4 animate-spin" />}
-                  {segmentoId ? 'Guardar cambios' : 'Crear segmento'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-          {segmentoId ? <input type="hidden" name="segmentoId" value={segmentoId} /> : null}
-        </form>
-      </div>
+        <FormActions>
+          <Button type="button" variant="ghost" onClick={() => router.back()}>
+            Cancelar
+          </Button>
+          <Button type="submit" loading={pending} disabled={!nombre.trim()}>
+            {segmentoId ? 'Guardar cambios' : 'Crear segmento'}
+          </Button>
+        </FormActions>
+        {segmentoId ? <input type="hidden" name="segmentoId" value={segmentoId} /> : null}
+      </form>
 
       {/* Vista previa en vivo */}
       <Card className="h-fit lg:sticky lg:top-4">
         <CardContent className="space-y-4 p-5">
-          <h2 className="font-semibold">Audiencia estimada</h2>
-          <p className="text-xs text-muted-foreground">
-            Solo agregados, nunca datos personales. El consentimiento de marketing geo es
-            obligatorio.
-          </p>
-          <Button type="button" variant="secondary" onClick={estimar} disabled={estimando}>
-            {estimando && <Loader2 className="h-4 w-4 animate-spin" />}
+          <div>
+            <h2 className="text-h4 text-foreground">Audiencia estimada</h2>
+            <p className="mt-1 text-caption text-muted-foreground">
+              Solo agregados, nunca datos personales. El consentimiento de marketing geo es obligatorio.
+            </p>
+          </div>
+          <Button type="button" variant="secondary" onClick={estimar} loading={estimando}>
             Estimar audiencia
           </Button>
           {preview?.error && (
-            <p className="text-sm font-medium text-destructive">{preview.error}</p>
+            <p role="alert" className="text-small font-medium text-destructive">
+              {preview.error}
+            </p>
           )}
-          {preview?.estimacion && (
-            <PreviewPanel estimacion={preview.estimacion} />
-          )}
+          {preview?.estimacion && <PreviewPanel estimacion={preview.estimacion} />}
         </CardContent>
       </Card>
     </div>
@@ -297,27 +252,27 @@ function GrupoEditor({ nivel, grupo, esRaiz, opciones, onChange, onQuitarCampo }
 
   return (
     <div
-      className={`space-y-3 rounded-lg border p-3 ${
-        esRaiz ? 'border-border bg-background' : 'border-dashed bg-muted/30'
+      className={`space-y-3 rounded-xl border p-4 ${
+        esRaiz ? 'border-border bg-card' : 'border-dashed border-border bg-muted/30'
       }`}
     >
       <div className="flex items-center justify-between gap-2">
         {!esRaiz ? (
-          <span className="text-xs font-medium text-muted-foreground">Grupo</span>
+          <span className="text-caption font-medium text-muted-foreground">Grupo</span>
         ) : (
-          <span className="text-xs font-medium text-muted-foreground">Combinar condiciones</span>
+          <span className="text-caption font-medium text-muted-foreground">Combinar condiciones</span>
         )}
         <div className="flex items-center gap-2">
-          <select
+          <SelectNativo
             aria-label="Cómo se combinan las condiciones del grupo"
-            className="rounded border bg-background px-2 py-1 text-sm"
+            className="h-9 w-auto"
             value={grupo.operador}
             onChange={(e) => onChange({ ...grupo, operador: e.target.value as GrupoUI['operador'] })}
           >
             <option value="AND">{etiquetaOperadorGrupo('AND')}</option>
             <option value="OR">{etiquetaOperadorGrupo('OR')}</option>
             <option value="NOT">{etiquetaOperadorGrupo('NOT')}</option>
-          </select>
+          </SelectNativo>
           {!esRaiz && (
             <Button
               type="button"
@@ -368,10 +323,10 @@ function GrupoEditor({ nivel, grupo, esRaiz, opciones, onChange, onQuitarCampo }
         />
       ))}
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <Button
           type="button"
-          variant="ghost"
+          variant="outline"
           size="sm"
           onClick={() =>
             onChange({
@@ -383,11 +338,11 @@ function GrupoEditor({ nivel, grupo, esRaiz, opciones, onChange, onQuitarCampo }
             })
           }
         >
-          <Plus className="h-3 w-3" /> Condición
+          <Plus className="h-3.5 w-3.5" aria-hidden /> Agregar condición
         </Button>
         <Button
           type="button"
-          variant="ghost"
+          variant="outline"
           size="sm"
           onClick={() =>
             onChange({
@@ -396,7 +351,7 @@ function GrupoEditor({ nivel, grupo, esRaiz, opciones, onChange, onQuitarCampo }
             })
           }
         >
-          <Layers className="h-3 w-3" /> Grupo
+          <Layers className="h-3.5 w-3.5" aria-hidden /> Agregar grupo
         </Button>
       </div>
     </div>
@@ -420,10 +375,10 @@ function FilaCondicion({ cond, opciones, onChange, onQuitar }: FilaProps) {
   }
 
   return (
-    <div className="flex w-full flex-wrap items-center gap-2 rounded-lg border bg-background p-2">
-      <select
+    <div className="flex w-full flex-wrap items-center gap-2 rounded-xl border border-border bg-background p-2">
+      <SelectNativo
         aria-label="Campo de la condición"
-        className="rounded border bg-background px-2 py-1 text-sm"
+        className="h-9 w-auto"
         value={cond.campo}
         onChange={(e) => cambiarCampo(e.target.value)}
       >
@@ -432,10 +387,10 @@ function FilaCondicion({ cond, opciones, onChange, onQuitar }: FilaProps) {
             {c.etiqueta}
           </option>
         ))}
-      </select>
-      <select
+      </SelectNativo>
+      <SelectNativo
         aria-label="Operador de la condición"
-        className="rounded border bg-background px-2 py-1 text-sm"
+        className="h-9 w-auto"
         value={cond.operador}
         onChange={(e) => {
           const op = e.target.value
@@ -455,7 +410,7 @@ function FilaCondicion({ cond, opciones, onChange, onQuitar }: FilaProps) {
             {etiquetaOperador(op)}
           </option>
         ))}
-      </select>
+      </SelectNativo>
 
       <ValorControl
         def={def}
@@ -490,40 +445,42 @@ function ValorControl({ def, cond, opciones, onChange }: ValorProps) {
   switch (def.tipo) {
     case 'bool':
       return (
-        <select
+        <SelectNativo
           aria-label="Valor de la condición"
-          className="rounded border bg-background px-2 py-1 text-sm"
+          className="h-9 w-auto"
           value={String(cond.valor ?? true)}
           onChange={(e) => onChange(e.target.value === 'true')}
         >
           <option value="true">Sí</option>
           <option value="false">No</option>
-        </select>
+        </SelectNativo>
       )
     case 'numero':
       return (
-        <input
+        <Input
           type="number"
           min={0}
-          className="w-24 rounded border bg-background px-2 py-1 text-sm"
+          aria-label="Valor de la condición"
+          className="h-9 w-24"
           value={String(cond.valor ?? 30)}
           onChange={(e) => onChange(Number(e.target.value))}
         />
       )
     case 'fecha':
       return (
-        <input
+        <Input
           type="date"
-          className="rounded border bg-background px-2 py-1 text-sm"
+          aria-label="Fecha de la condición"
+          className="h-9 w-auto"
           value={String(cond.valor ?? '')}
           onChange={(e) => onChange(e.target.value)}
         />
       )
     case 'mes':
       return (
-        <select
+        <SelectNativo
           aria-label="Mes"
-          className="rounded border bg-background px-2 py-1 text-sm"
+          className="h-9 w-auto"
           value={Number(cond.valor ?? 1)}
           onChange={(e) => onChange(Number(e.target.value))}
         >
@@ -532,15 +489,15 @@ function ValorControl({ def, cond, opciones, onChange }: ValorProps) {
               {new Date(0, m - 1, 1).toLocaleString('es-DO', { month: 'long' })}
             </option>
           ))}
-        </select>
+        </SelectNativo>
       )
     case 'radio': {
       const v = (cond.valor ?? { sucursalId: '', km: 3 }) as { sucursalId: string; km: number }
       return (
         <div className="flex items-center gap-2">
-          <select
+          <SelectNativo
             aria-label="Sucursal"
-            className="rounded border bg-background px-2 py-1 text-sm"
+            className="h-9 w-auto"
             value={v.sucursalId}
             onChange={(e) => onChange({ ...v, sucursalId: e.target.value })}
           >
@@ -550,12 +507,13 @@ function ValorControl({ def, cond, opciones, onChange }: ValorProps) {
                 {s.label}
               </option>
             ))}
-          </select>
-          <input
+          </SelectNativo>
+          <Input
             type="number"
             min={1}
             max={200}
-            className="w-20 rounded border bg-background px-2 py-1 text-sm"
+            aria-label="Radio en kilómetros"
+            className="h-9 w-20"
             value={v.km}
             onChange={(e) => onChange({ ...v, km: Number(e.target.value) })}
           />
@@ -601,12 +559,13 @@ function SelectorOpciones({
       onChange([...set])
     }
     return (
-      <div className="max-h-24 w-full max-w-xs space-y-1 overflow-y-auto rounded border bg-background p-2">
+      <div className="max-h-28 w-full max-w-xs space-y-1 overflow-y-auto rounded-xl border border-input bg-background p-2">
         {opciones.length === 0 && <p className="text-xs text-muted-foreground">Sin opciones</p>}
         {opciones.map((o) => (
           <label key={o.id} className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
+              className="size-4 accent-primary"
               checked={actual.includes(o.id)}
               onChange={() => toggle(o.id)}
             />
@@ -618,9 +577,9 @@ function SelectorOpciones({
   }
 
   return (
-    <select
+    <SelectNativo
       aria-label="Valor"
-      className="max-w-xs rounded border bg-background px-2 py-1 text-sm"
+      className="h-9 w-auto max-w-xs"
       value={actual}
       onChange={(e) => onChange(e.target.value)}
     >
@@ -630,6 +589,6 @@ function SelectorOpciones({
           {o.label}
         </option>
       ))}
-    </select>
+    </SelectNativo>
   )
 }
