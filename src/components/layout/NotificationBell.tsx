@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   AlertTriangle,
@@ -85,6 +85,20 @@ export function NotificationBell({ initialCount }: { initialCount: number }) {
   const [notifs, setNotifs] = useState<Notificacion[] | null>(null)
   const [, startTransition] = useTransition()
   const router = useRouter()
+  const botonRef = useRef<HTMLButtonElement>(null)
+
+  // Escape cierra el panel y devuelve el foco a la campana, como cualquier menú desplegable. Solo se cerraba con un clic
+  // fuera: con el teclado no había forma de salir.
+  useEffect(() => {
+    if (!open) return
+    function alPulsar(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      setOpen(false)
+      botonRef.current?.focus()
+    }
+    window.addEventListener('keydown', alPulsar)
+    return () => window.removeEventListener('keydown', alPulsar)
+  }, [open])
 
   function handleOpen() {
     if (!open && notifs === null) {
@@ -125,7 +139,9 @@ export function NotificationBell({ initialCount }: { initialCount: number }) {
   return (
     <div className="relative">
       <button
+        ref={botonRef}
         onClick={handleOpen}
+        aria-expanded={open}
         className="relative flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
         aria-label={count > 0 ? `Notificaciones (${count} sin leer)` : 'Notificaciones'}
       >

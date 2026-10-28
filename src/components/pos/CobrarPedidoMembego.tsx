@@ -10,8 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { PAGO_INICIAL, PagoFormulario, type EstadoDePago } from './PagoFormulario'
-
-const rd = (n: number | string) => `RD$${Number(n).toLocaleString('es-DO', { minimumFractionDigits: 2 })}`
+import { formatRD } from '@/lib/format'
 
 /**
  * Cobrar el pedido de quien llega con su QR (del marketplace o el cupón de una oferta). Quien cobra
@@ -100,9 +99,9 @@ export function CobrarPedidoMembego({ cajaSesionId }: { cajaSesionId: string }) 
             <CheckCircle2 className="h-4 w-4" aria-hidden /> Pedido {hecho.code} {hecho.transaccion ? 'cobrado y entregado' : 'entregado (ya estaba pagado)'}
           </p>
           <p className="mt-1 text-sm text-foreground">
-            {rd(hecho.total)}
+            {formatRD(hecho.total)}
             {hecho.transaccion ? ` · ticket ${hecho.transaccion.ticketNumero}` : ' · no entró dinero a la caja'}
-            {hecho.cambio ? ` · cambio ${rd(hecho.cambio)}` : ''}
+            {hecho.cambio ? ` · cambio ${formatRD(hecho.cambio)}` : ''}
           </p>
           <Button type="button" variant="outline" size="sm" className="mt-3" onClick={reiniciar}>
             Cobrar otro
@@ -120,7 +119,7 @@ export function CobrarPedidoMembego({ cajaSesionId }: { cajaSesionId: string }) 
               {pedido.oferta && <p className="text-sm font-medium text-primary">Oferta «{pedido.oferta}»: el precio ya trae el descuento.</p>}
               <p className="text-xs text-muted-foreground">{pedido.confirmado ? 'El cliente confirmó este monto en su teléfono.' : 'El cliente todavía no confirmó el monto.'}</p>
             </div>
-            <p className="text-h3 tabular-nums text-foreground">{rd(pedido.total)}</p>
+            <p className="text-h3 tabular-nums text-foreground">{formatRD(pedido.total)}</p>
           </div>
           <ul className="divide-y divide-border/50 text-sm" aria-label="Renglones del pedido">
             {pedido.lineas.map((l, i) => (
@@ -128,7 +127,7 @@ export function CobrarPedidoMembego({ cajaSesionId }: { cajaSesionId: string }) 
                 <span>
                   {l.cantidad} × {l.descripcion}
                 </span>
-                <span className="tabular-nums">{rd(l.total)}</span>
+                <span className="tabular-nums">{formatRD(l.total)}</span>
               </li>
             ))}
           </ul>
@@ -136,7 +135,7 @@ export function CobrarPedidoMembego({ cajaSesionId }: { cajaSesionId: string }) 
             <div className="space-y-3" data-testid="pos-ya-pagado">
               <p className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm text-foreground">
                 Este pedido <strong>ya está pagado</strong>: {pedido.pagoRegistrado.metodo}
-                {pedido.pagoRegistrado.referencia ? ` · ref. ${pedido.pagoRegistrado.referencia}` : ''} · {rd(pedido.pagoRegistrado.monto)}. No se cobra otra vez: entrégalo.
+                {pedido.pagoRegistrado.referencia ? ` · ref. ${pedido.pagoRegistrado.referencia}` : ''} · {formatRD(pedido.pagoRegistrado.monto)}. No se cobra otra vez: entrégalo.
               </p>
               <Button type="button" className="w-full py-5 text-base font-semibold" disabled={pending} onClick={() => cobrar(true)}>
                 {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -148,7 +147,7 @@ export function CobrarPedidoMembego({ cajaSesionId }: { cajaSesionId: string }) 
               <PagoFormulario valor={pago} onChange={setPago} total={Number(pedido.total)} prefijo="pos-cobro" />
               <Button type="button" className="w-full py-5 text-base font-semibold" disabled={pending} onClick={() => cobrar()}>
                 {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Cobrar {rd(pedido.total)} y entregar
+                Cobrar {formatRD(pedido.total)} y entregar
               </Button>
             </>
           ) : (

@@ -21,8 +21,7 @@ import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
 import { CreditCard, HeartHandshake } from 'lucide-react'
 import { Tabla } from '@/components/ui/tabla'
 import { EstadoChip, type TonoEstado } from '@/components/ui/estado-chip'
-
-const fmtRD = (n: number) => `RD$${n.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`
+import { formatRD } from '@/lib/format'
 
 const TONO_GIFTCARD: Record<string, TonoEstado> = {
   PENDIENTE_PAGO: 'aviso',
@@ -257,7 +256,7 @@ export default async function RegalosAdminPage({
           <p className="text-xs text-muted-foreground">
             {giftCards.kpis.porCobrar} por cobrar · {giftCards.kpis.activas} activa
             {giftCards.kpis.activas !== 1 ? 's' : ''} · saldo vigente{' '}
-            {fmtRD(giftCards.kpis.saldoVigente)}
+            {formatRD(giftCards.kpis.saldoVigente)}
           </p>
         </div>
 
@@ -295,8 +294,8 @@ export default async function RegalosAdminPage({
                   </div>
                 ),
               },
-              { clave: 'monto', encabezado: 'Monto', alineacion: 'derecha', celda: (g) => <span className="font-semibold text-foreground">{fmtRD(g.monto)}</span> },
-              { clave: 'saldo', encabezado: 'Saldo', alineacion: 'derecha', celda: (g) => (g.estado === 'PENDIENTE_PAGO' ? '—' : fmtRD(g.saldo)) },
+              { clave: 'monto', encabezado: 'Monto', alineacion: 'derecha', celda: (g) => <span className="font-semibold text-foreground">{formatRD(g.monto)}</span> },
+              { clave: 'saldo', encabezado: 'Saldo', alineacion: 'derecha', celda: (g) => (g.estado === 'PENDIENTE_PAGO' ? '—' : formatRD(g.saldo)) },
               {
                 clave: 'estado',
                 encabezado: 'Estado',

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Tabla, type Columna } from '@/components/ui/tabla'
 import { EstadoChip, type TonoEstado } from '@/components/ui/estado-chip'
+import { formatRD } from '@/lib/format'
 
 /**
  * EL HISTORIAL DE COMPROBANTES, EN LA `Tabla` DE SERVIDOR (auditoría admin · fase 7, tarea 7.1; 06 · T-01, T-06, T-15).
@@ -51,13 +52,12 @@ export function estadoDeComprobante(estado: string): { etiqueta: string; tono: T
   return ESTADO_COMPROBANTE[estado] ?? { etiqueta: estado, tono: 'neutro' }
 }
 
-const fmtRD = (n: number) => `RD$${n.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`
 const fmtFecha = (d: Date) =>
   new Intl.DateTimeFormat('es-DO', { timeZone: 'America/Santo_Domingo', dateStyle: 'medium', timeStyle: 'short' }).format(d)
 
 /** Lo que se lee en la columna Total: un cobro con su monto; una venta sin monto, un guion; una entrega sin cobro, «GRATIS». */
 export function totalDeComprobante(tipo: string, monto: number | null): string {
-  if (monto != null && monto > 0) return fmtRD(monto)
+  if (monto != null && monto > 0) return formatRD(monto)
   return tipo === 'SALE' ? '—' : 'GRATIS'
 }
 

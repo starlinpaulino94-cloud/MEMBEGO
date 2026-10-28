@@ -10,8 +10,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { PAGO_INICIAL, PagoFormulario, type EstadoDePago } from './PagoFormulario'
+import { formatRD } from '@/lib/format'
 
-const rd = (n: number | string) => `RD$${Number(n).toLocaleString('es-DO', { minimumFractionDigits: 2 })}`
 const nuevaClave = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 
 interface Renglon {
@@ -117,8 +117,8 @@ export function VentaMostrador({ cajaSesionId }: { cajaSesionId: string }) {
           <CheckCircle2 className="h-4 w-4" aria-hidden /> Venta {hecha.code} cobrada
         </p>
         <p className="mt-1 text-sm text-foreground">
-          {rd(hecha.total)} · ticket {hecha.transaccion.ticketNumero}
-          {hecha.cambio ? ` · cambio ${rd(hecha.cambio)}` : ''}
+          {formatRD(hecha.total)} · ticket {hecha.transaccion.ticketNumero}
+          {hecha.cambio ? ` · cambio ${formatRD(hecha.cambio)}` : ''}
           {hecha.repetido ? ' · (ya estaba registrada)' : ''}
         </p>
         <Button type="button" variant="outline" size="sm" className="mt-3" onClick={reiniciar}>
@@ -156,7 +156,7 @@ export function VentaMostrador({ cajaSesionId }: { cajaSesionId: string }) {
                 <span className="text-xs text-muted-foreground">{p.disponible === null ? 'Servicio' : p.disponible > 0 ? `${p.disponible} disponibles` : 'Agotado'}</span>
               </span>
               <span className="flex shrink-0 items-center gap-3">
-                <span className="tabular-nums">{rd(p.precio)}</span>
+                <span className="tabular-nums">{formatRD(p.precio)}</span>
                 <Button type="button" size="sm" variant="outline" disabled={p.disponible !== null && p.disponible <= 0} onClick={() => agregar(p)} aria-label={`Agregar ${p.etiqueta}`}>
                   <Plus className="h-4 w-4" aria-hidden />
                 </Button>
@@ -184,7 +184,7 @@ export function VentaMostrador({ cajaSesionId }: { cajaSesionId: string }) {
                   <Button type="button" size="sm" variant="outline" onClick={() => cambiar(r.producto.varianteId, 1)} aria-label={`Una más de ${r.producto.etiqueta}`}>
                     <Plus className="h-3.5 w-3.5" aria-hidden />
                   </Button>
-                  <span className="w-24 text-right tabular-nums">{rd(Number(r.producto.precio) * r.cantidad)}</span>
+                  <span className="w-24 text-right tabular-nums">{formatRD(Number(r.producto.precio) * r.cantidad)}</span>
                   <Button type="button" size="sm" variant="ghost" onClick={() => quitar(r.producto.varianteId)} aria-label={`Quitar ${r.producto.etiqueta}`}>
                     <Trash2 className="h-3.5 w-3.5" aria-hidden />
                   </Button>
@@ -239,13 +239,13 @@ export function VentaMostrador({ cajaSesionId }: { cajaSesionId: string }) {
           <p className="flex items-baseline justify-between border-t border-border/60 pt-3 text-h3 text-foreground">
             <span>Total</span>
             <span className="tabular-nums" data-testid="pos-total">
-              {rd(total)}
+              {formatRD(total)}
             </span>
           </p>
           <PagoFormulario valor={pago} onChange={setPago} total={total} prefijo="pos-venta" />
           <Button type="button" className="w-full py-5 text-base font-semibold" disabled={pending} onClick={cobrar}>
             {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Cobrar {rd(total)}
+            Cobrar {formatRD(total)}
           </Button>
         </>
       )}

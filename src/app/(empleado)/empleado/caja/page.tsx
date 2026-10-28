@@ -27,6 +27,7 @@ import { VentaMostrador } from '@/components/pos/VentaMostrador'
 import { posPermitido } from '@/modules/pos/capacidades'
 import Link from 'next/link'
 import { Banknote, Clock, Store, User as UserIcon } from 'lucide-react'
+import { formatRD } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,9 +39,6 @@ const fmtHora = (d: Date) =>
     hour: 'numeric',
     minute: '2-digit',
   }).format(d)
-
-const fmtRD = (n: number) =>
-  `RD$${n.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`
 
 const fmtFechaCorta = (d: Date) =>
   new Intl.DateTimeFormat('es-DO', {
@@ -110,8 +108,8 @@ export default async function CajaPage({
                 : dif === 0
                   ? 'Cuadrada'
                   : dif > 0
-                    ? `Sobrante ${fmtRD(dif)}`
-                    : `Faltante ${fmtRD(Math.abs(dif))}`
+                    ? `Sobrante ${formatRD(dif)}`
+                    : `Faltante ${formatRD(Math.abs(dif))}`
             return (
               <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
                 <div className="min-w-0">
@@ -233,7 +231,7 @@ export default async function CajaPage({
           </div>
           <div className="text-right">
             <p className="text-caption text-muted-foreground">Efectivo en caja (esperado)</p>
-            <p className="text-h2 tabular-nums text-foreground">{fmtRD(esperado)}</p>
+            <p className="text-h2 tabular-nums text-foreground">{formatRD(esperado)}</p>
           </div>
         </div>
 
@@ -241,9 +239,9 @@ export default async function CajaPage({
         <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[
             { label: 'Cobros', valor: String(resumen.cobros) },
-            { label: 'Efectivo', valor: fmtRD(resumen.totalEfectivo) },
-            { label: 'Transferencia', valor: fmtRD(resumen.totalTransferencia) },
-            { label: 'Total del turno', valor: fmtRD(resumen.total) },
+            { label: 'Efectivo', valor: formatRD(resumen.totalEfectivo) },
+            { label: 'Transferencia', valor: formatRD(resumen.totalTransferencia) },
+            { label: 'Total del turno', valor: formatRD(resumen.total) },
           ].map((s) => (
             <div key={s.label} className="rounded-2xl bg-card/70 p-3">
               <dt className="text-caption text-muted-foreground">{s.label}</dt>
@@ -316,7 +314,7 @@ export default async function CajaPage({
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
                   <div className="text-right">
-                    <p className="font-semibold tabular-nums text-foreground">{fmtRD(c.monto)}</p>
+                    <p className="font-semibold tabular-nums text-foreground">{formatRD(c.monto)}</p>
                     <p className="text-overline text-muted-foreground">
                       {c.metodoCobro ?? ''} · {fmtHora(c.createdAt)}
                     </p>

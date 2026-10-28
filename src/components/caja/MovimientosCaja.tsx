@@ -14,10 +14,10 @@ import type { MovimientosSesion } from '@/modules/caja/queries'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { formatRD } from '@/lib/format'
 
 const initial: CajaActionState = {}
 
-const fmtRD = (n: number) => `RD$${n.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`
 const fmtHora = (d: Date) =>
   new Intl.DateTimeFormat('es-DO', {
     timeZone: 'America/Santo_Domingo',
@@ -82,12 +82,12 @@ export function MovimientosCaja({
         <>
           <div className="mt-4 flex flex-wrap gap-3 text-caption">
             <span className="inline-flex items-center gap-1 text-success">
-              <ArrowDownCircle className="h-3.5 w-3.5" /> Entradas {fmtRD(movimientos.entrada)}
+              <ArrowDownCircle className="h-3.5 w-3.5" /> Entradas {formatRD(movimientos.entrada)}
             </span>
             <span className="inline-flex items-center gap-1 text-destructive">
-              <ArrowUpCircle className="h-3.5 w-3.5" /> Salidas {fmtRD(movimientos.salida)}
+              <ArrowUpCircle className="h-3.5 w-3.5" /> Salidas {formatRD(movimientos.salida)}
             </span>
-            <span className="font-semibold text-foreground">Neto {fmtRD(movimientos.neto)}</span>
+            <span className="font-semibold text-foreground">Neto {formatRD(movimientos.neto)}</span>
           </div>
           <ul className="mt-3 divide-y divide-border/50">
             {movimientos.items.map((m) => (
@@ -102,7 +102,7 @@ export function MovimientosCaja({
                 <span
                   className={`shrink-0 font-semibold tabular-nums ${m.tipo === 'ENTRADA' ? 'text-success' : 'text-destructive'}`}
                 >
-                  {m.tipo === 'ENTRADA' ? '+' : '−'}{fmtRD(m.monto)}
+                  {m.tipo === 'ENTRADA' ? '+' : '−'}{formatRD(m.monto)}
                 </span>
               </li>
             ))}
