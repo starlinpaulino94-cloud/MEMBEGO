@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Trophy, Megaphone, LayoutGrid, Bell } from 'lucide-react'
+import { Trophy, Megaphone, LayoutGrid, Bell } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   guardarPersonalizacion,
@@ -11,6 +11,7 @@ import {
 import type { EngagementConfig } from '@/lib/engagementConfig'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { FormActions, FormSection } from '@/components/ui/form-section'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
 const init: PersonalizacionState = {}
@@ -57,28 +58,16 @@ export function PersonalizacionForm({ config }: { config: EngagementConfig }) {
   }, [state.success, router])
 
   return (
-    <form action={formAction} className="max-w-2xl space-y-6">
+    <form action={formAction} className="max-w-3xl space-y-8">
       {state.error && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" role="alert">
           <AlertDescription>{state.error}</AlertDescription>
         </Alert>
       )}
 
-      {/* Color de marca */}
-      <div className="space-y-3 rounded-xl border border-border p-5">
-        <h3 className="font-semibold text-foreground">Color de acento</h3>
-        <p className="text-sm text-muted-foreground">
-          Es el color de marca del negocio y también se usa en sus membresías y ofertas.
-        </p>
+      <FormSection title="Color de acento" description="Es el color de marca del negocio y también se usa en sus membresías y ofertas.">
         <div className="flex items-center gap-3">
-          <Input
-            name="color"
-            type="color"
-            aria-label="Color de acento"
-            value={color}
-            onChange={(e) => setColor(e.target.value)}
-            className="h-11 w-20 p-1"
-          />
+          <Input name="color" type="color" aria-label="Color de acento" value={color} onChange={(e) => setColor(e.target.value)} className="h-11 w-20 p-1" />
           <span
             className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-white"
             style={{ backgroundColor: color }}
@@ -87,41 +76,33 @@ export function PersonalizacionForm({ config }: { config: EngagementConfig }) {
             Vista previa
           </span>
         </div>
-      </div>
+      </FormSection>
 
-      {/* Módulos */}
-      <div className="space-y-3 rounded-xl border border-border p-5">
-        <h3 className="font-semibold text-foreground">¿Qué mostrar en el inicio?</h3>
+      <FormSection title="Qué mostrar en el inicio" description="Los módulos que ven tus clientes al abrir la app. Apaga los que no uses.">
         <div className="space-y-2">
           {MODULOS.map((m) => (
             <label
               key={m.key}
               className="flex cursor-pointer items-start gap-3 rounded-xl border border-border p-4 has-[:checked]:border-primary/40 has-[:checked]:bg-primary/5"
             >
-              <input
-                type="checkbox"
-                name={m.key}
-                defaultChecked={config[m.key]}
-                className="mt-1 h-4 w-4 accent-primary"
-              />
+              <input type="checkbox" name={m.key} defaultChecked={config[m.key]} className="mt-1 size-4 accent-primary" />
               <span className="flex items-start gap-2.5">
                 <m.icon className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
                 <span>
                   <span className="block text-sm font-medium text-foreground">{m.titulo}</span>
-                  <span className="block text-xs text-muted-foreground">{m.desc}</span>
+                  <span className="block text-caption text-muted-foreground">{m.desc}</span>
                 </span>
               </span>
             </label>
           ))}
         </div>
-      </div>
+      </FormSection>
 
-      <div className="flex justify-end">
-        <Button type="submit" disabled={pending} className="gap-2">
-          {pending && <Loader2 className="h-4 w-4 animate-spin" />}
+      <FormActions>
+        <Button type="submit" loading={pending}>
           Guardar personalización
         </Button>
-      </div>
+      </FormActions>
     </form>
   )
 }

@@ -2,17 +2,16 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { crearOferta, editarOferta } from '@/modules/deals/actions'
 import { AYUDA_TIPO_DESCUENTO, ETIQUETA_TIPO_DESCUENTO } from '@/modules/deals/formato'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { Campo } from '@/components/ui/campo'
+import { FormActions, FormSection } from '@/components/ui/form-section'
+import { SelectNativo } from '@/components/ui/select-nativo'
 import { Textarea } from '@/components/ui/textarea'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-
-const campoSelector = 'h-9 w-full rounded-lg border border-input bg-background px-3 text-sm'
 
 export interface ProductoParaOferta {
   id: string
@@ -81,6 +80,11 @@ interface Props {
   soloAjustes?: boolean
 }
 
+/** Al crear, cada sección lleva su título a la izquierda; al editar dentro de la ficha (una tarjeta) va compacta. Fuera del componente: definida dentro se volvería a montar en cada tecla y los campos perderían el foco. */
+function Seccion({ compacta, title, description, children }: { compacta: boolean; title: string; description: string; children: React.ReactNode }) {
+  return compacta ? <div className="space-y-4">{children}</div> : <FormSection title={title} description={description}>{children}</FormSection>
+}
+
 /**
  * Alta o edición de una oferta. Todo lo que se escribe es TEXTO: el servidor lo lee, lo valida y
  * calcula (el navegador no manda precios finales, cuotas ni estados). La cuota por canje se
@@ -128,142 +132,170 @@ export function OfertaForm({ productos, promociones = [], cuota, moneda, ofertaI
     })
   }
 
+  const accion = (
+    <Button type="submit" loading={pending}>
+      {ofertaId ? 'Guardar cambios' : 'Crear borrador'}
+    </Button>
+  )
+
   return (
-    <form onSubmit={enviar} className="max-w-2xl space-y-5">
+    <form onSubmit={enviar} className={ofertaId ? 'max-w-2xl space-y-5' : 'space-y-8'}>
       {error && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" role="alert">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
-      <div className="space-y-2">
-        <Label htmlFor="title">Título</Label>
-        <Input id="title" value={v.title} onChange={(e) => set('title', e.target.value)} maxLength={120} placeholder="20 % en el lavado básico" required />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="description">Descripción (opcional)</Label>
-        <Textarea id="description" value={v.description} onChange={(e) => set('description', e.target.value)} maxLength={600} rows={3} />
-      </div>
+      <Seccion compacta={Boolean(ofertaId)} title="La oferta" description="Cómo se llama y qué ve el cliente en el marketplace.">
+        <Campo id="title" etiqueta="Título">
+          {(control) => (
+            <Input value={v.title} onChange={(e) => set('title', e.target.value)} maxLength={120} placeholder="20 % en el lavado básico" required {...control} />
+          )}
+        </Campo>
+        <Campo id="description" etiqueta="Descripción" opcional>
+          {(control) => <Textarea value={v.description} onChange={(e) => set('description', e.target.value)} maxLength={600} rows={3} {...control} />}
+        </Campo>
+      </Seccion>
 
       {!soloAjustes && (
         <>
-          <div className="space-y-2">
-            <Label htmlFor="catalogVariantId">Qué ofreces</Label>
-            <select id="catalogVariantId" className={campoSelector} value={v.catalogVariantId} onChange={(e) => set('catalogVariantId', e.target.value)} required>
-              <option value="">Elige un producto o servicio de tu catálogo…</option>
-              {productos.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.etiqueta} — {p.precio} {p.currency}
-                </option>
-              ))}
-            </select>
-            {productos.length === 0 && <p className="text-xs text-muted-foreground">No tienes productos o servicios publicados que se vendan por el marketplace. Publica uno en el catálogo primero.</p>}
-          </div>
-
-          {!ofertaId && promociones.length > 0 && (
-            <div className="space-y-2">
-              <Label htmlFor="promotionId">Condición de acceso (opcional)</Label>
-              <select id="promotionId" className={campoSelector} value={v.promotionId} onChange={(e) => set('promotionId', e.target.value)}>
-                <option value="">Disponible para todos los clientes elegibles</option>
-                {promociones.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-              </select>
-              <p className="text-xs text-muted-foreground">Las reglas activas se validan en el servidor al reclamar. Los cupones ya emitidos conservan sus condiciones de canje.</p>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="discountType">Tipo de descuento</Label>
-              <select id="discountType" className={campoSelector} value={v.discountType} onChange={(e) => set('discountType', e.target.value as ValoresDeOferta['discountType'])}>
-                {(Object.keys(ETIQUETA_TIPO_DESCUENTO) as ValoresDeOferta['discountType'][]).map((t) => (
-                  <option key={t} value={t}>
-                    {ETIQUETA_TIPO_DESCUENTO[t]}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="discountValue">Descuento</Label>
-              <Input id="discountValue" inputMode="decimal" value={v.discountValue} onChange={(e) => set('discountValue', e.target.value)} required />
-              <p className="text-xs text-muted-foreground">{AYUDA_TIPO_DESCUENTO[v.discountType]}</p>
-            </div>
-          </div>
-          {producto && (
-            <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm" aria-live="polite">
-              <p className="text-xs text-muted-foreground">Así lo verá el cliente</p>
-              <p className="mt-0.5">
-                <span className="text-muted-foreground">Antes:</span>{' '}
-                <span className={vista && vista.ahorro > 0 ? 'line-through' : ''}>{producto.precio} {producto.currency}</span>
-                {vista && vista.ahorro > 0 && (
-                  <>
-                    {' · '}
-                    <span className="text-muted-foreground">Ahora:</span> <strong>{vista.precio.toFixed(2)} {producto.currency}</strong>
-                    <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">ahorra {vista.ahorro.toFixed(2)}</span>
-                  </>
-                )}
-              </p>
-              {producto.sinStock && (
-                <p className="mt-1 text-xs text-warning">
-                  Este producto está agotado ahora mismo. La oferta se crea igual, pero el marketplace la mostrará como «Agotado» y nadie podrá obtenerla hasta que entres existencias en Inventario. Crear la oferta no cambia el stock.
-                </p>
+          <Seccion compacta={Boolean(ofertaId)} title="Qué ofreces" description="El producto o servicio de tu catálogo y quién puede obtener la oferta.">
+            <Campo
+              id="catalogVariantId"
+              etiqueta="Producto o servicio"
+              ayuda={
+                productos.length === 0
+                  ? 'No tienes productos o servicios publicados que se vendan por el marketplace. Publica uno en el catálogo primero.'
+                  : undefined
+              }
+            >
+              {(control) => (
+                <SelectNativo value={v.catalogVariantId} onChange={(e) => set('catalogVariantId', e.target.value)} required {...control}>
+                  <option value="">Elige un producto o servicio de tu catálogo…</option>
+                  {productos.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.etiqueta} — {p.precio} {p.currency}
+                    </option>
+                  ))}
+                </SelectNativo>
               )}
-            </div>
-          )}
+            </Campo>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="maxClaims">Cuántos clientes pueden obtenerla</Label>
-              <Input id="maxClaims" inputMode="numeric" value={v.maxClaims} onChange={(e) => set('maxClaims', e.target.value)} required />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="budgetTotal">Presupuesto máximo ({moneda})</Label>
-              <Input id="budgetTotal" inputMode="decimal" value={v.budgetTotal} onChange={(e) => set('budgetTotal', e.target.value)} required />
-              <p className="text-xs text-muted-foreground">
-                {cuota
-                  ? `Membego cobra ${cuota} ${moneda} por cada oferta canjeada${canjes !== null ? `: con este presupuesto alcanzan ${canjes} canjes` : ''}. Es un tope, no un pago por adelantado.`
-                  : 'La cuota por canje se toma de la tarifa de tu cuenta Membego al crear la oferta. El presupuesto es un tope, no un pago por adelantado.'}
-              </p>
-            </div>
-          </div>
+            {!ofertaId && promociones.length > 0 && (
+              <Campo
+                id="promotionId"
+                etiqueta="Condición de acceso"
+                opcional
+                ayuda="Las reglas activas se validan en el servidor al reclamar. Los cupones ya emitidos conservan sus condiciones de canje."
+              >
+                {(control) => (
+                  <SelectNativo value={v.promotionId} onChange={(e) => set('promotionId', e.target.value)} {...control}>
+                    <option value="">Disponible para todos los clientes elegibles</option>
+                    {promociones.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.nombre}
+                      </option>
+                    ))}
+                  </SelectNativo>
+                )}
+              </Campo>
+            )}
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="startsAt">Empieza (opcional)</Label>
-              <Input id="startsAt" type="date" value={v.startsAt} onChange={(e) => set('startsAt', e.target.value)} />
-              <p className="text-xs text-muted-foreground">Vacío = en cuanto la publiques.</p>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" className="size-4 rounded border-input" checked={v.newCustomersOnly} onChange={(e) => set('newCustomersOnly', e.target.checked)} />
+              Solo para clientes nuevos (quien nunca ha completado un pedido contigo)
+            </label>
+          </Seccion>
+
+          <Seccion compacta={Boolean(ofertaId)} title="El descuento" description="Cuánto rebajas. Abajo ves cómo lo verá el cliente.">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Campo id="discountType" etiqueta="Tipo de descuento">
+                {(control) => (
+                  <SelectNativo value={v.discountType} onChange={(e) => set('discountType', e.target.value as ValoresDeOferta['discountType'])} {...control}>
+                    {(Object.keys(ETIQUETA_TIPO_DESCUENTO) as ValoresDeOferta['discountType'][]).map((t) => (
+                      <option key={t} value={t}>
+                        {ETIQUETA_TIPO_DESCUENTO[t]}
+                      </option>
+                    ))}
+                  </SelectNativo>
+                )}
+              </Campo>
+              <Campo id="discountValue" etiqueta="Descuento" ayuda={AYUDA_TIPO_DESCUENTO[v.discountType]}>
+                {(control) => <Input inputMode="decimal" value={v.discountValue} onChange={(e) => set('discountValue', e.target.value)} required {...control} />}
+              </Campo>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="voucherDays">Días para canjear el cupón</Label>
-              <Input id="voucherDays" inputMode="numeric" value={v.voucherDays} onChange={(e) => set('voucherDays', e.target.value)} />
-              <p className="text-xs text-muted-foreground">De 1 a 60 días desde que el cliente la obtiene.</p>
+            {producto && (
+              <div className="rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm" aria-live="polite">
+                <p className="text-caption text-muted-foreground">Así lo verá el cliente</p>
+                <p className="mt-0.5">
+                  <span className="text-muted-foreground">Antes:</span>{' '}
+                  <span className={vista && vista.ahorro > 0 ? 'line-through' : ''}>{producto.precio} {producto.currency}</span>
+                  {vista && vista.ahorro > 0 && (
+                    <>
+                      {' · '}
+                      <span className="text-muted-foreground">Ahora:</span> <strong>{vista.precio.toFixed(2)} {producto.currency}</strong>
+                      <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">ahorra {vista.ahorro.toFixed(2)}</span>
+                    </>
+                  )}
+                </p>
+                {producto.sinStock && (
+                  <p className="mt-1 text-xs text-warning-ink">
+                    Este producto está agotado ahora mismo. La oferta se crea igual, pero el marketplace la mostrará como «Agotado» y nadie podrá obtenerla hasta que entres existencias en Inventario. Crear la oferta no cambia el stock.
+                  </p>
+                )}
+              </div>
+            )}
+          </Seccion>
+
+          <Seccion compacta={Boolean(ofertaId)} title="Cupos y presupuesto" description="Cuántos clientes la obtienen y cuánto estás dispuesto a pagar por traerlos.">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Campo id="maxClaims" etiqueta="Cuántos clientes pueden obtenerla">
+                {(control) => <Input inputMode="numeric" value={v.maxClaims} onChange={(e) => set('maxClaims', e.target.value)} required {...control} />}
+              </Campo>
+              <Campo
+                id="budgetTotal"
+                etiqueta={`Presupuesto máximo (${moneda})`}
+                ayuda={
+                  cuota
+                    ? `Membego cobra ${cuota} ${moneda} por cada oferta canjeada${canjes !== null ? `: con este presupuesto alcanzan ${canjes} canjes` : ''}. Es un tope, no un pago por adelantado.`
+                    : 'La cuota por canje se toma de la tarifa de tu cuenta Membego al crear la oferta. El presupuesto es un tope, no un pago por adelantado.'
+                }
+              >
+                {(control) => <Input inputMode="decimal" value={v.budgetTotal} onChange={(e) => set('budgetTotal', e.target.value)} required {...control} />}
+              </Campo>
             </div>
-          </div>
+          </Seccion>
+
+          <Seccion compacta={Boolean(ofertaId)} title="Cuándo" description="Las fechas en que está disponible y el plazo para canjear el cupón.">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Campo id="startsAt" etiqueta="Empieza" opcional ayuda="Vacío = en cuanto la publiques.">
+                {(control) => <Input type="date" value={v.startsAt} onChange={(e) => set('startsAt', e.target.value)} {...control} />}
+              </Campo>
+              <Campo id="endsAt" etiqueta="Termina" opcional ayuda="Vale hasta el final de ese día. Vacío = sin fecha de fin.">
+                {(control) => <Input type="date" value={v.endsAt} onChange={(e) => set('endsAt', e.target.value)} {...control} />}
+              </Campo>
+            </div>
+            <Campo id="voucherDays" etiqueta="Días para canjear el cupón" ayuda="De 1 a 60 días desde que el cliente la obtiene." className="sm:max-w-xs">
+              {(control) => <Input inputMode="numeric" value={v.voucherDays} onChange={(e) => set('voucherDays', e.target.value)} {...control} />}
+            </Campo>
+          </Seccion>
         </>
       )}
 
-      <div className="space-y-2">
-        <Label htmlFor="endsAt">Termina (opcional)</Label>
-        <Input id="endsAt" type="date" value={v.endsAt} onChange={(e) => set('endsAt', e.target.value)} className="max-w-48" />
-        <p className="text-xs text-muted-foreground">Vale hasta el final de ese día. Vacío = sin fecha de fin.</p>
-      </div>
       {soloAjustes && (
-        <div className="space-y-2">
-          <Label htmlFor="maxClaims">Cuántos clientes pueden obtenerla</Label>
-          <Input id="maxClaims" inputMode="numeric" value={v.maxClaims} onChange={(e) => set('maxClaims', e.target.value)} className="max-w-48" required />
-        </div>
+        <Seccion compacta={Boolean(ofertaId)} title="Cupos y fin" description="Lo único que cambia en una oferta ya publicada.">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Campo id="endsAt" etiqueta="Termina" opcional ayuda="Vale hasta el final de ese día. Vacío = sin fecha de fin.">
+              {(control) => <Input type="date" value={v.endsAt} onChange={(e) => set('endsAt', e.target.value)} {...control} />}
+            </Campo>
+            <Campo id="maxClaims" etiqueta="Cuántos clientes pueden obtenerla">
+              {(control) => <Input inputMode="numeric" value={v.maxClaims} onChange={(e) => set('maxClaims', e.target.value)} required {...control} />}
+            </Campo>
+          </div>
+        </Seccion>
       )}
 
-      {!soloAjustes && (
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={v.newCustomersOnly} onChange={(e) => set('newCustomersOnly', e.target.checked)} />
-          Solo para clientes nuevos (quien nunca ha completado un pedido contigo)
-        </label>
-      )}
-
-      <Button type="submit" disabled={pending}>
-        {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-        {ofertaId ? 'Guardar cambios' : 'Crear borrador'}
-      </Button>
+      {ofertaId ? accion : <FormActions>{accion}</FormActions>}
     </form>
   )
 }

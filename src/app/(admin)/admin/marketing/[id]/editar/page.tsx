@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { requireRole } from '@/lib/auth/guards'
 import { ADMIN_ROLES } from '@/types'
@@ -49,8 +50,17 @@ export default async function EditarCampanaMarketingPage({
 
   const deals = await getDealsParaMarketing(companyId)
   return (
-    <div className="space-y-6">
-      <PageHeader title="Editar campaña" description="Ajusta tu oferta y su ventana de tiempo." />
+    <div className="mx-auto w-full max-w-5xl space-y-6">
+      <PageHeader
+        className="mb-0 sm:mb-0"
+        back={
+          <Link href="/admin/marketing" className="text-muted-foreground hover:text-foreground">
+            ‹ Campañas de Marketing
+          </Link>
+        }
+        title="Editar campaña"
+        description="Ajusta tu oferta y su ventana de tiempo."
+      />
       <MarketingCampaignForm existing={existing} companyId={companyId} deals={deals} />
     </div>
   )

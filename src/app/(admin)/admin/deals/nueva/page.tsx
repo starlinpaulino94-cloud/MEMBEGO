@@ -1,6 +1,5 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { ChevronLeft } from 'lucide-react'
 import { conEmpresa } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import { puedeFuncion, requireRole } from '@/lib/auth/guards'
@@ -30,12 +29,18 @@ export default async function NuevaOfertaPage({ searchParams }: { searchParams: 
   const elegido = opciones.productos.find((p) => p.id === preseleccion)
 
   return (
-    <div className="space-y-6">
-      <Link href="/admin/deals" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-        <ChevronLeft className="h-4 w-4" />
-        Ofertas
-      </Link>
-      <PageHeader title="Nueva oferta" description="Elige qué ofreces, cuánto descuentas y cuánto estás dispuesto a pagar por traer clientes. Queda como borrador hasta que la publiques." />
+    <div className="mx-auto w-full max-w-[720px] space-y-6">
+      <PageHeader
+        variant="formulario"
+        className="mb-0 sm:mb-0"
+        back={
+          <Link href="/admin/deals" className="text-muted-foreground hover:text-foreground">
+            ‹ Ofertas
+          </Link>
+        }
+        title="Nueva oferta"
+        description="Elige qué ofreces, cuánto descuentas y cuánto estás dispuesto a pagar por traer clientes. Queda como borrador hasta que la publiques."
+      />
       {opciones.suspendida && (
         <Alert variant="destructive">
           <AlertDescription>Tu cuenta Membego está suspendida: no puedes crear ofertas hasta ponerte al día.</AlertDescription>

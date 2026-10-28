@@ -1,13 +1,14 @@
 'use client'
 
 import { useActionState, useEffect, useState } from 'react'
-import { Loader2, Gift } from 'lucide-react'
+import { Gift } from 'lucide-react'
 import { toast } from 'sonner'
 import { guardarBienvenida } from '@/modules/admin/actions'
 import type { AdminActionState } from '@/modules/admin/actions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { Campo } from '@/components/ui/campo'
+import { SelectNativo } from '@/components/ui/select-nativo'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 const initial: AdminActionState = {}
@@ -53,49 +54,42 @@ export function BienvenidaConfigForm({
               value="on"
               checked={activa}
               onChange={(e) => setActiva(e.target.checked)}
-              className="h-4 w-4 rounded border-border"
+              className="size-4 rounded border-input"
             />
             Ofrecer beneficio de bienvenida
           </label>
 
           {activa && (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="bienvenida-tipo">Tipo</Label>
-                <select
-                  id="bienvenida-tipo"
-                  name="tipo"
-                  value={tipo}
-                  onChange={(e) => setTipo(e.target.value)}
-                  className="h-9 w-full rounded-lg border border-border bg-background px-3 text-sm"
-                >
-                  <option value="PORCENTAJE">Porcentaje (%)</option>
-                  <option value="MONTO">Monto fijo</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="bienvenida-valor">
-                  {tipo === 'PORCENTAJE' ? 'Porcentaje de descuento' : 'Monto de descuento'}
-                </Label>
-                <Input
-                  id="bienvenida-valor"
-                  name="valor"
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  max={tipo === 'PORCENTAJE' ? 100 : undefined}
-                  defaultValue={bienvenida.valor ?? ''}
-                  required
-                  placeholder={tipo === 'PORCENTAJE' ? '10' : '500.00'}
-                />
-              </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Campo id="bienvenida-tipo" etiqueta="Tipo">
+                {(control) => (
+                  <SelectNativo name="tipo" value={tipo} onChange={(e) => setTipo(e.target.value)} {...control}>
+                    <option value="PORCENTAJE">Porcentaje (%)</option>
+                    <option value="MONTO">Monto fijo</option>
+                  </SelectNativo>
+                )}
+              </Campo>
+              <Campo id="bienvenida-valor" etiqueta={tipo === 'PORCENTAJE' ? 'Porcentaje de descuento' : 'Monto de descuento'}>
+                {(control) => (
+                  <Input
+                    name="valor"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    max={tipo === 'PORCENTAJE' ? 100 : undefined}
+                    defaultValue={bienvenida.valor ?? ''}
+                    required
+                    placeholder={tipo === 'PORCENTAJE' ? '10' : '500.00'}
+                    {...control}
+                  />
+                )}
+              </Campo>
             </div>
           )}
           {/* Si el toggle está apagado, igual enviamos tipo para no perderlo. */}
           {!activa && <input type="hidden" name="tipo" value={tipo} />}
 
-          <Button type="submit" disabled={pending} size="sm">
-            {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          <Button type="submit" loading={pending} size="sm">
             Guardar
           </Button>
         </form>

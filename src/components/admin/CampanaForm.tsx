@@ -2,7 +2,6 @@
 
 import { useActionState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   crearCampana,
@@ -15,6 +14,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Switch } from '@/components/ui/switch'
+import { Campo } from '@/components/ui/campo'
+import { FormActions, FormSection } from '@/components/ui/form-section'
 
 interface ExistingCampana {
   id: string
@@ -46,83 +47,63 @@ export function CampanaForm({ existing }: { existing?: ExistingCampana }) {
   }, [state.success, existing, router])
 
   return (
-    <form action={formAction} className="max-w-lg space-y-5">
+    <form action={formAction} className="space-y-8">
       {existing && <input type="hidden" name="id" value={existing.id} />}
 
       {state.error && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" role="alert">
           <AlertDescription>{state.error}</AlertDescription>
         </Alert>
       )}
 
-      <div className="space-y-2">
-        <Label htmlFor="nombre">Nombre de la campaña *</Label>
-        <Input
-          id="nombre"
-          name="nombre"
-          defaultValue={existing?.nombre}
-          placeholder="Ej: Black Friday 2026"
-          required
-        />
-      </div>
+      <FormSection title="La campaña" description="Un nombre para agrupar sus promociones y publicaciones, y para qué es.">
+        <Campo id="nombre" etiqueta="Nombre de la campaña">
+          {(control) => <Input name="nombre" defaultValue={existing?.nombre} placeholder="Ej: Black Friday 2026" required {...control} />}
+        </Campo>
+        <Campo id="descripcion" etiqueta="Descripción" opcional>
+          {(control) => (
+            <Textarea name="descripcion" rows={3} defaultValue={existing?.descripcion ?? ''} placeholder="Objetivo de la campaña" {...control} />
+          )}
+        </Campo>
+      </FormSection>
 
-      <div className="space-y-2">
-        <Label htmlFor="descripcion">Descripción</Label>
-        <Textarea
-          id="descripcion"
-          name="descripcion"
-          rows={3}
-          defaultValue={existing?.descripcion ?? ''}
-          placeholder="Objetivo de la campaña"
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="fechaInicio">Inicio</Label>
-          <Input
-            id="fechaInicio"
-            name="fechaInicio"
-            type="date"
-            defaultValue={toDateInput(existing?.fechaInicio ?? null)}
-          />
+      <FormSection title="Fechas" description="Cuándo empieza y cuándo termina. Sin fechas, no tiene límite.">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Campo id="fechaInicio" etiqueta="Inicio" opcional>
+            {(control) => <Input name="fechaInicio" type="date" defaultValue={toDateInput(existing?.fechaInicio ?? null)} {...control} />}
+          </Campo>
+          <Campo id="fechaFin" etiqueta="Fin" opcional>
+            {(control) => <Input name="fechaFin" type="date" defaultValue={toDateInput(existing?.fechaFin ?? null)} {...control} />}
+          </Campo>
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="fechaFin">Fin</Label>
-          <Input
-            id="fechaFin"
-            name="fechaFin"
-            type="date"
-            defaultValue={toDateInput(existing?.fechaFin ?? null)}
-          />
-        </div>
-      </div>
+      </FormSection>
 
       {existing && (
-        <div className="flex items-center gap-3">
-          <Switch
-            id="activo"
-            name="activo"
-            defaultChecked={existing.activo}
-            value="true"
-            onCheckedChange={(checked) => {
-              const el = document.querySelector<HTMLInputElement>('input[name="activo"]')
-              if (el) el.value = String(checked)
-            }}
-          />
-          <Label htmlFor="activo">Campaña activa</Label>
-        </div>
+        <FormSection title="Estado" description="Desactívala para dejar de usarla sin borrarla.">
+          <div className="flex items-center gap-3">
+            <Switch
+              id="activo"
+              name="activo"
+              defaultChecked={existing.activo}
+              value="true"
+              onCheckedChange={(checked) => {
+                const el = document.querySelector<HTMLInputElement>('input[name="activo"]')
+                if (el) el.value = String(checked)
+              }}
+            />
+            <Label htmlFor="activo">Campaña activa</Label>
+          </div>
+        </FormSection>
       )}
 
-      <div className="flex gap-3">
-        <Button type="submit" disabled={pending}>
-          {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          {existing ? 'Guardar cambios' : 'Crear campaña'}
-        </Button>
-        <Button type="button" variant="outline" onClick={() => router.back()}>
+      <FormActions>
+        <Button type="button" variant="ghost" onClick={() => router.back()}>
           Cancelar
         </Button>
-      </div>
+        <Button type="submit" loading={pending}>
+          {existing ? 'Guardar cambios' : 'Crear campaña'}
+        </Button>
+      </FormActions>
     </form>
   )
 }

@@ -2,16 +2,18 @@
 
 import { useActionState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Gift, Loader2 } from 'lucide-react'
+import { Gift } from 'lucide-react'
 import { toast } from 'sonner'
 import { crearOfertaPrivada, type OfertaActionState } from '@/modules/ofertas/actions'
 import { ClientePicker, type ClienteOption } from '@/components/ofertas/ClientePicker'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Campo } from '@/components/ui/campo'
+import { FormActions, FormSection } from '@/components/ui/form-section'
+import { SelectNativo } from '@/components/ui/select-nativo'
 
 const init: OfertaActionState = {}
-
-const inputClase =
-  'mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring'
 
 export function CrearOfertaForm({ clientes }: { clientes: ClienteOption[] }) {
   const router = useRouter()
@@ -26,81 +28,60 @@ export function CrearOfertaForm({ clientes }: { clientes: ClienteOption[] }) {
   }, [state, router])
 
   return (
-    <form action={formAction} className="space-y-6">
-      <div className="rounded-2xl border border-border/70 bg-card p-4">
-        <h2 className="text-sm font-semibold text-foreground">El regalo</h2>
-        <div className="mt-3 space-y-3">
-          <label className="block text-xs font-medium text-muted-foreground">
-            Título
-            <input
-              name="titulo"
-              required
-              maxLength={120}
-              placeholder="Ej.: 12 lavados gratis al mes"
-              className={inputClase}
-            />
-          </label>
-          <label className="block text-xs font-medium text-muted-foreground">
-            Descripción (opcional)
-            <textarea
+    <form action={formAction} className="space-y-8">
+      <FormSection title="El regalo" description="Qué recibe el cliente y lo que ve al abrirlo.">
+        <Campo id="titulo" etiqueta="Título">
+          {(control) => <Input name="titulo" required maxLength={120} placeholder="Ej.: 12 lavados gratis al mes" {...control} />}
+        </Campo>
+        <Campo id="descripcion" etiqueta="Descripción" opcional>
+          {(control) => (
+            <Textarea
               name="descripcion"
-              rows={2}
+              rows={3}
               maxLength={500}
               placeholder="Condiciones o detalles que verá el cliente al abrir su regalo…"
-              className={inputClase}
+              {...control}
             />
-          </label>
-        </div>
-      </div>
+          )}
+        </Campo>
+      </FormSection>
 
-      <div className="rounded-2xl border border-border/70 bg-card p-4">
-        <h2 className="text-sm font-semibold text-foreground">La regla de usos</h2>
-        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <label className="text-xs font-medium text-muted-foreground">
-            Cantidad de usos
-            <input
-              type="number"
-              name="usosPorPeriodo"
-              min={1}
-              max={500}
-              defaultValue={12}
-              className={inputClase}
-            />
-          </label>
-          <label className="text-xs font-medium text-muted-foreground">
-            Se renuevan
-            <select name="periodo" defaultValue="MENSUAL" className={inputClase}>
-              <option value="MENSUAL">Cada mes</option>
-              <option value="SEMANAL">Cada semana</option>
-              <option value="TOTAL">Nunca (cupo único)</option>
-            </select>
-          </label>
-          <label className="text-xs font-medium text-muted-foreground">
-            Válido hasta (opcional)
-            <input type="date" name="vigenciaHasta" className={inputClase} />
-          </label>
+      <FormSection
+        title="La regla de usos"
+        description="Cuántas veces se puede usar y cada cuánto se renueva. Ej.: 12 usos · cada mes · válido hasta dentro de un año = 12 lavados gratis al mes por un año."
+      >
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Campo id="usosPorPeriodo" etiqueta="Cantidad de usos">
+            {(control) => <Input type="number" name="usosPorPeriodo" min={1} max={500} defaultValue={12} {...control} />}
+          </Campo>
+          <Campo id="periodo" etiqueta="Se renuevan">
+            {(control) => (
+              <SelectNativo name="periodo" defaultValue="MENSUAL" {...control}>
+                <option value="MENSUAL">Cada mes</option>
+                <option value="SEMANAL">Cada semana</option>
+                <option value="TOTAL">Nunca (cupo único)</option>
+              </SelectNativo>
+            )}
+          </Campo>
+          <Campo id="vigenciaHasta" etiqueta="Válido hasta" opcional>
+            {(control) => <Input type="date" name="vigenciaHasta" {...control} />}
+          </Campo>
         </div>
-        <p className="mt-2 text-xs text-muted-foreground">
-          Ej.: 12 usos · cada mes · válido hasta dentro de un año = 12 lavados
-          gratis al mes por un año.
-        </p>
-      </div>
+      </FormSection>
 
-      <div>
-        <h2 className="mb-2 text-sm font-semibold text-foreground">
-          ¿Quiénes reciben este regalo?
-        </h2>
+      <FormSection
+        title="Quiénes lo reciben"
+        description="Solo estas cuentas podrán reclamarlo. Si el link llega a otra persona, verá «tu cuenta no aplica para esta promoción»."
+      >
         <ClientePicker clientes={clientes} />
-        <p className="mt-2 text-xs text-muted-foreground">
-          Solo estas cuentas podrán reclamarlo. Si el link llega a otra persona,
-          verá &quot;tu cuenta no aplica para esta promoción&quot;.
-        </p>
-      </div>
+      </FormSection>
 
-      <Button type="submit" disabled={pending} className="min-h-11 gap-2 font-semibold">
-        {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Gift className="h-4 w-4" />}
-        Crear regalo y generar link
-      </Button>
+      <FormActions>
+        <Button type="submit" loading={pending}>
+          {!pending && <Gift className="h-4 w-4" aria-hidden />}
+          Crear regalo y generar link
+        </Button>
+      </FormActions>
     </form>
   )
 }

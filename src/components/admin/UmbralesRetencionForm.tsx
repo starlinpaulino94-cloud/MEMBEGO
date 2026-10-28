@@ -1,10 +1,11 @@
 'use client'
 
 import { useActionState, useEffect } from 'react'
-import { Loader2, Save } from 'lucide-react'
+import { Save } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Campo } from '@/components/ui/campo'
 import {
   guardarUmbralesRetencion,
   type UmbralesActionState,
@@ -58,24 +59,15 @@ export function UmbralesRetencionForm({ umbrales }: { umbrales: UmbralesRetencio
 
   return (
     <form action={action} className="space-y-4">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {CAMPOS.map((c) => (
-          <label key={c.clave} className="space-y-1.5 text-sm font-medium text-foreground">
-            {c.label}
-            <Input
-              type="number"
-              name={c.clave}
-              defaultValue={umbrales[c.clave]}
-              min={1}
-              max={365}
-              className="mt-1"
-            />
-            <span className="text-caption block font-normal">{c.ayuda}</span>
-          </label>
+          <Campo key={c.clave} id={c.clave} etiqueta={c.label} ayuda={c.ayuda}>
+            {(control) => <Input type="number" name={c.clave} defaultValue={umbrales[c.clave]} min={1} max={365} {...control} />}
+          </Campo>
         ))}
       </div>
-      <Button type="submit" disabled={pending} className="gap-2">
-        {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+      <Button type="submit" loading={pending} className="gap-2">
+        {!pending && <Save className="h-4 w-4" aria-hidden />}
         Guardar umbrales
       </Button>
     </form>

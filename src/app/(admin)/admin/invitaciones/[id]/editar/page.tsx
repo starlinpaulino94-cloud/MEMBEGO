@@ -6,6 +6,7 @@ import { ADMIN_ROLES } from '@/types'
 import { PageHeader } from '@/components/ui/page-header'
 import { CampanaInvitacionForm } from '@/components/invitaciones/CampanaInvitacionForm'
 import type { InvitaContenido } from '@/lib/invitaContenido'
+import Link from 'next/link'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Editar campaña de invitación' }
@@ -70,8 +71,15 @@ export default async function EditarCampanaPage({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-[720px] space-y-6">
       <PageHeader
+        variant="formulario"
+        className="mb-0 sm:mb-0"
+        back={
+          <Link href="/admin/invitaciones" className="text-muted-foreground hover:text-foreground">
+            ‹ Invita y Gana
+          </Link>
+        }
         title="Editar campaña"
         description={`Editando: ${campana.nombre}`}
       />

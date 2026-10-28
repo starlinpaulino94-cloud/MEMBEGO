@@ -7,7 +7,6 @@ import { getGrowthAdminData, getGrowthRule } from '@/modules/growth/queries'
 import { PageHeader } from '@/components/ui/page-header'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 import { ReglaRecompensaForm } from '@/components/growth/ReglaRecompensaForm'
-import { ArrowLeft } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,15 +31,15 @@ export default async function EditarReglaPage({
   if (!regla) notFound()
 
   return (
-    <div className="space-y-6">
-      <Link
-        href="/admin/crecimiento/recompensas"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" /> Reglas de recompensa
-      </Link>
-
+    <div className="mx-auto w-full max-w-[720px] space-y-6">
       <PageHeader
+        variant="formulario"
+        className="mb-0 sm:mb-0"
+        back={
+          <Link href="/admin/crecimiento/recompensas" className="text-muted-foreground hover:text-foreground">
+            ‹ Reglas de recompensa
+          </Link>
+        }
         title={regla.nombre}
         description="Los cambios aplican a las recompensas que se entreguen a partir de ahora; lo ya entregado no se toca."
       />

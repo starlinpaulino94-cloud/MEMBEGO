@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, Flame, ArrowRight } from 'lucide-react'
+import { Flame, ArrowRight } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   crearCampanaMarketing,
@@ -19,7 +19,8 @@ import { CampanaImagenUpload } from '@/components/invitaciones/CampanaImagenUplo
 import { FORMATOS } from '@/lib/imagen/formatos'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { Campo } from '@/components/ui/campo'
+import { FormActions, FormSection } from '@/components/ui/form-section'
 import { Textarea } from '@/components/ui/textarea'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
@@ -101,281 +102,201 @@ export function MarketingCampaignForm({
   }, [state.success, existing, router])
 
   return (
-    <form action={formAction} className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_20rem]">
-      <div className="max-w-2xl space-y-6">
+    <form action={formAction} className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="min-w-0 space-y-8">
         {existing && <input type="hidden" name="id" value={existing.id} />}
 
         {state.error && (
-          <Alert variant="destructive">
+          <Alert variant="destructive" role="alert">
             <AlertDescription>{state.error}</AlertDescription>
           </Alert>
         )}
 
-        {/* ── Básico ─────────────────────────────────────────────── */}
-        <div className="space-y-5 rounded-xl border border-border p-5">
-          <h3 className="font-semibold text-foreground">Información de la campaña</h3>
-
-          <div className="space-y-2">
-            <Label htmlFor="dealId">Deal que distribuirá (opcional)</Label>
-            <Select name="dealId" defaultValue={existing?.dealId ?? 'ninguno'}>
-              <SelectTrigger id="dealId">
-                <SelectValue placeholder="Sin Deal vinculado" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ninguno">Sin Deal vinculado</SelectItem>
-                {deals.map((deal) => (
-                  <SelectItem key={deal.id} value={deal.id}>
-                    {deal.title}{deal.promotion ? ` · Promotion: ${deal.promotion.nombre}` : ''}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              La campaña enlaza la oferta y su Promotion. Sus reglas se validan al reclamar; los cupones emitidos conservan su vigencia.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="tipo">Tipo de campaña</Label>
-            <Select name="tipo" value={tipo} onValueChange={setTipo}>
-              <SelectTrigger id="tipo">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {MARKETING_TIPOS.map((t) => (
-                  <SelectItem key={t.value} value={t.value}>
-                    {t.label} — {t.desc}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="titulo">Título</Label>
-            <Input
-              id="titulo"
-              name="titulo"
-              placeholder="Ej: ¡Lavado premium 2x1 solo hoy!"
-              value={titulo}
-              onChange={(e) => setTitulo(e.target.value)}
-              maxLength={120}
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="descripcion">Descripción</Label>
-            <Textarea
-              id="descripcion"
-              name="descripcion"
-              placeholder="Describe la oferta de forma breve y atractiva…"
-              value={descripcion}
-              onChange={(e) => setDescripcion(e.target.value)}
-              maxLength={600}
-              rows={3}
-              required
-            />
-          </div>
-        </div>
-
-        {/* ── Ventana de tiempo ──────────────────────────────────── */}
-        <div className="space-y-5 rounded-xl border border-border p-5">
-          <h3 className="font-semibold text-foreground">¿Cuándo se muestra?</h3>
-
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="fechaInicio">Inicio</Label>
-              <Input
-                id="fechaInicio"
-                name="fechaInicio"
-                type="datetime-local"
-                defaultValue={toLocalInput(existing?.fechaInicio ?? null)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="fechaFin">Fin</Label>
-              <Input
-                id="fechaFin"
-                name="fechaFin"
-                type="datetime-local"
-                defaultValue={toLocalInput(existing?.fechaFin ?? null)}
-                required
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-sm">Días de la semana (opcional)</Label>
-            <p className="text-xs text-muted-foreground">
-              Déjalos sin marcar para mostrar todos los días. Útil para “Fin de semana”.
-            </p>
-            <div className="flex flex-wrap gap-2 pt-1">
-              {DIAS_SEMANA.map((d) => (
-                <label
-                  key={d.value}
-                  className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/10"
-                >
-                  <input
-                    type="checkbox"
-                    name="diasSemana"
-                    value={d.value}
-                    defaultChecked={existing?.diasSemana?.includes(d.value) ?? false}
-                    className="accent-primary"
-                  />
-                  {d.label}
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="horaInicio">Hora inicio (Happy Hour, opcional)</Label>
-              <Input
-                id="horaInicio"
-                name="horaInicio"
-                type="time"
-                defaultValue={minutosAHora(existing?.horaInicioMin)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="horaFin">Hora fin</Label>
-              <Input
-                id="horaFin"
-                name="horaFin"
-                type="time"
-                defaultValue={minutosAHora(existing?.horaFinMin)}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* ── Urgencia + destino ─────────────────────────────────── */}
-        <div className="space-y-5 rounded-xl border border-border p-5">
-          <h3 className="font-semibold text-foreground">Urgencia y acción</h3>
-
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="maxReclamos">Cupos totales (opcional)</Label>
-              <Input
-                id="maxReclamos"
-                name="maxReclamos"
-                type="number"
-                min={0}
-                placeholder="Sin límite"
-                defaultValue={existing?.maxReclamos ?? ''}
-              />
-              <p className="text-xs text-muted-foreground">
-                Urgencia visual para campañas sin Deal. Al vincular una oferta, sus cupos y presupuesto gobiernan los reclamos.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="prioridad">Prioridad</Label>
-              <Input
-                id="prioridad"
-                name="prioridad"
-                type="number"
-                min={0}
-                defaultValue={existing?.prioridad ?? 0}
-              />
-              <p className="text-xs text-muted-foreground">Mayor = se muestra primero.</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="ctaTexto">Texto del botón</Label>
-              <Input
-                id="ctaTexto"
-                name="ctaTexto"
-                placeholder="Aprovecha ahora"
-                value={ctaTexto}
-                onChange={(e) => setCtaTexto(e.target.value)}
-                maxLength={40}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="ctaHref">Destino del botón</Label>
-              <Select name="ctaHref" defaultValue={existing?.dealId ? MARKETING_CTA_DESTINOS[0].value : existing?.ctaHref ?? MARKETING_CTA_DESTINOS[0].value}>
-                <SelectTrigger id="ctaHref">
-                  <SelectValue />
+        <FormSection apilada title="Información de la campaña" description="Qué se anuncia y con qué mensaje.">
+          <Campo
+            id="dealId"
+            etiqueta="Deal que distribuirá"
+            opcional
+            ayuda="La campaña enlaza la oferta y su Promotion. Sus reglas se validan al reclamar; los cupones emitidos conservan su vigencia."
+          >
+            {(control) => (
+              <Select name="dealId" defaultValue={existing?.dealId ?? 'ninguno'}>
+                <SelectTrigger className="w-full" {...control}>
+                  <SelectValue placeholder="Sin Deal vinculado" />
                 </SelectTrigger>
                 <SelectContent>
-                  {MARKETING_CTA_DESTINOS.map((d) => (
-                    <SelectItem key={d.value} value={d.value}>
-                      {d.label}
+                  <SelectItem value="ninguno">Sin Deal vinculado</SelectItem>
+                  {deals.map((deal) => (
+                    <SelectItem key={deal.id} value={deal.id}>
+                      {deal.title}
+                      {deal.promotion ? ` · Promotion: ${deal.promotion.nombre}` : ''}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {existing?.dealId && (
-                <p className="text-xs text-muted-foreground">El CTA irá a la ficha del Deal vinculado.</p>
+            )}
+          </Campo>
+
+          <Campo id="tipo" etiqueta="Tipo de campaña">
+            {(control) => (
+              <Select name="tipo" value={tipo} onValueChange={setTipo}>
+                <SelectTrigger className="w-full" {...control}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MARKETING_TIPOS.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>
+                      {t.label} — {t.desc}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </Campo>
+
+          <Campo id="titulo" etiqueta="Título">
+            {(control) => (
+              <Input
+                name="titulo"
+                placeholder="Ej: ¡Lavado premium 2x1 solo hoy!"
+                value={titulo}
+                onChange={(e) => setTitulo(e.target.value)}
+                maxLength={120}
+                required
+                {...control}
+              />
+            )}
+          </Campo>
+
+          <Campo id="descripcion" etiqueta="Descripción">
+            {(control) => (
+              <Textarea
+                name="descripcion"
+                placeholder="Describe la oferta de forma breve y atractiva…"
+                value={descripcion}
+                onChange={(e) => setDescripcion(e.target.value)}
+                maxLength={600}
+                rows={3}
+                required
+                {...control}
+              />
+            )}
+          </Campo>
+        </FormSection>
+
+        <FormSection apilada title="¿Cuándo se muestra?" description="La ventana de fechas y, si quieres, los días y las horas en que aparece.">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Campo id="fechaInicio" etiqueta="Inicio">
+              {(control) => <Input name="fechaInicio" type="datetime-local" defaultValue={toLocalInput(existing?.fechaInicio ?? null)} required {...control} />}
+            </Campo>
+            <Campo id="fechaFin" etiqueta="Fin">
+              {(control) => <Input name="fechaFin" type="datetime-local" defaultValue={toLocalInput(existing?.fechaFin ?? null)} required {...control} />}
+            </Campo>
+          </div>
+
+          <Campo id="diasSemana" etiqueta="Días de la semana" opcional como="grupo" ayuda="Déjalos sin marcar para mostrar todos los días. Útil para “Fin de semana”.">
+            {() => (
+              <div className="flex flex-wrap gap-2 pt-1">
+                {DIAS_SEMANA.map((d) => (
+                  <label
+                    key={d.value}
+                    className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/10"
+                  >
+                    <input
+                      type="checkbox"
+                      name="diasSemana"
+                      value={d.value}
+                      defaultChecked={existing?.diasSemana?.includes(d.value) ?? false}
+                      className="accent-primary"
+                    />
+                    {d.label}
+                  </label>
+                ))}
+              </div>
+            )}
+          </Campo>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Campo id="horaInicio" etiqueta="Hora inicio (Happy Hour)" opcional>
+              {(control) => <Input name="horaInicio" type="time" defaultValue={minutosAHora(existing?.horaInicioMin)} {...control} />}
+            </Campo>
+            <Campo id="horaFin" etiqueta="Hora fin" opcional>
+              {(control) => <Input name="horaFin" type="time" defaultValue={minutosAHora(existing?.horaFinMin)} {...control} />}
+            </Campo>
+          </div>
+        </FormSection>
+
+        <FormSection apilada title="Urgencia y acción" description="El cupo que se muestra y a dónde lleva el botón.">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Campo
+              id="maxReclamos"
+              etiqueta="Cupos totales"
+              opcional
+              ayuda="Urgencia visual para campañas sin Deal. Al vincular una oferta, sus cupos y presupuesto gobiernan los reclamos."
+            >
+              {(control) => <Input name="maxReclamos" type="number" min={0} placeholder="Sin límite" defaultValue={existing?.maxReclamos ?? ''} {...control} />}
+            </Campo>
+            <Campo id="prioridad" etiqueta="Prioridad" ayuda="Mayor = se muestra primero.">
+              {(control) => <Input name="prioridad" type="number" min={0} defaultValue={existing?.prioridad ?? 0} {...control} />}
+            </Campo>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Campo id="ctaTexto" etiqueta="Texto del botón" opcional>
+              {(control) => (
+                <Input name="ctaTexto" placeholder="Aprovecha ahora" value={ctaTexto} onChange={(e) => setCtaTexto(e.target.value)} maxLength={40} {...control} />
               )}
-            </div>
+            </Campo>
+            <Campo id="ctaHref" etiqueta="Destino del botón" ayuda={existing?.dealId ? 'El CTA irá a la ficha del Deal vinculado.' : undefined}>
+              {(control) => (
+                <Select
+                  name="ctaHref"
+                  defaultValue={existing?.dealId ? MARKETING_CTA_DESTINOS[0].value : existing?.ctaHref ?? MARKETING_CTA_DESTINOS[0].value}
+                >
+                  <SelectTrigger className="w-full" {...control}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MARKETING_CTA_DESTINOS.map((d) => (
+                      <SelectItem key={d.value} value={d.value}>
+                        {d.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </Campo>
           </div>
 
-          <label className="flex cursor-pointer items-center gap-2.5 pt-1">
-            <input
-              type="checkbox"
-              name="destacada"
-              defaultChecked={existing?.destacada ?? false}
-              className="h-4 w-4 accent-primary"
-            />
-            <span className="text-sm text-foreground">
-              Destacar (se muestra antes que otras campañas)
-            </span>
+          <label className="flex cursor-pointer items-center gap-2.5">
+            <input type="checkbox" name="destacada" defaultChecked={existing?.destacada ?? false} className="size-4 accent-primary" />
+            <span className="text-sm text-foreground">Destacar (se muestra antes que otras campañas)</span>
           </label>
-        </div>
+        </FormSection>
 
-        {/* ── Apariencia ─────────────────────────────────────────── */}
-        <div className="space-y-5 rounded-xl border border-border p-5">
-          <h3 className="font-semibold text-foreground">Apariencia</h3>
+        <FormSection apilada title="Apariencia" description="Imagen de fondo y colores de la tarjeta. Todo es opcional.">
+          <Campo id="bannerUrl" etiqueta="Imagen de fondo" opcional como="grupo">
+            {() => <BannerUploadBridge value={banner} onChange={setBanner} companyId={companyId} campanaId={existing?.id ?? null} />}
+          </Campo>
 
-          <div className="space-y-2">
-            <Label>Imagen de fondo (opcional)</Label>
-            <BannerUploadBridge
-              value={banner}
-              onChange={setBanner}
-              companyId={companyId}
-              campanaId={existing?.id ?? null}
-            />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Campo id="colorPrimario" etiqueta="Color primario">
+              {(control) => <Input name="colorPrimario" type="color" value={primary} onChange={(e) => setPrimary(e.target.value)} {...control} />}
+            </Campo>
+            <Campo id="colorSecundario" etiqueta="Color secundario">
+              {(control) => <Input name="colorSecundario" type="color" value={secondary} onChange={(e) => setSecondary(e.target.value)} {...control} />}
+            </Campo>
           </div>
+        </FormSection>
 
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="colorPrimario">Color primario</Label>
-              <Input
-                id="colorPrimario"
-                name="colorPrimario"
-                type="color"
-                value={primary}
-                onChange={(e) => setPrimary(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="colorSecundario">Color secundario</Label>
-              <Input
-                id="colorSecundario"
-                name="colorSecundario"
-                type="color"
-                value={secondary}
-                onChange={(e) => setSecondary(e.target.value)}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-3">
-          <Button type="button" variant="outline" onClick={() => router.back()}>
+        <FormActions>
+          <Button type="button" variant="ghost" onClick={() => router.back()}>
             Cancelar
           </Button>
-          <Button type="submit" disabled={pending}>
-            {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          <Button type="submit" loading={pending}>
             {existing ? 'Guardar cambios' : 'Crear campaña'}
           </Button>
-        </div>
+        </FormActions>
       </div>
 
       {/* ── Vista previa en vivo ─────────────────────────────────── */}

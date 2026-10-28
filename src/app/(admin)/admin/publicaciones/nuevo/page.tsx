@@ -3,6 +3,8 @@ import { conEmpresa } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import { resolveCompanyId } from '@/lib/auth/company-context'
 import { PostForm } from '@/components/admin/PostForm'
+import Link from 'next/link'
+import { PageHeader } from '@/components/ui/page-header'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,13 +24,18 @@ export default async function NuevaPublicacionPage() {
     : []
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Nueva publicación</h1>
-        <p className="text-muted-foreground">
-          Se notificará automáticamente a los seguidores de tu empresa.
-        </p>
-      </div>
+    <div className="mx-auto w-full max-w-[720px] space-y-6">
+      <PageHeader
+        variant="formulario"
+        className="mb-0 sm:mb-0"
+        back={
+          <Link href="/admin/publicaciones" className="text-muted-foreground hover:text-foreground">
+            ‹ Publicaciones
+          </Link>
+        }
+        title="Nueva publicación"
+        description="Se notificará automáticamente a los seguidores de tu empresa."
+      />
       <PostForm campanas={campanas} />
     </div>
   )

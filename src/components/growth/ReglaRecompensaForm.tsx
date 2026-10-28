@@ -4,7 +4,11 @@ import { useActionState, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { StatusBanner } from '@/components/ui/status-banner'
+import { Campo } from '@/components/ui/campo'
+import { FormActions, FormSection } from '@/components/ui/form-section'
+import { SelectNativo } from '@/components/ui/select-nativo'
 import {
   TRIGGER_LABEL,
   TIPO_LABEL,
@@ -27,10 +31,6 @@ export interface ReglaEditable {
   recompensaValor: number
   recompensaPromocionId: string | null
 }
-
-const campo =
-  'w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground'
-const etiqueta = 'mb-1 block text-xs font-medium text-muted-foreground'
 
 /**
  * Formulario de una regla de recompensa, en su propia página.
@@ -67,7 +67,7 @@ export function ReglaRecompensaForm({
   }, [estado.ok, router])
 
   return (
-    <form action={accion} className="space-y-5 rounded-2xl border border-border/70 bg-card p-5">
+    <form action={accion} className="space-y-8">
       {regla && <input type="hidden" name="id" value={regla.id} />}
 
       {estado.error && (
@@ -76,172 +76,122 @@ export function ReglaRecompensaForm({
         </StatusBanner>
       )}
 
-      <div>
-        <label htmlFor="nombre" className={etiqueta}>
-          Nombre de la regla
-        </label>
-        <input
-          id="nombre"
-          name="nombre"
-          required
-          maxLength={80}
-          defaultValue={regla?.nombre}
-          placeholder="Ej. Bono por registro"
-          className={campo}
-        />
-        <p className="mt-1 text-xs text-muted-foreground">
-          Solo lo ves tú, para reconocerla en la lista.
-        </p>
-      </div>
+      <FormSection title="La regla" description="Cómo la reconoces en la lista.">
+        <Campo id="nombre" etiqueta="Nombre de la regla" ayuda="Solo lo ves tú, para reconocerla en la lista.">
+          {(control) => <Input name="nombre" required maxLength={80} defaultValue={regla?.nombre} placeholder="Ej. Bono por registro" {...control} />}
+        </Campo>
+      </FormSection>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div>
-          <label htmlFor="trigger" className={etiqueta}>
-            Cuándo se entrega
-          </label>
-          <select
-            id="trigger"
-            name="trigger"
-            value={trigger}
-            onChange={(e) => setTrigger(e.target.value)}
-            className={campo}
-          >
-            {Object.entries(TRIGGER_LABEL).map(([v, l]) => (
-              <option key={v} value={v}>
-                {l}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {pideUmbral && (
-          <div>
-            <label htmlFor="valorCondicion" className={etiqueta}>
-              ¿Cuántos referidos?
-            </label>
-            <input
-              id="valorCondicion"
-              name="valorCondicion"
-              type="number"
-              min={1}
-              step={1}
-              defaultValue={regla?.valorCondicion ?? 3}
-              className={campo}
-            />
-          </div>
-        )}
-
-        <div>
-          <label htmlFor="recompensaTipo" className={etiqueta}>
-            Qué se entrega
-          </label>
-          <select
-            id="recompensaTipo"
-            name="recompensaTipo"
-            value={tipo}
-            onChange={(e) => setTipo(e.target.value)}
-            className={campo}
-          >
-            {Object.entries(TIPO_LABEL).map(([v, l]) => (
-              <option key={v} value={v}>
-                {l}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {esBeneficio ? (
-          <div>
-            <label htmlFor="recompensaPromocionId" className={etiqueta}>
-              Cuál beneficio digital
-            </label>
-            <select
-              id="recompensaPromocionId"
-              name="recompensaPromocionId"
-              defaultValue={regla?.recompensaPromocionId ?? ''}
-              className={campo}
-            >
-              <option value="">Elige uno…</option>
-              {promos.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.titulo}
-                </option>
-              ))}
-            </select>
-            {promos.length === 0 && (
-              <p className="mt-1 text-xs text-warning">
-                No tienes promociones activas para entregar.{' '}
-                <Link href="/admin/promociones" className="font-medium underline">
-                  Crea una primero
-                </Link>
-                .
-              </p>
+      <FormSection title="Cuándo se entrega" description="El hecho que dispara la recompensa y a quién se le da.">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Campo id="trigger" etiqueta="Cuándo se entrega">
+            {(control) => (
+              <SelectNativo name="trigger" value={trigger} onChange={(e) => setTrigger(e.target.value)} {...control}>
+                {Object.entries(TRIGGER_LABEL).map(([v, l]) => (
+                  <option key={v} value={v}>
+                    {l}
+                  </option>
+                ))}
+              </SelectNativo>
             )}
-          </div>
-        ) : (
-          <div>
-            <label htmlFor="recompensaValor" className={etiqueta}>
-              Cuánto {tipo === 'DESCUENTO_PORCENTAJE' ? '(%)' : ''}
-            </label>
-            <input
-              id="recompensaValor"
-              name="recompensaValor"
-              type="number"
-              step="0.01"
-              min={0}
-              max={tipo === 'DESCUENTO_PORCENTAJE' ? 100 : undefined}
-              defaultValue={regla?.recompensaValor || ''}
-              className={campo}
-            />
-          </div>
-        )}
-
-        <div>
-          <label htmlFor="beneficiario" className={etiqueta}>
-            A quién se recompensa
-          </label>
-          <select
-            id="beneficiario"
-            name="beneficiario"
-            defaultValue={regla?.beneficiario ?? 'REFERENTE'}
-            className={campo}
-          >
-            {Object.entries(BENEFICIARIO_LABEL).map(([v, l]) => (
-              <option key={v} value={v}>
-                {l}
-              </option>
-            ))}
-          </select>
+          </Campo>
+          {pideUmbral && (
+            <Campo id="valorCondicion" etiqueta="¿Cuántos referidos?">
+              {(control) => <Input name="valorCondicion" type="number" min={1} step={1} defaultValue={regla?.valorCondicion ?? 3} {...control} />}
+            </Campo>
+          )}
+          <Campo id="beneficiario" etiqueta="A quién se recompensa">
+            {(control) => (
+              <SelectNativo name="beneficiario" defaultValue={regla?.beneficiario ?? 'REFERENTE'} {...control}>
+                {Object.entries(BENEFICIARIO_LABEL).map(([v, l]) => (
+                  <option key={v} value={v}>
+                    {l}
+                  </option>
+                ))}
+              </SelectNativo>
+            )}
+          </Campo>
+          <Campo id="planId" etiqueta="Solo si compró este plan" opcional>
+            {(control) => (
+              <SelectNativo name="planId" defaultValue={regla?.planId ?? ''} {...control}>
+                <option value="">Cualquier plan</option>
+                {plans.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre}
+                  </option>
+                ))}
+              </SelectNativo>
+            )}
+          </Campo>
         </div>
+      </FormSection>
 
-        <div>
-          <label htmlFor="planId" className={etiqueta}>
-            Solo si compró este plan (opcional)
-          </label>
-          <select
-            id="planId"
-            name="planId"
-            defaultValue={regla?.planId ?? ''}
-            className={campo}
-          >
-            <option value="">Cualquier plan</option>
-            {plans.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.nombre}
-              </option>
-            ))}
-          </select>
+      <FormSection title="Qué se entrega" description="El premio: puntos, un descuento o un beneficio digital.">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Campo id="recompensaTipo" etiqueta="Qué se entrega">
+            {(control) => (
+              <SelectNativo name="recompensaTipo" value={tipo} onChange={(e) => setTipo(e.target.value)} {...control}>
+                {Object.entries(TIPO_LABEL).map(([v, l]) => (
+                  <option key={v} value={v}>
+                    {l}
+                  </option>
+                ))}
+              </SelectNativo>
+            )}
+          </Campo>
+          {esBeneficio ? (
+            <Campo
+              id="recompensaPromocionId"
+              etiqueta="Cuál beneficio digital"
+              ayuda={
+                promos.length === 0 ? (
+                  <span className="text-warning-ink">
+                    No tienes promociones activas para entregar.{' '}
+                    <Link href="/admin/promociones" className="font-medium underline">
+                      Crea una primero
+                    </Link>
+                    .
+                  </span>
+                ) : undefined
+              }
+            >
+              {(control) => (
+                <SelectNativo name="recompensaPromocionId" defaultValue={regla?.recompensaPromocionId ?? ''} {...control}>
+                  <option value="">Elige uno…</option>
+                  {promos.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.titulo}
+                    </option>
+                  ))}
+                </SelectNativo>
+              )}
+            </Campo>
+          ) : (
+            <Campo id="recompensaValor" etiqueta={`Cuánto${tipo === 'DESCUENTO_PORCENTAJE' ? ' (%)' : ''}`}>
+              {(control) => (
+                <Input
+                  name="recompensaValor"
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  max={tipo === 'DESCUENTO_PORCENTAJE' ? 100 : undefined}
+                  defaultValue={regla?.recompensaValor || ''}
+                  {...control}
+                />
+              )}
+            </Campo>
+          )}
         </div>
-      </div>
+      </FormSection>
 
-      <div className="flex flex-wrap gap-2 pt-1">
-        <Button type="submit" disabled={enviando}>
-          {enviando ? 'Guardando…' : regla ? 'Guardar cambios' : 'Crear regla'}
-        </Button>
+      <FormActions>
         <Button asChild variant="ghost">
           <Link href="/admin/crecimiento/recompensas">Cancelar</Link>
         </Button>
-      </div>
+        <Button type="submit" loading={enviando}>
+          {regla ? 'Guardar cambios' : 'Crear regla'}
+        </Button>
+      </FormActions>
     </form>
   )
 }

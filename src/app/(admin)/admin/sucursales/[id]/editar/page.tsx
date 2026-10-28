@@ -4,6 +4,8 @@ import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
 import { requireCompanyContext } from '@/lib/auth/company-context'
 import { SucursalForm } from '@/components/admin/SucursalForm'
+import Link from 'next/link'
+import { PageHeader } from '@/components/ui/page-header'
 
 export default async function EditarSucursalPage({
   params,
@@ -22,11 +24,18 @@ export default async function EditarSucursalPage({
   if (companyId && suc.companyId !== companyId) return notFound()
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Editar sucursal</h1>
-        <p className="text-sm text-muted-foreground">{suc.nombre}</p>
-      </div>
+    <div className="mx-auto w-full max-w-[720px] space-y-6">
+      <PageHeader
+        variant="formulario"
+        className="mb-0 sm:mb-0"
+        back={
+          <Link href="/admin/sucursales" className="text-muted-foreground hover:text-foreground">
+            ‹ Sucursales
+          </Link>
+        }
+        title="Editar sucursal"
+        description={suc.nombre}
+      />
       <SucursalForm
         existing={{
           id: suc.id,

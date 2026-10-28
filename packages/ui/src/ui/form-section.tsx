@@ -18,16 +18,22 @@ export function FormSection({
   description,
   children,
   className,
+  apilada = false,
 }: {
   title: string
   description?: string
   children: React.ReactNode
   className?: string
+  /**
+   * Título ENCIMA de los campos en vez de a su izquierda. Para un formulario que comparte la fila con otra cosa (una vista
+   * previa a un lado) y no tiene ancho para dos columnas.
+   */
+  apilada?: boolean
 }) {
   return (
     <fieldset className={cn('min-w-0 border-t border-border pt-6', className)}>
       <legend className="sr-only">{title}</legend>
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
+      <div className={cn('grid grid-cols-1 gap-6', !apilada && 'md:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]')}>
         <div className="min-w-0">
           {/* `aria-hidden`: la leyenda ya lo anuncia; sin esto el lector de
               pantalla diría el título dos veces en cada campo. */}
