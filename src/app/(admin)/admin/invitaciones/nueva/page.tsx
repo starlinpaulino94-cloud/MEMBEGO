@@ -4,6 +4,7 @@ import { ADMIN_ROLES } from '@/types'
 import { resolveCompanyId } from '@/lib/auth/company-context'
 import { PageHeader } from '@/components/ui/page-header'
 import { CampanaInvitacionForm } from '@/components/invitaciones/CampanaInvitacionForm'
+import Link from 'next/link'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Nueva campaña de invitación' }
@@ -26,8 +27,15 @@ export default async function NuevaCampanaInvitacionPage() {
     : []
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-[720px] space-y-6">
       <PageHeader
+        variant="formulario"
+        className="mb-0 sm:mb-0"
+        back={
+          <Link href="/admin/invitaciones" className="text-muted-foreground hover:text-foreground">
+            ‹ Invita y Gana
+          </Link>
+        }
         title="Nueva campaña"
         description="Configura una campaña 'Invita y Gana' para que tus clientes traigan amigos."
       />

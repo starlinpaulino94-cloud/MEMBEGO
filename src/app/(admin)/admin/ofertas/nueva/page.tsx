@@ -1,10 +1,10 @@
 import Link from 'next/link'
 import { conEmpresa } from '@/lib/tenant'
-import { ArrowLeft } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
 import { requireCompanyContext } from '@/lib/auth/company-context'
 import { CrearOfertaForm } from '@/components/ofertas/CrearOfertaForm'
+import { PageHeader } from '@/components/ui/page-header'
 import { SinEmpresaActiva } from '@/components/admin/SinEmpresaActiva'
 
 export const dynamic = 'force-dynamic'
@@ -28,21 +28,18 @@ export default async function NuevaOfertaPage() {
   )
 
   return (
-    <div className="max-w-3xl space-y-6">
-      <Link
-        href="/admin/ofertas/vip"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" /> Regalos VIP
-      </Link>
-
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Crear regalo VIP</h1>
-        <p className="text-muted-foreground">
-          Define el regalo, su regla de usos y la lista cerrada de clientes.
-          Al crearlo obtendrás el link privado para compartir.
-        </p>
-      </div>
+    <div className="mx-auto w-full max-w-[720px] space-y-6">
+      <PageHeader
+        variant="formulario"
+        className="mb-0 sm:mb-0"
+        back={
+          <Link href="/admin/ofertas/vip" className="text-muted-foreground hover:text-foreground">
+            ‹ Regalos VIP
+          </Link>
+        }
+        title="Crear regalo VIP"
+        description="Define el regalo, su regla de usos y la lista cerrada de clientes. Al crearlo obtendrás el link privado para compartir."
+      />
 
       <CrearOfertaForm clientes={clientes} />
     </div>

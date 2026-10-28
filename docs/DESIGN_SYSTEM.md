@@ -262,7 +262,16 @@ Lucide, sistema único. Tamaños normalizados:
   pestaña se pinta con `render`, así sirve para enlaces o estado local.
 - **FormSection** — agrupa un formulario largo por intención. Usa `<fieldset>`
   y `<legend>` de verdad: el lector de pantalla anuncia la sección al entrar en
-  cada campo. **FormActions** fija las acciones al fondo.
+  cada campo. **FormActions** fija las acciones al fondo. Con `apilada` el título
+  va encima de los campos en vez de a su izquierda: para un formulario que comparte
+  la fila con una vista previa y no tiene ancho para dos columnas.
+- **Campo** — un control con su etiqueta siempre visible, lo opcional marcado
+  «(opcional)» (nunca un asterisco), y la ayuda y el error enlazados por
+  `aria-describedby`. Todo campo de un formulario del panel va dentro de uno.
+- **SelectNativo** — lista desplegable nativa con el aspecto de `Input`. Para
+  formularios cuyo valor controla el estado o donde importa `required` sin
+  JavaScript; en el móvil abre el selector del sistema. `Select` (Radix) queda
+  para menús con contenido propio.
 - **MobileBottomSheet** — lista que convive con un mapa a pantalla completa.
   Dos estados (asomada / abierta) y un tirador que es un botón real; **no** es
   un diálogo, porque el mapa de detrás sigue siendo interactivo.

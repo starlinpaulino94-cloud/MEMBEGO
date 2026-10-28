@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState, useEffect, useRef, useState } from 'react'
-import { Loader2, Send } from 'lucide-react'
+import { Send } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   enviarNotificacionSegmento,
@@ -16,7 +16,7 @@ import {
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { Campo } from '@/components/ui/campo'
 import { Textarea } from '@/components/ui/textarea'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
@@ -60,93 +60,82 @@ export function NotifSegmentForm({
   return (
     <form ref={formRef} action={action} className="max-w-xl space-y-5">
       {state.error && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" role="alert">
           <AlertDescription>{state.error}</AlertDescription>
         </Alert>
       )}
 
-      <div className="space-y-2">
-        <Label htmlFor="segmento">Segmento destinatario *</Label>
-        <Select name="segmento" value={segmento} onValueChange={setSegmento}>
-          <SelectTrigger id="segmento">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {SEGMENTOS.map((s) => {
-              const n = conteoDe(s.value)
-              return (
-                <SelectItem key={s.value} value={s.value}>
-                  {s.label}
-                  {n != null ? ` (${n})` : ''}
-                </SelectItem>
-              )
-            })}
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-muted-foreground">
-          Solo se notifica al segmento elegido — nunca a usuarios ajenos a tu
-          empresa.
-        </p>
-        {/* Ver antes de mandar. Estos segmentos se calculaban desde hace tiempo
-            y solo servían para ENVIAR: había que apretar el botón sin saber a
-            quién le iba a llegar, que es lo que hace que nadie se atreva. */}
-        {VER_SEGMENTO[segmento as SegmentoValue] && (
-          <Link
-            href={VER_SEGMENTO[segmento as SegmentoValue]!}
-            className="text-caption text-primary hover:underline"
-          >
-            Ver quiénes son antes de enviar →
-          </Link>
-        )}
-      </div>
-
-      {segmento === 'plan' && (
-        <div className="space-y-2">
-          <Label htmlFor="planId">Plan *</Label>
-          <Select name="planId">
-            <SelectTrigger id="planId">
-              <SelectValue placeholder="Selecciona un plan" />
+      <Campo
+        id="segmento"
+        etiqueta="Segmento destinatario"
+        ayuda="Solo se notifica al segmento elegido — nunca a usuarios ajenos a tu empresa."
+      >
+        {(control) => (
+          <Select name="segmento" value={segmento} onValueChange={setSegmento}>
+            <SelectTrigger className="w-full" {...control}>
+              <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {planes.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.nombre}
-                </SelectItem>
-              ))}
+              {SEGMENTOS.map((s) => {
+                const n = conteoDe(s.value)
+                return (
+                  <SelectItem key={s.value} value={s.value}>
+                    {s.label}
+                    {n != null ? ` (${n})` : ''}
+                  </SelectItem>
+                )
+              })}
             </SelectContent>
           </Select>
-        </div>
+        )}
+      </Campo>
+      {/* Ver antes de mandar. Estos segmentos se calculaban desde hace tiempo
+          y solo servían para ENVIAR: había que apretar el botón sin saber a
+          quién le iba a llegar, que es lo que hace que nadie se atreva. */}
+      {VER_SEGMENTO[segmento as SegmentoValue] && (
+        <Link href={VER_SEGMENTO[segmento as SegmentoValue]!} className="-mt-3 block text-caption text-primary hover:underline">
+          Ver quiénes son antes de enviar →
+        </Link>
       )}
 
-      <div className="space-y-2">
-        <Label htmlFor="titulo">Título *</Label>
-        <Input
-          id="titulo"
-          name="titulo"
-          maxLength={100}
-          placeholder="Ej: ¡Este fin de semana 2x1!"
-          required
-        />
-      </div>
+      {segmento === 'plan' && (
+        <Campo id="planId" etiqueta="Plan">
+          {(control) => (
+            <Select name="planId">
+              <SelectTrigger className="w-full" {...control}>
+                <SelectValue placeholder="Selecciona un plan" />
+              </SelectTrigger>
+              <SelectContent>
+                {planes.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.nombre}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </Campo>
+      )}
 
-      <div className="space-y-2">
-        <Label htmlFor="mensaje">Mensaje *</Label>
-        <Textarea
-          id="mensaje"
-          name="mensaje"
-          rows={3}
-          maxLength={500}
-          placeholder="Texto que verá el cliente en su campana de notificaciones."
-          required
-        />
-      </div>
+      <Campo id="titulo" etiqueta="Título">
+        {(control) => <Input name="titulo" maxLength={100} placeholder="Ej: ¡Este fin de semana 2x1!" required {...control} />}
+      </Campo>
 
-      <Button type="submit" disabled={pending}>
-        {pending ? (
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-        ) : (
-          <Send className="mr-2 h-4 w-4" />
+      <Campo id="mensaje" etiqueta="Mensaje">
+        {(control) => (
+          <Textarea
+            name="mensaje"
+            rows={3}
+            maxLength={500}
+            placeholder="Texto que verá el cliente en su campana de notificaciones."
+            required
+            {...control}
+          />
         )}
+      </Campo>
+
+      <Button type="submit" loading={pending}>
+        {!pending && <Send className="h-4 w-4" aria-hidden />}
         Enviar notificación
       </Button>
     </form>

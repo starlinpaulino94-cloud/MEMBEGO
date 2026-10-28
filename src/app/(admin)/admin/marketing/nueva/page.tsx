@@ -4,6 +4,7 @@ import { ADMIN_ROLES } from '@/types'
 import { PageHeader } from '@/components/ui/page-header'
 import { MarketingCampaignForm } from '@/components/engagement/MarketingCampaignForm'
 import { getDealsParaMarketing } from '@/modules/engagement/campanas'
+import Link from 'next/link'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Nueva campaña de marketing' }
@@ -17,8 +18,14 @@ export default async function NuevaCampanaMarketingPage() {
   const companyId = await resolveCompanyId(user)
   const deals = companyId ? await getDealsParaMarketing(companyId) : []
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-5xl space-y-6">
       <PageHeader
+        className="mb-0 sm:mb-0"
+        back={
+          <Link href="/admin/marketing" className="text-muted-foreground hover:text-foreground">
+            ‹ Campañas de Marketing
+          </Link>
+        }
         title="Nueva campaña"
         description="Diseña una oferta con contador que aparecerá viva en el inicio de tus clientes."
       />

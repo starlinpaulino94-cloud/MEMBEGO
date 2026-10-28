@@ -52,8 +52,9 @@ export function ClientePicker({ clientes }: { clientes: ClienteOption[] }) {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
+            aria-label="Buscar cliente por nombre, correo o teléfono"
             placeholder="Buscar por nombre, correo o teléfono…"
-            className="h-9 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="h-10 w-full rounded-xl border border-input bg-background pl-9 pr-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
         </div>
         <button

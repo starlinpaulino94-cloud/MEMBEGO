@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
 import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
 import { requireCompanyContext } from '@/lib/auth/company-context'
@@ -22,15 +21,15 @@ export default async function ConfiguracionCitasPage() {
   const config = await getAgendaConfig(companyId)
 
   return (
-    <div className="max-w-3xl space-y-6">
-      <Link
-        href="/admin/citas"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" /> Citas
-      </Link>
-
+    <div className="mx-auto w-full max-w-[720px] space-y-6">
       <PageHeader
+        variant="formulario"
+        className="mb-0 sm:mb-0"
+        back={
+          <Link href="/admin/citas" className="text-muted-foreground hover:text-foreground">
+            ‹ Citas
+          </Link>
+        }
         title="Configuración de la agenda"
         description="Define cuántas citas aceptas por turno y por día, tu horario semanal y las reglas de reserva. Los cambios aplican de inmediato."
       />

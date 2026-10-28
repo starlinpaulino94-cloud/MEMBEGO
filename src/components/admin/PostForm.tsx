@@ -2,7 +2,6 @@
 
 import { useActionState, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   crearPost,
@@ -15,6 +14,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Switch } from '@/components/ui/switch'
+import { Campo } from '@/components/ui/campo'
+import { FormActions, FormSection } from '@/components/ui/form-section'
 import {
   Select,
   SelectContent,
@@ -70,136 +71,116 @@ export function PostForm({
   }, [state.success, existing, router])
 
   return (
-    <form action={formAction} className="max-w-lg space-y-5">
+    <form action={formAction} className="space-y-8">
       {existing && <input type="hidden" name="id" value={existing.id} />}
 
       {state.error && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" role="alert">
           <AlertDescription>{state.error}</AlertDescription>
         </Alert>
       )}
 
-      <div className="space-y-2">
-        <Label htmlFor="tipo">Tipo *</Label>
-        <Select name="tipo" value={tipo} onValueChange={setTipo}>
-          <SelectTrigger id="tipo">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="NOTICIA">Noticia / novedad</SelectItem>
-            <SelectItem value="EVENTO">Evento</SelectItem>
-            <SelectItem value="BENEFICIO">Beneficio para miembros</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="titulo">Título *</Label>
-        <Input
-          id="titulo"
-          name="titulo"
-          defaultValue={existing?.titulo}
-          placeholder={
-            tipo === 'EVENTO'
-              ? 'Ej: Feria de aniversario'
-              : tipo === 'BENEFICIO'
-                ? 'Ej: Café gratis para miembros'
-                : 'Ej: Nuevo horario extendido'
-          }
-          required
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="contenido">Contenido *</Label>
-        <Textarea
-          id="contenido"
-          name="contenido"
-          defaultValue={existing?.contenido}
-          rows={4}
-          placeholder="Detalles para tus seguidores"
-          required
-        />
-      </div>
+      <FormSection title="La publicación" description="Qué publicas y lo que leen tus seguidores en tu perfil.">
+        <Campo id="tipo" etiqueta="Tipo" className="sm:max-w-xs">
+          {(control) => (
+            <Select name="tipo" value={tipo} onValueChange={setTipo}>
+              <SelectTrigger className="w-full" {...control}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="NOTICIA">Noticia / novedad</SelectItem>
+                <SelectItem value="EVENTO">Evento</SelectItem>
+                <SelectItem value="BENEFICIO">Beneficio para miembros</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+        </Campo>
+        <Campo id="titulo" etiqueta="Título">
+          {(control) => (
+            <Input
+              name="titulo"
+              defaultValue={existing?.titulo}
+              placeholder={
+                tipo === 'EVENTO'
+                  ? 'Ej: Feria de aniversario'
+                  : tipo === 'BENEFICIO'
+                    ? 'Ej: Café gratis para miembros'
+                    : 'Ej: Nuevo horario extendido'
+              }
+              required
+              {...control}
+            />
+          )}
+        </Campo>
+        <Campo id="contenido" etiqueta="Contenido">
+          {(control) => <Textarea name="contenido" defaultValue={existing?.contenido} rows={4} placeholder="Detalles para tus seguidores" required {...control} />}
+        </Campo>
+      </FormSection>
 
       {tipo === 'EVENTO' && (
-        <>
-          <div className="space-y-2">
-            <Label htmlFor="fechaEvento">Fecha y hora del evento *</Label>
-            <Input
-              id="fechaEvento"
-              name="fechaEvento"
-              type="datetime-local"
-              defaultValue={toDatetimeLocal(existing?.fechaEvento ?? null)}
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="lugar">Lugar</Label>
-            <Input
-              id="lugar"
-              name="lugar"
-              defaultValue={existing?.lugar ?? ''}
-              placeholder="Ej: Sucursal principal"
-            />
-          </div>
-        </>
+        <FormSection title="El evento" description="Cuándo y dónde ocurre.">
+          <Campo id="fechaEvento" etiqueta="Fecha y hora del evento">
+            {(control) => (
+              <Input name="fechaEvento" type="datetime-local" defaultValue={toDatetimeLocal(existing?.fechaEvento ?? null)} required {...control} />
+            )}
+          </Campo>
+          <Campo id="lugar" etiqueta="Lugar" opcional>
+            {(control) => <Input name="lugar" defaultValue={existing?.lugar ?? ''} placeholder="Ej: Sucursal principal" {...control} />}
+          </Campo>
+        </FormSection>
       )}
 
-      <div className="space-y-2">
-        <Label htmlFor="imagenUrl">Imagen (URL)</Label>
-        <Input
-          id="imagenUrl"
-          name="imagenUrl"
-          defaultValue={existing?.imagenUrl ?? ''}
-          placeholder="https://..."
-        />
-      </div>
-
-      {campanas.length > 0 && (
-        <div className="space-y-2">
-          <Label htmlFor="campanaId">Campaña (opcional)</Label>
-          <Select name="campanaId" defaultValue={existing?.campanaId ?? 'none'}>
-            <SelectTrigger id="campanaId">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Sin campaña</SelectItem>
-              {campanas.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.nombre}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
+      <FormSection title="Imagen y campaña" description="Una imagen para acompañarla y, si la tienes, la campaña a la que pertenece.">
+        <Campo id="imagenUrl" etiqueta="Imagen (URL)" opcional>
+          {(control) => <Input name="imagenUrl" defaultValue={existing?.imagenUrl ?? ''} placeholder="https://..." {...control} />}
+        </Campo>
+        {campanas.length > 0 && (
+          <Campo id="campanaId" etiqueta="Campaña" opcional>
+            {(control) => (
+              <Select name="campanaId" defaultValue={existing?.campanaId ?? 'none'}>
+                <SelectTrigger className="w-full" {...control}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sin campaña</SelectItem>
+                  {campanas.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </Campo>
+        )}
+      </FormSection>
 
       {existing && (
-        <div className="flex items-center gap-3">
-          <Switch
-            id="activo"
-            name="activo"
-            defaultChecked={existing.activo}
-            value="true"
-            onCheckedChange={(checked) => {
-              const el = document.querySelector<HTMLInputElement>('input[name="activo"]')
-              if (el) el.value = String(checked)
-            }}
-          />
-          <Label htmlFor="activo">Visible en el perfil público</Label>
-        </div>
+        <FormSection title="Estado" description="Una publicación oculta deja de verse en tu perfil sin borrarse.">
+          <div className="flex items-center gap-3">
+            <Switch
+              id="activo"
+              name="activo"
+              defaultChecked={existing.activo}
+              value="true"
+              onCheckedChange={(checked) => {
+                const el = document.querySelector<HTMLInputElement>('input[name="activo"]')
+                if (el) el.value = String(checked)
+              }}
+            />
+            <Label htmlFor="activo">Visible en el perfil público</Label>
+          </div>
+        </FormSection>
       )}
 
-      <div className="flex gap-3">
-        <Button type="submit" disabled={pending}>
-          {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          {existing ? 'Guardar cambios' : 'Publicar'}
-        </Button>
-        <Button type="button" variant="outline" onClick={() => router.back()}>
+      <FormActions>
+        <Button type="button" variant="ghost" onClick={() => router.back()}>
           Cancelar
         </Button>
-      </div>
+        <Button type="submit" loading={pending}>
+          {existing ? 'Guardar cambios' : 'Publicar'}
+        </Button>
+      </FormActions>
     </form>
   )
 }

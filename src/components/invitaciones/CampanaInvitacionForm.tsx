@@ -2,7 +2,6 @@
 
 import { useActionState, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   crearCampanaInvitacion,
@@ -19,7 +18,8 @@ import {
 } from '@/lib/invitaContenido'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { Campo } from '@/components/ui/campo'
+import { FormActions, FormSection } from '@/components/ui/form-section'
 import { Textarea } from '@/components/ui/textarea'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
@@ -108,115 +108,58 @@ export function CampanaInvitacionForm({
   }, [state.success, existing, router])
 
   return (
-    <form action={formAction} className="max-w-2xl space-y-6">
+    <form action={formAction} className="space-y-8">
       {existing && <input type="hidden" name="id" value={existing.id} />}
 
       {state.error && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" role="alert">
           <AlertDescription>{state.error}</AlertDescription>
         </Alert>
       )}
 
-      <div className="space-y-5 rounded-xl border border-border p-5">
-        <h3 className="font-semibold text-foreground">Información básica</h3>
-
-        <div className="space-y-2">
-          <Label htmlFor="nombre">Nombre interno</Label>
-          <Input
-            id="nombre"
-            name="nombre"
-            placeholder="Ej: Campaña verano 2025"
-            defaultValue={existing?.nombre ?? ''}
-            required
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="titulo">Título público</Label>
-          <Input
-            id="titulo"
-            name="titulo"
-            placeholder="Ej: ¡Invita a un amigo y gana!"
-            defaultValue={existing?.titulo ?? ''}
-            required
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="descripcion">Descripción</Label>
-          <Textarea
-            id="descripcion"
-            name="descripcion"
-            placeholder="Describe la campaña a tus clientes..."
-            defaultValue={existing?.descripcion ?? ''}
-            required
-            rows={3}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="textoLanding">Texto adicional del landing (opcional)</Label>
-          <Textarea
-            id="textoLanding"
-            name="textoLanding"
-            placeholder="Texto persuasivo que aparecerá en la página de invitación"
-            defaultValue={existing?.textoLanding ?? ''}
-            rows={2}
-          />
-        </div>
-      </div>
-
-      <div className="space-y-5 rounded-xl border border-border p-5">
-        <h3 className="font-semibold text-foreground">Meta y fechas</h3>
-
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
-          <div className="space-y-2">
-            <Label htmlFor="metaRegistros">Registros necesarios</Label>
-            <Input
-              id="metaRegistros"
-              name="metaRegistros"
-              type="number"
-              min={1}
-              defaultValue={existing?.metaRegistros ?? 5}
-              required
+      <FormSection title="Información básica" description="Cómo la llamas tú y lo que ven tus clientes al recibir la invitación.">
+        <Campo id="nombre" etiqueta="Nombre interno" ayuda="Solo lo ves tú, para distinguir una campaña de otra.">
+          {(control) => <Input name="nombre" placeholder="Ej: Campaña verano 2025" defaultValue={existing?.nombre ?? ''} required {...control} />}
+        </Campo>
+        <Campo id="titulo" etiqueta="Título público">
+          {(control) => <Input name="titulo" placeholder="Ej: ¡Invita a un amigo y gana!" defaultValue={existing?.titulo ?? ''} required {...control} />}
+        </Campo>
+        <Campo id="descripcion" etiqueta="Descripción">
+          {(control) => (
+            <Textarea name="descripcion" placeholder="Describe la campaña a tus clientes..." defaultValue={existing?.descripcion ?? ''} required rows={3} {...control} />
+          )}
+        </Campo>
+        <Campo id="textoLanding" etiqueta="Texto adicional del landing" opcional>
+          {(control) => (
+            <Textarea
+              name="textoLanding"
+              placeholder="Texto persuasivo que aparecerá en la página de invitación"
+              defaultValue={existing?.textoLanding ?? ''}
+              rows={2}
+              {...control}
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="fechaInicio">Fecha inicio</Label>
-            <Input
-              id="fechaInicio"
-              name="fechaInicio"
-              type="date"
-              defaultValue={toDateInput(existing?.fechaInicio ?? null)}
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="fechaFin">Fecha fin</Label>
-            <Input
-              id="fechaFin"
-              name="fechaFin"
-              type="date"
-              defaultValue={toDateInput(existing?.fechaFin ?? null)}
-              required
-            />
-          </div>
-        </div>
+          )}
+        </Campo>
+      </FormSection>
 
-        <div className="space-y-2">
-          <Label htmlFor="maxPremios">Máximo de premios (dejar vacío = ilimitado)</Label>
-          <Input
-            id="maxPremios"
-            name="maxPremios"
-            type="number"
-            min={1}
-            defaultValue={existing?.maxPremios ?? ''}
-          />
+      <FormSection title="Meta y fechas" description="Cuántos registros trae cada invitante para ganar y cuándo corre la campaña.">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Campo id="metaRegistros" etiqueta="Registros necesarios">
+            {(control) => <Input name="metaRegistros" type="number" min={1} defaultValue={existing?.metaRegistros ?? 5} required {...control} />}
+          </Campo>
+          <Campo id="fechaInicio" etiqueta="Fecha inicio">
+            {(control) => <Input name="fechaInicio" type="date" defaultValue={toDateInput(existing?.fechaInicio ?? null)} required {...control} />}
+          </Campo>
+          <Campo id="fechaFin" etiqueta="Fecha fin">
+            {(control) => <Input name="fechaFin" type="date" defaultValue={toDateInput(existing?.fechaFin ?? null)} required {...control} />}
+          </Campo>
         </div>
-      </div>
+        <Campo id="maxPremios" etiqueta="Máximo de premios" opcional ayuda="Vacío = ilimitado." className="sm:max-w-xs">
+          {(control) => <Input name="maxPremios" type="number" min={1} defaultValue={existing?.maxPremios ?? ''} {...control} />}
+        </Campo>
+      </FormSection>
 
-      <div className="space-y-5 rounded-xl border border-border p-5">
-        <h3 className="font-semibold text-foreground">Premio para quien invita</h3>
+      <FormSection title="Premio para quien invita" description="Lo que gana la persona que trae a sus amigos.">
         <BeneficioFields
           prefix="beneficioInvitante"
           tipo={invitanteTipo}
@@ -224,10 +167,9 @@ export function CampanaInvitacionForm({
           defaults={existing?.beneficioInvitante}
           promociones={promociones}
         />
-      </div>
+      </FormSection>
 
-      <div className="space-y-5 rounded-xl border border-border p-5">
-        <h3 className="font-semibold text-foreground">Beneficio para el invitado</h3>
+      <FormSection title="Beneficio para el invitado" description="Lo que recibe el amigo que se registra con el enlace.">
         <BeneficioFields
           prefix="beneficioInvitado"
           tipo={invitadoTipo}
@@ -235,94 +177,101 @@ export function CampanaInvitacionForm({
           defaults={existing?.beneficioInvitado}
           promociones={promociones}
         />
-      </div>
+      </FormSection>
 
-      <div className="space-y-5 rounded-xl border border-border p-5">
-        <h3 className="font-semibold text-foreground">Experiencia del enlace</h3>
+      <FormSection title="Experiencia del enlace" description="Qué ve el cliente al abrir el enlace de invitación.">
         <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border p-4">
-          <input
-            type="checkbox"
-            name="usarBanner"
-            defaultChecked={existing?.usarBanner ?? true}
-            className="mt-0.5 h-4 w-4 accent-primary"
-          />
+          <input type="checkbox" name="usarBanner" defaultChecked={existing?.usarBanner ?? true} className="mt-0.5 size-4 accent-primary" />
           <span className="text-sm">
-            <span className="block font-medium text-foreground">
-              Mostrar página de presentación (banner) antes del registro
-            </span>
+            <span className="block font-medium text-foreground">Mostrar página de presentación (banner) antes del registro</span>
             <span className="mt-0.5 block text-muted-foreground">
-              Si lo dejas desmarcado, el enlace lleva al cliente{' '}
-              <strong>directo al formulario de registro</strong> (recomendado). Márcalo
-              para mostrar primero el banner con la descripción de la promoción.
+              Si lo dejas desmarcado, el enlace lleva al cliente <strong>directo al formulario de registro</strong> (recomendado). Márcalo para
+              mostrar primero el banner con la descripción de la promoción.
             </span>
           </span>
         </label>
-      </div>
+      </FormSection>
 
-      <div className="space-y-5 rounded-xl border border-border p-5">
-        <h3 className="font-semibold text-foreground">Apariencia (opcional)</h3>
-
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label>Imagen (compartir / OG)</Label>
-            <CampanaImagenUpload
-              name="imagenUrl"
-              companyId={companyId}
-              campanaId={existing?.id ?? null}
-              currentUrl={existing?.imagenUrl ?? null}
-              label="Subir imagen"
-              formato={FORMATOS.compartir}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Banner del landing</Label>
-            <CampanaImagenUpload
-              name="bannerUrl"
-              companyId={companyId}
-              campanaId={existing?.id ?? null}
-              currentUrl={existing?.bannerUrl ?? null}
-              label="Subir banner"
-              formato={FORMATOS.fondo}
-            />
-          </div>
+      <FormSection title="Apariencia" description="Imágenes y colores del enlace. Todo es opcional.">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Campo id="imagenUrl" etiqueta="Imagen (compartir / OG)" opcional como="grupo">
+            {() => (
+              <CampanaImagenUpload
+                name="imagenUrl"
+                companyId={companyId}
+                campanaId={existing?.id ?? null}
+                currentUrl={existing?.imagenUrl ?? null}
+                label="Subir imagen"
+                formato={FORMATOS.compartir}
+              />
+            )}
+          </Campo>
+          <Campo id="bannerUrl" etiqueta="Banner del landing" opcional como="grupo">
+            {() => (
+              <CampanaImagenUpload
+                name="bannerUrl"
+                companyId={companyId}
+                campanaId={existing?.id ?? null}
+                currentUrl={existing?.bannerUrl ?? null}
+                label="Subir banner"
+                formato={FORMATOS.fondo}
+              />
+            )}
+          </Campo>
         </div>
-
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="colorPrimario">Color primario</Label>
-            <Input
-              id="colorPrimario"
-              name="colorPrimario"
-              type="color"
-              defaultValue={existing?.colorPrimario ?? '#6366f1'}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="colorSecundario">Color secundario</Label>
-            <Input
-              id="colorSecundario"
-              name="colorSecundario"
-              type="color"
-              defaultValue={existing?.colorSecundario ?? '#8b5cf6'}
-            />
-          </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Campo id="colorPrimario" etiqueta="Color primario">
+            {(control) => <Input name="colorPrimario" type="color" defaultValue={existing?.colorPrimario ?? '#6366f1'} {...control} />}
+          </Campo>
+          <Campo id="colorSecundario" etiqueta="Color secundario">
+            {(control) => <Input name="colorSecundario" type="color" defaultValue={existing?.colorSecundario ?? '#8b5cf6'} {...control} />}
+          </Campo>
         </div>
-      </div>
+      </FormSection>
 
       <CompartirModulo defaults={existing?.contenido ?? null} />
 
       <ContenidoModulo defaults={existing?.contenido ?? null} />
 
-      <div className="flex justify-end gap-3">
-        <Button type="button" variant="outline" onClick={() => router.back()}>
+      <FormActions>
+        <Button type="button" variant="ghost" onClick={() => router.back()}>
           Cancelar
         </Button>
-        <Button type="submit" disabled={pending}>
-          {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+        <Button type="submit" loading={pending}>
           {existing ? 'Guardar cambios' : 'Crear campaña'}
         </Button>
-      </div>
+      </FormActions>
     </form>
+  )
+}
+
+/** Los campos de texto de un módulo opcional, cada uno con su valor por defecto como sugerencia. */
+function CamposDeContenido({
+  campos,
+  defaults,
+}: {
+  campos: typeof INVITA_COMPARTIR_CAMPOS | typeof INVITA_CONTENIDO_CAMPOS
+  defaults: Partial<InvitaContenido> | null
+}) {
+  return (
+    <>
+      {campos.map((campo) => {
+        const name = `contenido_${campo.key}`
+        const value = defaults?.[campo.key] ?? ''
+        const placeholder = INVITA_CONTENIDO_DEFAULT[campo.key]
+        return (
+          <Campo key={campo.key} id={name} etiqueta={campo.label} opcional ayuda={campo.hint}>
+            {(control) =>
+              campo.multiline ? (
+                <Textarea name={name} defaultValue={value} placeholder={placeholder} rows={2} {...control} />
+              ) : (
+                <Input name={name} defaultValue={value} placeholder={placeholder} {...control} />
+              )
+            }
+          </Campo>
+        )
+      })}
+    </>
   )
 }
 
@@ -331,44 +280,26 @@ export function CampanaInvitacionForm({
  * muestran WhatsApp/Facebook/Telegram/X al compartir el enlace de la campaña
  * (título y descripción Open Graph) y el CTA de la landing. La imagen de la
  * tarjeta es la "Imagen (compartir / OG)" de Apariencia.
+ *
+ * Plegada: casi nadie la toca, y son varios campos que alargaban el formulario.
  */
 function CompartirModulo({ defaults }: { defaults: Partial<InvitaContenido> | null }) {
+  const lleno = INVITA_COMPARTIR_CAMPOS.some((c) => Boolean(defaults?.[c.key]))
   return (
-    <div className="space-y-5 rounded-xl border border-border p-5">
-      <div>
-        <h3 className="font-semibold text-foreground">Compartir · vista previa del enlace</h3>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Así se ve la tarjeta cuando alguien comparte el enlace por WhatsApp, Facebook,
-          Telegram o X. Deja un campo vacío para usar el título y la descripción de la
-          campaña. La imagen es la “Imagen (compartir / OG)” de la sección Apariencia.
-        </p>
-      </div>
-
-      <div className="space-y-4">
-        {INVITA_COMPARTIR_CAMPOS.map((campo) => {
-          const name = `contenido_${campo.key}`
-          const value = defaults?.[campo.key] ?? ''
-          const placeholder = INVITA_CONTENIDO_DEFAULT[campo.key]
-          return (
-            <div key={campo.key} className="space-y-2">
-              <Label htmlFor={name}>{campo.label}</Label>
-              {campo.multiline ? (
-                <Textarea
-                  id={name}
-                  name={name}
-                  defaultValue={value}
-                  placeholder={placeholder}
-                  rows={2}
-                />
-              ) : (
-                <Input id={name} name={name} defaultValue={value} placeholder={placeholder} />
-              )}
-              {campo.hint && <p className="text-xs text-muted-foreground">{campo.hint}</p>}
-            </div>
-          )
-        })}
-      </div>
-    </div>
+    <FormSection
+      title="Compartir"
+      description="Cómo se ve la tarjeta cuando alguien comparte el enlace por WhatsApp, Facebook, Telegram o X."
+    >
+      <details open={lleno} className="group rounded-xl border border-border px-4 py-3">
+        <summary className="cursor-pointer text-small font-medium text-foreground">Personalizar la vista previa del enlace</summary>
+        <div className="mt-4 space-y-4">
+          <p className="text-caption text-muted-foreground">
+            Deja un campo vacío para usar el título y la descripción de la campaña. La imagen es la “Imagen (compartir / OG)” de la sección Apariencia.
+          </p>
+          <CamposDeContenido campos={INVITA_COMPARTIR_CAMPOS} defaults={defaults} />
+        </div>
+      </details>
+    </FormSection>
   )
 }
 
@@ -378,48 +309,17 @@ function CompartirModulo({ defaults }: { defaults: Partial<InvitaContenido> | nu
  * por defecto. Permite editar TODO el contenido desde el panel (superadmin/admin).
  */
 function ContenidoModulo({ defaults }: { defaults: Partial<InvitaContenido> | null }) {
+  const lleno = INVITA_CONTENIDO_CAMPOS.some((c) => Boolean(defaults?.[c.key]))
   return (
-    <div className="space-y-5 rounded-xl border border-border p-5">
-      <div>
-        <h3 className="font-semibold text-foreground">Textos del módulo del cliente</h3>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Personaliza lo que el cliente ve en “Invita y Gana”. Deja un campo vacío para
-          usar el texto por defecto (se muestra como sugerencia).
-        </p>
-      </div>
-
-      <div className="space-y-4">
-        {INVITA_CONTENIDO_CAMPOS.map((campo) => {
-          const name = `contenido_${campo.key}`
-          const value = defaults?.[campo.key] ?? ''
-          const placeholder = INVITA_CONTENIDO_DEFAULT[campo.key]
-          return (
-            <div key={campo.key} className="space-y-2">
-              <Label htmlFor={name}>{campo.label}</Label>
-              {campo.multiline ? (
-                <Textarea
-                  id={name}
-                  name={name}
-                  defaultValue={value}
-                  placeholder={placeholder}
-                  rows={2}
-                />
-              ) : (
-                <Input
-                  id={name}
-                  name={name}
-                  defaultValue={value}
-                  placeholder={placeholder}
-                />
-              )}
-              {campo.hint && (
-                <p className="text-xs text-muted-foreground">{campo.hint}</p>
-              )}
-            </div>
-          )
-        })}
-      </div>
-    </div>
+    <FormSection title="Textos del módulo" description="Lo que el cliente lee en «Invita y Gana». Si no cambias nada, ve los textos por defecto.">
+      <details open={lleno} className="group rounded-xl border border-border px-4 py-3">
+        <summary className="cursor-pointer text-small font-medium text-foreground">Personalizar los textos</summary>
+        <div className="mt-4 space-y-4">
+          <p className="text-caption text-muted-foreground">Deja un campo vacío para usar el texto por defecto (se muestra como sugerencia).</p>
+          <CamposDeContenido campos={INVITA_CONTENIDO_CAMPOS} defaults={defaults} />
+        </div>
+      </details>
+    </FormSection>
   )
 }
 
@@ -437,73 +337,59 @@ function BeneficioFields({
   promociones: PromocionOption[]
 }) {
   return (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor={`${prefix}PromocionId`}>Beneficio digital (recomendado)</Label>
-        <Select name={`${prefix}PromocionId`} defaultValue={defaults?.promocionId ?? 'none'}>
-          <SelectTrigger id={`${prefix}PromocionId`}>
-            <SelectValue placeholder="Selecciona una promoción" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">— Sin beneficio digital —</SelectItem>
-            {promociones.map((p) => (
-              <SelectItem key={p.id} value={p.id}>
-                {p.titulo}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-muted-foreground">
-          Al vincular una promoción, el premio se entrega automáticamente como beneficio
-          digital: aparece en la wallet del cliente con su código QR, canjeable en el
-          escáner.
-        </p>
-      </div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor={`${prefix}Tipo`}>Tipo de beneficio</Label>
-          <Select name={`${prefix}Tipo`} value={tipo} onValueChange={onTipoChange}>
-            <SelectTrigger id={`${prefix}Tipo`}>
-              <SelectValue />
+    <>
+      <Campo
+        id={`${prefix}PromocionId`}
+        etiqueta="Beneficio digital (recomendado)"
+        ayuda="Al vincular una promoción, el premio se entrega automáticamente como beneficio digital: aparece en la wallet del cliente con su código QR, canjeable en el escáner."
+      >
+        {(control) => (
+          <Select name={`${prefix}PromocionId`} defaultValue={defaults?.promocionId ?? 'none'}>
+            <SelectTrigger className="w-full" {...control}>
+              <SelectValue placeholder="Selecciona una promoción" />
             </SelectTrigger>
             <SelectContent>
-              {BENEFICIO_TIPOS.map((t) => (
-                <SelectItem key={t.value} value={t.value}>
-                  {t.label}
+              <SelectItem value="none">— Sin beneficio digital —</SelectItem>
+              {promociones.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.titulo}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor={`${prefix}Valor`}>Valor</Label>
-          <Input
-            id={`${prefix}Valor`}
-            name={`${prefix}Valor`}
-            placeholder={tipo === 'DESCUENTO' ? 'Ej: 20' : 'Ej: Lavado premium'}
-            defaultValue={defaults?.valor ?? ''}
-          />
-        </div>
+        )}
+      </Campo>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Campo id={`${prefix}Tipo`} etiqueta="Tipo de beneficio">
+          {(control) => (
+            <Select name={`${prefix}Tipo`} value={tipo} onValueChange={onTipoChange}>
+              <SelectTrigger className="w-full" {...control}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {BENEFICIO_TIPOS.map((t) => (
+                  <SelectItem key={t.value} value={t.value}>
+                    {t.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </Campo>
+        <Campo id={`${prefix}Valor`} etiqueta="Valor">
+          {(control) => (
+            <Input name={`${prefix}Valor`} placeholder={tipo === 'DESCUENTO' ? 'Ej: 20' : 'Ej: Lavado premium'} defaultValue={defaults?.valor ?? ''} {...control} />
+          )}
+        </Campo>
       </div>
-      <div className="space-y-2">
-        <Label htmlFor={`${prefix}Descripcion`}>Descripción del beneficio</Label>
-        <Input
-          id={`${prefix}Descripcion`}
-          name={`${prefix}Descripcion`}
-          placeholder="Ej: Un lavado completo gratis"
-          defaultValue={defaults?.descripcion ?? ''}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor={`${prefix}VigenciaDias`}>Vigencia (días)</Label>
-        <Input
-          id={`${prefix}VigenciaDias`}
-          name={`${prefix}VigenciaDias`}
-          type="number"
-          min={1}
-          defaultValue={defaults?.vigenciaDias ?? 30}
-        />
-      </div>
-    </div>
+      <Campo id={`${prefix}Descripcion`} etiqueta="Descripción del beneficio">
+        {(control) => (
+          <Input name={`${prefix}Descripcion`} placeholder="Ej: Un lavado completo gratis" defaultValue={defaults?.descripcion ?? ''} {...control} />
+        )}
+      </Campo>
+      <Campo id={`${prefix}VigenciaDias`} etiqueta="Vigencia (días)" className="sm:max-w-xs">
+        {(control) => <Input name={`${prefix}VigenciaDias`} type="number" min={1} defaultValue={defaults?.vigenciaDias ?? 30} {...control} />}
+      </Campo>
+    </>
   )
 }
