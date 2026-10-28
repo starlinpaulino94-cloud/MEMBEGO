@@ -159,7 +159,18 @@ export function formatDateTimeExacto(
  * paneles de superadmin que agregan montos de varias empresas.
  */
 export function formatMoneyRD(n: number): string {
-  return `RD$${n.toLocaleString('es-DO', { minimumFractionDigits: 0 })}`
+  return formatRD(n, { minimumFractionDigits: 0 })
+}
+
+/**
+ * «RD$1,600.00», y con el signo DELANTE: «-RD$300.00». Pegado a mano (`RD$${n.toLocaleString(…)}`) un negativo salía
+ * «RD$-300.00» —un reembolso, un retiro de caja, un ajuste—, que no es como se escribe un importe y se confunde con un
+ * guion. Las opciones son las de `toLocaleString`; por defecto, dos decimales.
+ */
+export function formatRD(n: number | string, opciones: Intl.NumberFormatOptions = { minimumFractionDigits: 2 }): string {
+  const v = Number(n)
+  const valor = Number.isFinite(v) ? v : 0
+  return `${valor < 0 ? '-' : ''}RD$${Math.abs(valor).toLocaleString('es-DO', opciones)}`
 }
 
 /** Monedas ofrecidas en el selector de configuración. */

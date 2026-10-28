@@ -1,6 +1,7 @@
 import { CreditCard } from 'lucide-react'
 import { FacturaPrintDialog } from '@/components/facturas/FacturaPrintDialog'
 import type { CobrosEnLineaDelDia as Datos } from '@/modules/pagos/cobros-en-linea'
+import { formatRD } from '@/lib/format'
 
 /**
  * Cobros con tarjeta hechos en la app o la web ese día (y las renovaciones automáticas).
@@ -9,8 +10,6 @@ import type { CobrosEnLineaDelDia as Datos } from '@/modules/pagos/cobros-en-lin
  * esperado ni al arqueo. Existen aquí para que el personal vea qué se pagó con tarjeta fuera del mostrador y pueda
  * imprimir cada comprobante para el cuadre. Componente de servidor: solo el botón de imprimir es de cliente.
  */
-
-const fmtRD = (n: number) => `RD$${n.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`
 
 export function CobrosEnLineaDelDia({ datos, timeZone }: { datos: Datos; timeZone: string }) {
   const fmtHora = (d: Date) => new Intl.DateTimeFormat('es-DO', { timeZone, hour: 'numeric', minute: '2-digit' }).format(d)
@@ -29,7 +28,7 @@ export function CobrosEnLineaDelDia({ datos, timeZone }: { datos: Datos; timeZon
         </div>
         {resumen.cantidad > 0 && (
           <p className="text-right text-sm font-bold tabular-nums text-foreground" data-testid="cobros-en-linea-total">
-            {fmtRD(resumen.total)}
+            {formatRD(resumen.total)}
             <span className="block text-overline font-normal text-muted-foreground">
               {resumen.cantidad} {resumen.cantidad === 1 ? 'cobro' : 'cobros'}
             </span>
@@ -55,7 +54,7 @@ export function CobrosEnLineaDelDia({ datos, timeZone }: { datos: Datos; timeZon
                 <span className="text-foreground">
                   {c.etiqueta} <span className="text-muted-foreground">· {c.cantidad} {c.cantidad === 1 ? 'cobro' : 'cobros'}</span>
                 </span>
-                <span className="font-semibold tabular-nums text-foreground">{fmtRD(c.total)}</span>
+                <span className="font-semibold tabular-nums text-foreground">{formatRD(c.total)}</span>
               </li>
             ))}
           </ul>
@@ -80,7 +79,7 @@ export function CobrosEnLineaDelDia({ datos, timeZone }: { datos: Datos; timeZon
               </div>
               <div className="flex shrink-0 items-center gap-3">
                 <div className="text-right">
-                  <p className="font-semibold tabular-nums text-foreground">{fmtRD(c.monto)}</p>
+                  <p className="font-semibold tabular-nums text-foreground">{formatRD(c.monto)}</p>
                   <p className="text-overline text-muted-foreground">{fmtHora(c.creadoAt)}</p>
                 </div>
                 <FacturaPrintDialog transactionId={c.id} yaImpresa={c.impresa} triggerLabel={c.impresa ? 'Reimprimir' : 'Imprimir'} />

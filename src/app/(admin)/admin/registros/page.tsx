@@ -23,12 +23,11 @@ import { leerPaginacion } from '@/lib/paginacion'
 import { TablaPaginacion } from '@/components/tablas/TablaPaginacion'
 import { Tabla } from '@/components/ui/tabla'
 import { EstadoChip, type TonoEstado } from '@/components/ui/estado-chip'
+import { formatRD } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
 
 export const metadata = { title: 'Registros' }
-
-const fmtRD = (n: number) => `RD$${n.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`
 
 const TONO_COMPROBANTE: Record<string, TonoEstado> = {
   APPLIED: 'exito',
@@ -95,11 +94,11 @@ export default async function RegistrosPage({
   ).toString()
 
   const kpis = [
-    { label: 'Ingresos (aplicados)', valor: fmtRD(resumen.total) },
+    { label: 'Ingresos (aplicados)', valor: formatRD(resumen.total) },
     { label: 'Operaciones con monto', valor: String(resumen.cantidad) },
-    { label: 'Efectivo', valor: fmtRD(resumen.porMetodo.efectivo) },
-    { label: 'Transferencia', valor: fmtRD(resumen.porMetodo.transferencia) },
-    { label: 'Tarjeta', valor: fmtRD(resumen.porMetodo.tarjeta) },
+    { label: 'Efectivo', valor: formatRD(resumen.porMetodo.efectivo) },
+    { label: 'Transferencia', valor: formatRD(resumen.porMetodo.transferencia) },
+    { label: 'Tarjeta', valor: formatRD(resumen.porMetodo.tarjeta) },
   ]
 
   return (
@@ -245,7 +244,7 @@ export default async function RegistrosPage({
               clave: 'monto',
               encabezado: 'Monto',
               alineacion: 'derecha',
-              celda: (r) => <span className="font-semibold text-foreground">{r.monto == null ? '—' : fmtRD(r.monto)}</span>,
+              celda: (r) => <span className="font-semibold text-foreground">{r.monto == null ? '—' : formatRD(r.monto)}</span>,
             },
             { clave: 'estado', encabezado: 'Estado', celda: (r) => <EstadoChip tono={TONO_COMPROBANTE[r.estado] ?? 'neutro'}>{r.estadoLabel}</EstadoChip> },
             {
@@ -287,11 +286,11 @@ export default async function RegistrosPage({
           generadoEn={fmtFecha(new Date().toISOString())}
         >
           <div className="my-2 flex flex-wrap gap-x-6 gap-y-1 text-xs">
-            <span><strong>Ingresos:</strong> {fmtRD(resumen.total)}</span>
+            <span><strong>Ingresos:</strong> {formatRD(resumen.total)}</span>
             <span><strong>Operaciones:</strong> {resumen.cantidad}</span>
-            <span><strong>Efectivo:</strong> {fmtRD(resumen.porMetodo.efectivo)}</span>
-            <span><strong>Transferencia:</strong> {fmtRD(resumen.porMetodo.transferencia)}</span>
-            <span><strong>Otro:</strong> {fmtRD(resumen.porMetodo.otro)}</span>
+            <span><strong>Efectivo:</strong> {formatRD(resumen.porMetodo.efectivo)}</span>
+            <span><strong>Transferencia:</strong> {formatRD(resumen.porMetodo.transferencia)}</span>
+            <span><strong>Otro:</strong> {formatRD(resumen.porMetodo.otro)}</span>
           </div>
           <table className="w-full border-collapse text-xs">
             <thead>
@@ -313,7 +312,7 @@ export default async function RegistrosPage({
                   <td className="py-0.5 pr-2">{r.tipoLabel}</td>
                   <td className="py-0.5 pr-2">{r.cliente ?? '—'}</td>
                   <td className="py-0.5 pr-2">{r.empleado ?? '—'}</td>
-                  <td className="py-0.5 pr-2 text-right tabular-nums">{r.monto == null ? '—' : fmtRD(r.monto)}</td>
+                  <td className="py-0.5 pr-2 text-right tabular-nums">{r.monto == null ? '—' : formatRD(r.monto)}</td>
                   <td className="py-0.5 pr-2">{r.estadoLabel}</td>
                 </tr>
               ))}

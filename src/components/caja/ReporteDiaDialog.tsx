@@ -24,9 +24,7 @@ import { Button } from '@/components/ui/button'
 import { ANCHO_IMPRIMIBLE_MM, AreaDeImpresion } from '@/components/impresion/AreaDeImpresion'
 import { obtenerReporteDia } from '@/modules/caja/actions'
 import type { ReporteEmpleadoDia } from '@/modules/caja/queries'
-
-const fmtRD = (n: number) =>
-  `RD$${n.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`
+import { formatRD } from '@/lib/format'
 
 function fmtFecha(fecha: string, tz: string) {
   // `fecha` es YYYY-MM-DD; se ancla a mediodía para evitar corrimiento de día.
@@ -88,22 +86,22 @@ function ReportePreview({ r, papel = true }: { r: ReporteEmpleadoDia; papel?: bo
       ) : (
         <>
           <div className="font-bold">COBROS POR MÉTODO</div>
-          <Row label="Efectivo" value={fmtRD(r.porMetodo.efectivo)} />
-          <Row label="Transferencia" value={fmtRD(r.porMetodo.transferencia)} />
-          <Row label="Otro" value={fmtRD(r.porMetodo.otro)} />
-          <Row label={`TOTAL (${r.cobros} cobros)`} value={fmtRD(r.total)} bold />
+          <Row label="Efectivo" value={formatRD(r.porMetodo.efectivo)} />
+          <Row label="Transferencia" value={formatRD(r.porMetodo.transferencia)} />
+          <Row label="Otro" value={formatRD(r.porMetodo.otro)} />
+          <Row label={`TOTAL (${r.cobros} cobros)`} value={formatRD(r.total)} bold />
           <Sep />
 
           <div className="font-bold">POR ORIGEN</div>
-          <Row label={`En caja (${r.porOrigen.caja})`} value={fmtRD(r.porOrigen.cajaTotal)} />
-          <Row label={`Panel/transf. (${r.porOrigen.panel})`} value={fmtRD(r.porOrigen.panelTotal)} />
+          <Row label={`En caja (${r.porOrigen.caja})`} value={formatRD(r.porOrigen.cajaTotal)} />
+          <Row label={`Panel/transf. (${r.porOrigen.panel})`} value={formatRD(r.porOrigen.panelTotal)} />
           <Sep />
 
           {r.porTipo.length > 0 && (
             <>
               <div className="font-bold">POR TIPO DE OPERACIÓN</div>
               {r.porTipo.map((t) => (
-                <Row key={t.tipo} label={`${t.label} (${t.cantidad})`} value={fmtRD(t.total)} />
+                <Row key={t.tipo} label={`${t.label} (${t.cantidad})`} value={formatRD(t.total)} />
               ))}
               <Sep />
             </>
@@ -117,15 +115,15 @@ function ReportePreview({ r, papel = true }: { r: ReporteEmpleadoDia; papel?: bo
           <div className="text-[0.85em]">Pagados en la app o la web. NO pasan por la gaveta: no suman al efectivo.</div>
           {r.enLinea.detalleOculto
             ? r.enLinea.porCanal.map((c) => (
-                <Row key={c.etiqueta} label={`${c.etiqueta} (${c.cantidad})`} value={fmtRD(c.total)} />
+                <Row key={c.etiqueta} label={`${c.etiqueta} (${c.cantidad})`} value={formatRD(c.total)} />
               ))
             : r.enLinea.items.map((i) => (
                 <div key={i.ticketNumero} className="mt-1">
-                  <Row label={`${i.ticketNumero} · ${fmtHora(i.hora, r.timeZone)}`} value={fmtRD(i.monto)} />
+                  <Row label={`${i.ticketNumero} · ${fmtHora(i.hora, r.timeZone)}`} value={formatRD(i.monto)} />
                   <div className="text-[0.85em]">{i.cliente} · {i.detalle} · {i.canal}</div>
                 </div>
               ))}
-          <Row label={`TOTAL EN LÍNEA (${r.enLinea.cantidad})`} value={fmtRD(r.enLinea.total)} bold />
+          <Row label={`TOTAL EN LÍNEA (${r.enLinea.cantidad})`} value={formatRD(r.enLinea.total)} bold />
           <Sep />
         </>
       )}

@@ -21,6 +21,7 @@ import {
 } from '@/modules/observabilidad/conciliacion-actions'
 import { MOTIVOS_DE_CIERRE, NOTA_DE_CIERRE_MIN, motivoValeConProductoActivo } from '@/modules/observabilidad/conciliacion-entrega'
 import type { CasoDeConciliacion } from '@/modules/observabilidad/conciliacion'
+import { formatRD } from '@/lib/format'
 
 /**
  * La lista de casos de UN hallazgo, cada uno con las acciones que el servidor ofrece para él.
@@ -29,8 +30,6 @@ import type { CasoDeConciliacion } from '@/modules/observabilidad/conciliacion'
  * en el servidor. Tras resolver un caso la pantalla se refresca: el caso desaparece porque la lectura ya no lo encuentra, no
  * porque la interfaz lo oculte.
  */
-
-const fmtRD = (n: number) => `RD$${n.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`
 
 export function CasosDeHallazgo({
   casos,
@@ -112,7 +111,7 @@ function FilaDeCaso({
         {(caso.diagnostico || (caso.hechos && caso.hechos.length > 0)) && <DetalleDeCaso caso={caso} fmtFecha={fmtFecha} />}
       </div>
       <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-        {caso.monto != null && <span className="text-sm font-semibold tabular-nums text-foreground">{fmtRD(caso.monto)}</span>}
+        {caso.monto != null && <span className="text-sm font-semibold tabular-nums text-foreground">{formatRD(caso.monto)}</span>}
 
         {caso.acciones.includes('GENERAR_COMPROBANTE') && puedeResolver && !comprobante && (
           <Button size="sm" variant="secondary" disabled={pendiente} onClick={() => correr(() => generarComprobanteAccion(caso.id), false)}>
@@ -354,7 +353,7 @@ function LoteDeComprobantes({ lote, dias }: { lote: { cantidad: number; monto: n
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 px-4 py-3">
       <p className="text-sm text-muted-foreground">
-        {lote.cantidad} pagos con tarjeta ya entregados no tienen comprobante ({fmtRD(lote.monto)}).
+        {lote.cantidad} pagos con tarjeta ya entregados no tienen comprobante ({formatRD(lote.monto)}).
       </p>
       <Dialog open={abierto} onOpenChange={setAbierto}>
         <DialogTrigger asChild>
@@ -366,7 +365,7 @@ function LoteDeComprobantes({ lote, dias }: { lote: { cantidad: number; monto: n
           <DialogHeader>
             <DialogTitle>Generar {lote.cantidad} comprobantes</DialogTitle>
             <DialogDescription>
-              Se registrará la venta de {lote.cantidad} pagos con tarjeta ya entregados ({fmtRD(lote.monto)} en total). No se cobra
+              Se registrará la venta de {lote.cantidad} pagos con tarjeta ya entregados ({formatRD(lote.monto)} en total). No se cobra
               nada. Cada comprobante lleva la fecha en que el cliente pagó, así que los reportes de esos días los verán donde
               corresponde; el número de ticket sigue el orden de hoy. Quedan todos en la bitácora a tu nombre.
             </DialogDescription>

@@ -27,8 +27,7 @@ import {
   redimirGiftCard,
   cancelarGiftCardAdmin,
 } from '@/modules/regalos/giftcard-actions'
-
-const fmtRD = (n: number) => `RD$${n.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`
+import { formatRD } from '@/lib/format'
 
 export function GiftCardAdminActions({
   giftCardId,
@@ -114,7 +113,7 @@ export function GiftCardAdminActions({
             </DialogHeader>
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                Se activa la gift card de <strong>{fmtRD(monto)}</strong> y el cobro
+                Se activa la gift card de <strong>{formatRD(monto)}</strong> y el cobro
                 queda registrado como venta con su factura. Ambas partes reciben la
                 notificación.
               </p>
@@ -137,7 +136,7 @@ export function GiftCardAdminActions({
                 Volver
               </Button>
               <Button onClick={confirmar} disabled={pending} className="gap-2">
-                {pending && <Loader2 className="h-4 w-4 animate-spin" />} Confirmar {fmtRD(monto)}
+                {pending && <Loader2 className="h-4 w-4 animate-spin" />} Confirmar {formatRD(monto)}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -204,7 +203,7 @@ export function GiftCardAdminActions({
             </DialogHeader>
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                Saldo disponible: <strong>{fmtRD(saldo)}</strong>. Ingresa el monto del
+                Saldo disponible: <strong>{formatRD(saldo)}</strong>. Ingresa el monto del
                 consumo; queda el comprobante y el cliente ve su saldo restante.
               </p>
               <div className="space-y-1.5">

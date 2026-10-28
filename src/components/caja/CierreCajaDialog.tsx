@@ -23,9 +23,7 @@ import { Button } from '@/components/ui/button'
 import { ANCHO_IMPRIMIBLE_MM, AreaDeImpresion } from '@/components/impresion/AreaDeImpresion'
 import { obtenerCierre } from '@/modules/caja/actions'
 import type { CierreReporte } from '@/modules/caja/queries'
-
-const fmtRD = (n: number) =>
-  `RD$${n.toLocaleString('es-DO', { minimumFractionDigits: 2 })}`
+import { formatRD } from '@/lib/format'
 
 function fmtFechaHora(d: Date | string | null, tz: string) {
   if (!d) return '—'
@@ -62,8 +60,8 @@ function CierrePreview({ c, papel = true }: { c: CierreReporte; papel?: boolean 
       : dif === 0
         ? 'Cuadrada'
         : dif > 0
-          ? `Sobrante ${fmtRD(dif)}`
-          : `Faltante ${fmtRD(Math.abs(dif))}`
+          ? `Sobrante ${formatRD(dif)}`
+          : `Faltante ${formatRD(Math.abs(dif))}`
   return (
     <div
       className={papel ? 'mx-auto bg-white font-mono text-black shadow' : 'font-mono text-black'}
@@ -93,17 +91,17 @@ function CierrePreview({ c, papel = true }: { c: CierreReporte; papel?: boolean 
       <Sep />
 
       <div className="font-bold">COBROS POR MÉTODO</div>
-      <Row label="Efectivo" value={fmtRD(c.porMetodo.efectivo)} />
-      <Row label="Transferencia" value={fmtRD(c.porMetodo.transferencia)} />
-      <Row label="Otro" value={fmtRD(c.porMetodo.otro)} />
-      <Row label={`TOTAL (${c.cobros} cobros)`} value={fmtRD(c.total)} bold />
+      <Row label="Efectivo" value={formatRD(c.porMetodo.efectivo)} />
+      <Row label="Transferencia" value={formatRD(c.porMetodo.transferencia)} />
+      <Row label="Otro" value={formatRD(c.porMetodo.otro)} />
+      <Row label={`TOTAL (${c.cobros} cobros)`} value={formatRD(c.total)} bold />
       <Sep />
 
       {c.porTipo.length > 0 && (
         <>
           <div className="font-bold">POR TIPO DE OPERACIÓN</div>
           {c.porTipo.map((t) => (
-            <Row key={t.tipo} label={`${t.label} (${t.cantidad})`} value={fmtRD(t.total)} />
+            <Row key={t.tipo} label={`${t.label} (${t.cantidad})`} value={formatRD(t.total)} />
           ))}
           <Sep />
         </>
@@ -113,7 +111,7 @@ function CierrePreview({ c, papel = true }: { c: CierreReporte; papel?: boolean 
         <>
           <div className="font-bold">POR EMPLEADO</div>
           {c.porEmpleado.map((e) => (
-            <Row key={e.empleado} label={`${e.empleado} (${e.cantidad})`} value={fmtRD(e.total)} />
+            <Row key={e.empleado} label={`${e.empleado} (${e.cantidad})`} value={formatRD(e.total)} />
           ))}
           <Sep />
         </>
@@ -126,11 +124,11 @@ function CierrePreview({ c, papel = true }: { c: CierreReporte; papel?: boolean 
             <Row
               key={i}
               label={`${m.tipo === 'ENTRADA' ? '(+)' : '(−)'} ${m.concepto}`}
-              value={fmtRD(m.monto)}
+              value={formatRD(m.monto)}
             />
           ))}
-          <Row label="Entradas" value={fmtRD(c.movimientosEntrada)} />
-          <Row label="Salidas" value={fmtRD(c.movimientosSalida)} />
+          <Row label="Entradas" value={formatRD(c.movimientosEntrada)} />
+          <Row label="Salidas" value={formatRD(c.movimientosSalida)} />
           <Sep />
         </>
       )}
@@ -140,20 +138,20 @@ function CierrePreview({ c, papel = true }: { c: CierreReporte; papel?: boolean 
           <div className="font-bold">COBROS EN LÍNEA (TARJETA)</div>
           <div className="text-[0.85em]">Pagados en la app o la web durante el turno. NO pasan por la gaveta: no suman al efectivo ni al arqueo.</div>
           {c.enLinea.porCanal.map((x) => (
-            <Row key={x.etiqueta} label={`${x.etiqueta} (${x.cantidad})`} value={fmtRD(x.total)} />
+            <Row key={x.etiqueta} label={`${x.etiqueta} (${x.cantidad})`} value={formatRD(x.total)} />
           ))}
-          <Row label={`TOTAL EN LÍNEA (${c.enLinea.cantidad})`} value={fmtRD(c.enLinea.total)} bold />
+          <Row label={`TOTAL EN LÍNEA (${c.enLinea.cantidad})`} value={formatRD(c.enLinea.total)} bold />
           <Sep />
         </>
       )}
 
       <div className="font-bold">ARQUEO DE EFECTIVO</div>
-      <Row label="Fondo inicial" value={fmtRD(c.balanceInicial)} />
+      <Row label="Fondo inicial" value={formatRD(c.balanceInicial)} />
       {(c.movimientosEntrada > 0 || c.movimientosSalida > 0) && (
-        <Row label="Movim. netos" value={fmtRD(c.movimientosEntrada - c.movimientosSalida)} />
+        <Row label="Movim. netos" value={formatRD(c.movimientosEntrada - c.movimientosSalida)} />
       )}
-      <Row label="Efectivo esperado" value={c.balanceEsperado == null ? '—' : fmtRD(c.balanceEsperado)} />
-      <Row label="Efectivo contado" value={c.balanceFinal == null ? '—' : fmtRD(c.balanceFinal)} />
+      <Row label="Efectivo esperado" value={c.balanceEsperado == null ? '—' : formatRD(c.balanceEsperado)} />
+      <Row label="Efectivo contado" value={c.balanceFinal == null ? '—' : formatRD(c.balanceFinal)} />
       <Row label="Diferencia" value={difLabel} bold />
       {c.observaciones && (
         <>
