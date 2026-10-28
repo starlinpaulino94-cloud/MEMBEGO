@@ -22,6 +22,13 @@ export function tinteDeNombre(nombre: string): (typeof TINTES)[number] {
   return TINTES[h % TINTES.length]
 }
 
+/** «car wash prueva» → CW, «MESTIZO Restaurante» → MR; con una sola palabra, sus dos primeras letras. */
+export function iniciales(nombre: string): string {
+  const palabras = nombre.split(/\s+/).filter((p) => /[\p{L}\p{N}]/u.test(p))
+  const texto = palabras.length >= 2 ? palabras[0][0] + palabras[1][0] : (palabras[0] ?? nombre).slice(0, 2)
+  return texto.toUpperCase()
+}
+
 export function InicialesEmpresa({ nombre, className }: { nombre: string; className?: string }) {
   return (
     <span
@@ -32,7 +39,7 @@ export function InicialesEmpresa({ nombre, className }: { nombre: string; classN
         className
       )}
     >
-      {nombre.slice(0, 2).toUpperCase()}
+      {iniciales(nombre)}
     </span>
   )
 }
