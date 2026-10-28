@@ -1,6 +1,6 @@
 -- =============================================================================
 -- ¿ESTÁN APLICADAS TODAS LAS MIGRACIONES DE prisma/migrations? (versión larga)
--- Generado con scripts/generar-verificar-migraciones.mjs en 2d13a2a6: 254 migraciones, última 20261088_conciliacion_cerrar_sin_entregar.
+-- Generado con scripts/generar-verificar-migraciones.mjs en 384cf1c: 255 migraciones, última 20261089_cobros_antiguos_se_cierran.
 -- Solo lee; no modifica nada. Es UNA sola sentencia.
 --
 -- Ejecútalo desde el archivo, no pegado (es largo y los pegados se recortan):
@@ -267,7 +267,8 @@ WITH repo(nombre, checksum) AS (VALUES
   ('20261085_identidad_incidencias_respuesta','5fbcc5c960c258b4bab37b7442175fb43f6fe6ea4600b02d2067d6ce93e959ae'),
   ('20261086_identidad_reglas_enums','103ee8129fcd8c8f2b99b029fc6477025f0873b40c98bc51094db6a110295c4d'),
   ('20261087_identidad_reglas','a9818fdd0994cfccb22f85d212f27d6796cd7d4c168a0a3a758efdc973fbbdcd'),
-  ('20261088_conciliacion_cerrar_sin_entregar','1a52882b75f2536a289a92f807ac9ee927414d1d710c05405a5aebeb7eea7d76')
+  ('20261088_conciliacion_cerrar_sin_entregar','1a52882b75f2536a289a92f807ac9ee927414d1d710c05405a5aebeb7eea7d76'),
+  ('20261089_cobros_antiguos_se_cierran','2e0e95190bfa78a3cafaadc77b2efa62b209b20cd1a281fa1fdb9128c60ac980')
 ),
 hallazgos AS (
   SELECT 1 AS orden, 'FALTANTE' AS tipo, r.nombre AS migracion,
