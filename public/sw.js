@@ -1,15 +1,24 @@
 /* eslint-disable no-console */
 /**
- * SERVICE WORKER DE MEMBEGO (auditoría · Fase 7, punto 28).
+ * SERVICE WORKER DE MEMBEGO (auditoría · Fase 7, punto 28 · y Web Push).
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * PARA QUÉ EXISTE, EXACTAMENTE
  *
- * Para una cosa: que el escáner de pista ABRA cuando no hay red. La cola sin
- * conexión (`src/modules/scanner/colaOffline.ts`) guarda los lavados y los
- * reenvía sola, pero eso solo sirve si la página llegó a cargar. Si el empleado
- * abre el móvil sin cobertura y ve el dinosaurio del navegador, no hay cola que
- * valga.
+ * Para dos cosas:
+ *
+ *  1. Que el escáner de pista ABRA cuando no hay red. La cola sin conexión
+ *     (`src/modules/scanner/colaOffline.ts`) guarda los lavados y los reenvía
+ *     sola, pero eso solo sirve si la página llegó a cargar. Si el empleado
+ *     abre el móvil sin cobertura y ve el dinosaurio del navegador, no hay
+ *     cola que valga.
+ *
+ *  2. Que los avisos lleguen FUERA de la app (Web Push, sección del final).
+ *     MembeGo no está en las tiendas: se instala desde el navegador (PWA) y
+ *     el navegador despierta a este worker cuando el servidor envía un aviso,
+ *     aunque la app esté cerrada o el teléfono bloqueado. Sin service worker
+ *     no hay notificaciones push en la web, así que su registro también es
+ *     la condición de esa función.
  *
  * No existe para "hacer la app más rápida" ni para cachear datos. Los datos de
  * MembeGo cambian cada minuto y servir una versión vieja de la lista de
@@ -41,7 +50,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-const VERSION = 'v1'
+const VERSION = 'v2'
 const CACHE_ESTATICOS = `membego-estaticos-${VERSION}`
 const CACHE_PAGINAS = `membego-paginas-${VERSION}`
 
@@ -140,6 +149,93 @@ async function redPrimero(peticion) {
     })
   }
 }
+
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * WEB PUSH — los avisos fuera de la app
+ *
+ * El servidor (`src/modules/notificaciones/web-push.ts`) cifra un JSON con
+ * `{ id, titulo, mensaje, href }` y lo manda al servicio push del navegador;
+ * este lo descifra y despierta al worker con el evento `push`. Aquí solo hay
+ * que PINTARLO. Si llegara algo que no es JSON (una prueba desde DevTools), se
+ * enseña igual con un texto genérico: un `push` que no muestra nada hace que
+ * Chrome enseñe «Este sitio se actualizó en segundo plano» y retire el permiso
+ * a la tercera vez.
+ */
+self.addEventListener('push', (evento) => {
+  let datos = null
+  try {
+    datos = evento.data ? evento.data.json() : null
+  } catch {
+    datos = { titulo: 'MembeGo', mensaje: evento.data ? evento.data.text() : '' }
+  }
+  const titulo = (datos && datos.titulo) || 'MembeGo'
+  const opciones = {
+    body: (datos && datos.mensaje) || '',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    // El mismo aviso dos veces (reintento del servidor) sustituye al anterior
+    // en vez de apilarse.
+    tag: datos && datos.id ? `membego-${datos.id}` : undefined,
+    renotify: false,
+    data: { href: (datos && datos.href) || '/', id: datos && datos.id },
+  }
+  evento.waitUntil(self.registration.showNotification(titulo, opciones))
+})
+
+/**
+ * Al tocar el aviso: si MembeGo ya está abierto (pestaña o app instalada) se
+ * trae al frente y se navega a la ruta del aviso; si no, se abre. `href` es
+ * siempre una ruta RELATIVA de la propia app: aunque el servidor mandara otra
+ * cosa, se recorta al mismo origen para que un aviso nunca saque a nadie de
+ * MembeGo.
+ */
+self.addEventListener('notificationclick', (evento) => {
+  evento.notification.close()
+  const destino = new URL(
+    typeof evento.notification.data?.href === 'string' && evento.notification.data.href.startsWith('/')
+      ? evento.notification.data.href
+      : '/',
+    self.location.origin
+  ).href
+  evento.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (ventanas) => {
+      const abierta = ventanas.find((v) => 'focus' in v)
+      if (abierta) {
+        await abierta.focus()
+        if ('navigate' in abierta) return abierta.navigate(destino).catch(() => self.clients.openWindow(destino))
+        return undefined
+      }
+      return self.clients.openWindow(destino)
+    })
+  )
+})
+
+/**
+ * El servicio push puede caducar una suscripción y dar otra. Si no se avisa al
+ * servidor, la persona deja de recibir avisos sin saber por qué. Se vuelve a
+ * suscribir con la misma clave y se registra la nueva; la sesión viaja en la
+ * cookie, así que no hace falta nada más.
+ */
+self.addEventListener('pushsubscriptionchange', (evento) => {
+  const anterior = evento.oldSubscription
+  const clave = (evento.newSubscription && evento.newSubscription.options.applicationServerKey) ||
+    (anterior && anterior.options.applicationServerKey)
+  if (!clave) return
+  evento.waitUntil(
+    self.registration.pushManager
+      .subscribe({ userVisibleOnly: true, applicationServerKey: clave })
+      .then((nueva) =>
+        fetch('/api/v1/notificaciones/push-web', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(nueva.toJSON()),
+        })
+      )
+      .catch((e) => console.warn('[sw] no se pudo renovar la suscripción push:', e))
+  )
+})
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────

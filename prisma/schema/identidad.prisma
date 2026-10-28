@@ -698,6 +698,7 @@ model User {
   comprobantes     Comprobante[]
   notificaciones   Notificacion[]
   pushTokens       PushToken[]
+  webPushSuscripciones WebPushSuscripcion[]
   preferenciasDeAviso PreferenciasDeAviso?
   follows          CompanyFollow[]
   promosGuardadas  PromocionGuardada[]
@@ -1421,4 +1422,31 @@ model PushToken {
 
   @@index([userId])
   @@map("push_tokens")
+}
+
+/// Suscripción Web Push de un navegador (la app instalada como PWA o abierta
+/// en el navegador). Es lo que permite avisar FUERA de la app —con la pantalla
+/// apagada o MembeGo cerrado— sin pasar por las tiendas: el navegador entrega
+/// la notificación aunque la pestaña no exista. Una fila por navegador y
+/// dispositivo; el `endpoint` lo asigna el servicio push del navegador y es
+/// único. Si la persona cambia de cuenta en el mismo navegador, la fila pasa al
+/// nuevo `userId` (se hace upsert por endpoint): nunca hay dos dueños.
+model WebPushSuscripcion {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// URL que entrega el navegador (FCM, Mozilla autopush, APNs web…). Única por
+  /// definición del protocolo.
+  endpoint  String   @unique
+  /// Clave pública P-256 del navegador (base64url). Con ella se cifra cada aviso.
+  p256dh    String
+  /// Secreto de autenticación del navegador (base64url, 16 bytes).
+  auth      String
+  /// Para que la persona reconozca el dispositivo en sus ajustes (recortado).
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("web_push_suscripciones")
 }

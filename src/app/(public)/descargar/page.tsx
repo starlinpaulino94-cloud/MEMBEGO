@@ -2,7 +2,8 @@ import { haciaLaApp } from '@/lib/anfitriones'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Smartphone, Share, PlusSquare, Zap, WifiOff, ArrowRight } from 'lucide-react'
+import { Smartphone, Share, PlusSquare, Zap, WifiOff, ArrowRight, BellRing } from 'lucide-react'
+import { BotonInstalar } from '@/components/public/BotonInstalar'
 
 export const metadata: Metadata = {
   title: 'Descarga la app',
@@ -59,6 +60,9 @@ export default function DescargarPage() {
             No necesitas descargar nada de una tienda: MembeGo funciona en tu navegador
             y puedes instalarlo como app en segundos.
           </p>
+          <div className="mt-6">
+            <BotonInstalar />
+          </div>
         </div>
 
         <div className="mt-10 grid gap-4 sm:grid-cols-3">
@@ -79,10 +83,22 @@ export default function DescargarPage() {
           </div>
         </div>
 
+        <div className="mt-4 flex items-start gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-5">
+          <BellRing className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden />
+          <p className="text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">Avisos aunque la app esté cerrada.</span> Una vez
+            instalada, activa las notificaciones y te enteras de pagos, vencimientos y promociones con el
+            teléfono bloqueado. En iPhone hace falta instalarla primero.
+          </p>
+        </div>
+
         <div className="mt-8 grid gap-4 sm:grid-cols-2">
           <Pasos titulo="En iPhone / iPad" pasos={PASOS_IOS} />
           <Pasos titulo="En Android" pasos={PASOS_ANDROID} />
         </div>
+        <p className="mt-3 text-center text-caption text-muted-foreground">
+          Si no ves el botón de instalar, usa los pasos de tu teléfono: el resultado es el mismo.
+        </p>
 
         <div className="mt-10 flex flex-col items-center gap-3 text-center">
           <Link
