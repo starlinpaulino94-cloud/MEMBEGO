@@ -168,13 +168,18 @@ export function AppSidebar({
       {espacio && (
         <div
           data-nav-panel
-          className={cn('w-[212px] shrink-0 border-l border-sidebar-border', compactoReal && 'hidden')}
+          className={cn('flex w-[212px] shrink-0 flex-col border-l border-sidebar-border bg-sidebar', compactoReal && 'hidden')}
         >
+          {/* El conmutador de empresa también aquí. Solo lo pintaba la columna única (`NavColumna`), y el superadmin,
+              que ve el panel de empresa con riel de espacios, se quedaba sin forma de cambiar de empresa: tenía que
+              salir a Plataforma y no había un camino de vuelta a otra empresa. */}
+          {conmutador ? <div className="shrink-0 px-2.5 pb-1 pt-3">{conmutador}</div> : null}
           <NavPanel
             espacio={espacio}
             rutaActiva={ruta?.href ?? null}
             badges={badges}
             onNavigate={onNavigate}
+            className="h-auto flex-1"
           />
         </div>
       )}

@@ -86,6 +86,7 @@ function SegmentoAmbito({
     return (
       <span
         data-testid={testId}
+        title={title}
         aria-current="true"
         className={cn(base, 'bg-sidebar-accent text-sidebar-accent-foreground')}
       >
@@ -225,10 +226,12 @@ export function AppHeader({
             <SegmentoAmbito
               activo={ctx.scope === 'COMPANY'}
               href={ATERRIZAJE_EMPRESA}
-              title="Panel de empresa"
+              title={ctx.scope === 'COMPANY' && nombreEmpresa ? `Panel de ${nombreEmpresa}` : 'Panel de empresa'}
               testId="ambito-pildora"
             >
-              {ctx.scope === 'COMPANY' && nombreEmpresa ? `Empresa · ${nombreEmpresa}` : 'Empresa'}
+              {/* Solo «Empresa»: con el nombre (hasta 16rem) la píldora dejaba sin sitio al título de la pantalla a
+                  1 366 px. Qué empresa es lo dice el conmutador del menú lateral, que además sirve para cambiarla. */}
+              Empresa
             </SegmentoAmbito>
           </div>
         ) : null}
