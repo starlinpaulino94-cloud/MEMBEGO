@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Loader2, FileCheck2, RefreshCw, CheckCheck, Store, UserRound, CircleSlash, ChevronDown } from 'lucide-react'
+import { Loader2, FileCheck2, RefreshCw, CheckCheck, Store, UserRound, CircleSlash, ChevronDown, Ban } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { FacturaPrintDialog } from '@/components/facturas/FacturaPrintDialog'
 import { CierreCajaDialog } from '@/components/caja/CierreCajaDialog'
 import {
+  anularPagoNoRecibidoAccion,
   cerrarSinEntregarAccion,
   generarComprobanteAccion,
   generarComprobantesPendientesAccion,
@@ -150,6 +151,10 @@ function FilaDeCaso({
           />
         )}
 
+        {caso.acciones.includes('ANULAR_PAGO_NO_RECIBIDO') && puedeResolver && (
+          <AnularPagoNoRecibido caso={caso} pendiente={pendiente} onConfirmar={(nota) => correr(() => anularPagoNoRecibidoAccion(caso.id, nota))} />
+        )}
+
         {caso.acciones.includes('ABRIR_FICHA') && caso.clienteId && (
           <Button asChild size="sm" variant="ghost">
             <Link href={`/admin/clientes/${caso.clienteId}?vista=historial`}>
@@ -211,6 +216,58 @@ function MarcarEntregada({ caso, pendiente, onConfirmar }: { caso: CasoDeConcili
           }}
         >
           Marcar entregada
+        </Button>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/**
+ * «Anular pago no recibido»: para un pago de membresía confirmado a mano cuyo dinero nunca entró. Exige una nota; el servidor
+ * vuelve a comprobar que el pago sigue sin venta y que la membresía no está activa, y lo asienta en la bitácora.
+ */
+function AnularPagoNoRecibido({ caso, pendiente, onConfirmar }: { caso: CasoDeConciliacion; pendiente: boolean; onConfirmar: (nota: string) => void }) {
+  const [abierto, setAbierto] = useState(false)
+  const [nota, setNota] = useState('')
+  const valida = nota.trim().length >= NOTA_DE_CIERRE_MIN
+
+  return (
+    <Dialog open={abierto} onOpenChange={setAbierto}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="ghost" disabled={pendiente} data-testid="anular-pago-no-recibido">
+          <Ban className="h-4 w-4" aria-hidden /> Anular pago no recibido
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Anular pago no recibido</DialogTitle>
+          <DialogDescription>
+            {caso.titulo}
+            {caso.monto != null ? ` · ${formatRD(caso.monto)}` : ''}. Úsalo solo si el dinero nunca entró. El pago se quita de la
+            membresía y deja de contar en los ingresos; la membresía no cambia de estado y no se registra ninguna venta. Queda en
+            la bitácora a tu nombre con el importe y tu nota.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          <Label htmlFor={`nota-anular-${caso.id}`}>Nota (obligatoria)</Label>
+          <Textarea
+            id={`nota-anular-${caso.id}`}
+            value={nota}
+            onChange={(e) => setNota(e.target.value)}
+            maxLength={300}
+            placeholder="Ej: La transferencia nunca llegó al banco; lo confirmó el negocio."
+          />
+        </div>
+        <Button
+          variant="destructive"
+          disabled={!valida || pendiente}
+          onClick={() => {
+            onConfirmar(nota)
+            setAbierto(false)
+            setNota('')
+          }}
+        >
+          Anular pago
         </Button>
       </DialogContent>
     </Dialog>

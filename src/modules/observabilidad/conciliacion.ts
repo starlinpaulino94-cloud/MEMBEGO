@@ -46,6 +46,8 @@ export type AccionDeCaso =
   | 'MARCAR_ENTREGADA'
   /** Cerrar un cobro SIN entregar (reembolsado, de prueba, producto borrado…), con motivo y nota. */
   | 'CERRAR_SIN_ENTREGAR'
+  /** Quitar de los ingresos un pago de membresía que se dio por confirmado y nunca entró (sin venta ni pasarela), con nota. */
+  | 'ANULAR_PAGO_NO_RECIBIDO'
   | 'ABRIR_FICHA'
   | 'ABRIR_CAJA'
   | 'VER_CIERRE'
@@ -205,6 +207,7 @@ export async function conciliar(
             },
             select: {
               id: true,
+              estado: true,
               montoPagado: true,
               fechaPago: true,
               clienteId: true,
@@ -377,7 +380,9 @@ export async function conciliar(
           monto: Number(m.montoPagado ?? 0),
           fecha: m.fechaPago ?? ahora,
           clienteId: m.clienteId,
-          acciones: ['ABRIR_FICHA'],
+          // Si el dinero nunca entró se anula aquí. Una membresía ACTIVA no: primero se cancela en la ficha, porque anular el
+          // pago dejaría al cliente usando un plan que figura sin pagar.
+          acciones: m.estado === 'ACTIVA' ? ['ABRIR_FICHA'] : ['ANULAR_PAGO_NO_RECIBIDO', 'ABRIR_FICHA'],
         })),
       ].sort((a, b) => b.fecha.getTime() - a.fecha.getTime())
 
@@ -386,7 +391,7 @@ export async function conciliar(
           clave: 'cobro-sin-transaccion',
           titulo: 'Cobros sin transacción registrada',
           explicacion:
-            'El cobro existe, pero no hay ninguna operación en el libro. El dinero está en un sitio y no en el otro: los reportes de caja y los de membresías no van a cuadrar. Un pago con tarjeta se corrige con «Generar comprobante»; el resto se revisa en la ficha del cliente.',
+            'El cobro existe, pero no hay ninguna operación en el libro. El dinero está en un sitio y no en el otro: los reportes de caja y los de membresías no van a cuadrar. Un pago con tarjeta se corrige con «Generar comprobante»; el resto se revisa en la ficha del cliente y, si el dinero nunca entró, se anula con «Anular pago no recibido».',
           cantidad: casosCobro.length,
           severidad: 'ALTA',
           monto: suma(casosCobro),

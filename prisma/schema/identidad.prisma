@@ -646,6 +646,8 @@ enum AuditAccion {
   // Conciliación (cont.): al final porque su migración (20261088) es posterior a las de identidad.
   /// Se cerró SIN entregar un cobro aprobado (reembolsado, de prueba, producto eliminado…), con motivo y nota.
   CONCILIACION_ENTREGA_CERRADA_SIN_ENTREGAR
+  /// Se anuló un pago de membresía que figuraba confirmado y nunca entró (sin venta ni cobro de pasarela), con nota.
+  CONCILIACION_PAGO_ANULADO
 }
 
 // ─────────────────────────────────────────────

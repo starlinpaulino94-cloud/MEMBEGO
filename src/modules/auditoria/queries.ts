@@ -438,6 +438,7 @@ export const ACCION_LABEL: Record<string, string> = {
   CONCILIACION_ENTREGA_REINTENTADA: 'Conciliación: entrega reintentada',
   CONCILIACION_ENTREGA_MARCADA: 'Conciliación: entrega marcada como completada',
   CONCILIACION_ENTREGA_CERRADA_SIN_ENTREGAR: 'Conciliación: cobro cerrado sin entregar',
+  CONCILIACION_PAGO_ANULADO: 'Conciliación: pago no recibido anulado',
   // Verificación de identidad.
   IDENTIDAD_VERIFICACION_INICIADA: 'Identidad: verificación iniciada',
   IDENTIDAD_VERIFICACION_APROBADA: 'Identidad: verificación aprobada',

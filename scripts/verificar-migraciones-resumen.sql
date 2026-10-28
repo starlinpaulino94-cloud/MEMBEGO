@@ -1,5 +1,5 @@
 -- ¿Están aplicadas TODAS las migraciones de prisma/migrations? (versión corta)
--- Generado con scripts/generar-verificar-migraciones.mjs en 384cf1c: 255 migraciones, última 20261089_cobros_antiguos_se_cierran.
+-- Generado con scripts/generar-verificar-migraciones.mjs en 0e7be90: 256 migraciones, última 20261090_conciliacion_pago_no_recibido.
 -- Pégalo entero en el SQL Editor de Supabase. Solo lee. Devuelve UNA fila.
 --   veredicto = 'OK' → no falta ninguna y coinciden nombre y contenido.
 --   Si no, el detalle de qué falta lo da scripts/verificar-migraciones.sql
@@ -10,9 +10,9 @@ WITH base AS (
   FROM _prisma_migrations
   WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL
 ), esperado AS (
-  SELECT 255 AS total, '20261089_cobros_antiguos_se_cierran' AS ultima,
-         '02dec65d72834386ce4654185907a0f8' AS nombres,
-         '0b5b0b161b232306a0c4fca5e165ddc0' AS checksums
+  SELECT 256 AS total, '20261090_conciliacion_pago_no_recibido' AS ultima,
+         '417eb14a5ff9a120b96cf36869a45133' AS nombres,
+         '87d601073c34c1cb867910f5818ce034' AS checksums
 ), real AS (
   SELECT count(*) AS aplicadas,
          max(n COLLATE "C") AS ultima,

@@ -137,6 +137,14 @@ aprobado no se puede borrar, y «Cerrar sin entregar» no se ofrecía con el pro
 consentimiento, su evento y su asiento `MEMBRESIA_CANCELADA`). Con cualquier otro motivo, un producto activo se sigue
 cerrando con «Marcar entregada». Prueba: caso H de `conciliacion-cierre.db.test.ts`.
 
+**Un pago confirmado a mano que nunca entró se anula (migración `20261090`, oct-2026).** El caso «sin venta en el libro y sin
+cobro de pasarela» (una transferencia aprobada, una renovación en el mostrador) solo ofrecía «Abrir ficha», y la ficha no tiene
+cómo deshacer un pago: en CARTOWN quedaban dos (RD$ 1,600 y RD$ 2,600) cuyo dinero no llegó. «Anular pago no recibido»
+(`anularPagoNoRecibido`) exige nota, quita el pago de la membresía (`pagoConfirmado`, `montoPagado`, `fechaPago`), así que
+deja de contar en los ingresos, y asienta `CONCILIACION_PAGO_ANULADO` con el importe y la fecha que tenía en la misma
+transacción. No registra venta ni cambia el estado; una membresía **activa** no se anula (se cancela antes en la ficha).
+Prueba: `tests/postgres/conciliacion-pago-no-recibido.db.test.ts`.
+
 **Decisión 2 resuelta por cómo ya funciona la caja:** cerrar una caja no exige ser quien la abrió; la acción de cierre solo pide
 ser personal de la misma empresa con la caja activada. La conciliación no añade un cierre propio porque el cierre necesita el
 efectivo contado: lleva a la caja, donde se hace.

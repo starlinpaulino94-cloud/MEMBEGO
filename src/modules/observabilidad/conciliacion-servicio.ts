@@ -27,7 +27,8 @@ import { emitirCambioMembresiaAlBus, registrarEventoMembresia } from '@/modules/
  * La lectura (`conciliacion.ts`) dice QUÉ no cuadra. Estas tres funciones son lo que una persona puede hacer al
  * respecto, y todas cumplen lo mismo:
  *
- *   · no recobran nada: el dinero ya entró por la pasarela; aquí solo se alinean el libro y la entrega;
+ *   · no recobran nada: el dinero ya entró por la pasarela; aquí solo se alinean el libro y la entrega (o, si el dinero de
+ *     un pago confirmado a mano nunca entró, se quita de los ingresos: «Anular pago no recibido»);
  *   · son idempotentes: repetir el clic no duplica ni el comprobante ni la entrega;
  *   · se comprueban OTRA VEZ en el servidor: que la pantalla ofrezca un botón no basta para ejecutarlo;
  *   · dejan un asiento en la bitácora con quién la hizo y qué encontró.
@@ -373,6 +374,81 @@ export async function cerrarCobroSinEntregar(
     return { ok: true, mensaje: 'Cobro cerrado sin entregar y membresía cancelada. Queda en la bitácora con tu motivo y tu nota.' }
   }
   return { ok: true, mensaje: 'Cobro cerrado sin entregar. Queda en la bitácora con tu motivo y tu nota.' }
+}
+
+/**
+ * ANULAR PAGO NO RECIBIDO — quita de los ingresos el pago de una membresía que se dio por confirmado (a mano: una
+ * transferencia aprobada, una renovación en el mostrador) y cuyo dinero nunca entró. Es el caso «sin venta en el libro y
+ * sin cobro de pasarela»: nada que facturar ni que devolver, solo un importe que los reportes cuentan y no existe.
+ *
+ * Deja la membresía como estaba salvo el pago (`pagoConfirmado`, `montoPagado`, `fechaPago`), así que deja de sumar en
+ * todos los reportes de ingresos. Exige una nota y el asiento de la bitácora —con el importe y la fecha que tenía— va en la
+ * MISMA transacción: si no se puede anotar, no se anula. Una membresía ACTIVA no se anula: primero se cancela en la ficha.
+ */
+export async function anularPagoNoRecibido(
+  companyId: string,
+  membershipId: string,
+  actor: ActorDeConciliacion,
+  nota: string
+): Promise<ResultadoDeAccion> {
+  const texto = nota.trim()
+  if (texto.length < NOTA_DE_CIERRE_MIN) {
+    return falla(`Escribe una nota (al menos ${NOTA_DE_CIERRE_MIN} caracteres) con lo que comprobaste: por ejemplo, que la transferencia no llegó.`)
+  }
+  if (texto.length > 300) return falla('La nota es demasiado larga (máximo 300 caracteres).')
+
+  try {
+    return await conEmpresa(companyId, async (tx): Promise<ResultadoDeAccion> => {
+      // Las mismas condiciones con que la conciliación lista el caso: un pago con venta o con cobro de pasarela no es esto.
+      const sinVenta = {
+        id: membershipId,
+        companyId,
+        pagoConfirmado: true,
+        montoPagado: { gt: 0 },
+        transacciones: { none: {} },
+        pagoIntentos: { none: { estado: 'APROBADO' as const } },
+      }
+      const m = await tx.membership.findFirst({
+        where: sinVenta,
+        select: { id: true, estado: true, montoPagado: true, fechaPago: true, clienteId: true, updatedAt: true },
+      })
+      if (!m) {
+        const existe = await tx.membership.findFirst({ where: { id: membershipId, companyId }, select: { id: true } })
+        return existe ? { ok: true, mensaje: 'Esta membresía ya no tiene un pago sin venta: no hay nada que anular.' } : falla('Membresía no encontrada.')
+      }
+      if (m.estado === 'ACTIVA') {
+        return falla('La membresía sigue activa: cancélala primero desde la ficha del cliente y después anula el pago.')
+      }
+      // `updatedAt` tal como se leyó: si alguien la tocó mientras se decidía (una renovación), no se anula a ciegas.
+      const r = await tx.membership.updateMany({
+        where: { ...sinVenta, updatedAt: m.updatedAt },
+        data: { pagoConfirmado: false, montoPagado: null, fechaPago: null },
+      })
+      if (r.count === 0) return falla('La membresía cambió mientras la revisabas. Recarga la pantalla.')
+      await tx.auditLog.create({
+        data: {
+          companyId,
+          userId: actor.userId,
+          accion: 'CONCILIACION_PAGO_ANULADO',
+          entidadTipo: 'Membership',
+          entidadId: m.id,
+          payload: {
+            nota: texto,
+            montoAnulado: Number(m.montoPagado),
+            fechaPagoAnterior: m.fechaPago?.toISOString() ?? null,
+            estado: m.estado,
+            clienteId: m.clienteId,
+          },
+          ipAddress: actor.ipAddress ?? null,
+          userAgent: actor.userAgent ?? null,
+        },
+      })
+      return { ok: true, mensaje: 'Pago anulado: ya no cuenta en los ingresos. Queda en la bitácora con tu nota.' }
+    })
+  } catch (e) {
+    anotarFallo('conciliacion:anular-pago', { membershipId })(e)
+    return falla('No se pudo anular el pago. Revisa el registro del servidor e inténtalo de nuevo.')
+  }
 }
 
 export type ResultadoDeLote =
