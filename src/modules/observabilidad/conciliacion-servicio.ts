@@ -12,11 +12,14 @@ import {
   entregaRequierePersona,
   esMotivoDeCierre,
   evidenciaDeEntrega,
+  motivoValeConProductoActivo,
   productoEliminado,
   situacionDeEntrega,
   type EstadoDeEntrega,
 } from '@/modules/observabilidad/conciliacion-entrega'
 import { activacionesEnBitacora } from '@/modules/observabilidad/conciliacion-bitacora'
+import { revocarConsentimientos } from '@/modules/pagos/consentimientos'
+import { emitirCambioMembresiaAlBus, registrarEventoMembresia } from '@/modules/membresia/eventos'
 
 /**
  * LAS ACCIONES DE LA CONCILIACIÓN — resolver un caso, con rastro.
@@ -65,7 +68,7 @@ async function cargarCobro(companyId: string, intentoId: string) {
         planDestinoId: true,
         membershipId: true,
         compraId: true,
-        membership: { select: { pagoConfirmado: true, fechaPago: true, estado: true, planIdSolicitado: true } },
+        membership: { select: { pagoConfirmado: true, fechaPago: true, estado: true, planIdSolicitado: true, clienteId: true, planId: true } },
         compra: { select: { pagoConfirmado: true, fechaActivacion: true } },
       },
     })
@@ -246,8 +249,10 @@ export async function marcarCobroEntregado(companyId: string, intentoId: string,
  * que el cambio de estado —si la bitácora no lo acepta, el cobro no se cierra—: un cobro cerrado sin entregar sin saber
  * quién ni por qué sería exactamente el error invisible que la conciliación existe para evitar.
  *
- * Nunca para un producto que SÍ está activo: ése se cierra con «Marcar entregada» (y queda facturado). Uno que se activó y
- * después se borró admite las dos salidas: lo decide quien comprueba en la pasarela si el dinero se devolvió.
+ * Un producto que SÍ está activo se cierra con «Marcar entregada» (y queda facturado). Uno que se activó y después se borró
+ * admite las dos salidas: lo decide quien comprueba en la pasarela si el dinero se devolvió. Una MEMBRESÍA activa solo se
+ * cierra sin entregar si el dinero no se quedó (`MOTIVOS_CON_PRODUCTO_ACTIVO`: reembolso o cobro de prueba), y entonces se
+ * cancela en la misma transacción —con su renovación, su consentimiento y su asiento—: lo que no se pagó no se conserva.
  */
 export async function cerrarCobroSinEntregar(
   companyId: string,
@@ -271,10 +276,19 @@ export async function cerrarCobroSinEntregar(
   if (situacion === 'DESCARTADA') return { ok: true, mensaje: 'Este cobro ya estaba cerrado sin entregar.' }
   if (situacion === 'ENTREGADA') return falla('Este cobro ya está entregado: no hay nada que cerrar.')
   if (situacion === 'EN_CURSO') return falla('La entrega sigue en curso. Espera un par de minutos.')
-  // Un producto que se activó y SIGUE existiendo contradice «no se entregó». Si ya se borró, no hay nada que lo contradiga:
-  // la persona decide si fue entregado (y se factura) o si el dinero se devolvió.
+  // Un producto que se activó y SIGUE existiendo contradice «no se entregó», salvo que el dinero no se quedara: una
+  // membresía activa de un cobro reembolsado o de prueba se cierra sin entregar y se cancela. Si ya se borró, no hay nada
+  // que lo contradiga: la persona decide si fue entregado (y se factura) o si el dinero se devolvió.
+  const membresiaActiva = situacion === 'REGISTRO_SIN_CERRAR' && !productoEliminado(cobro) ? cobro.membership : null
   if (situacion === 'REGISTRO_SIN_CERRAR' && !productoEliminado(cobro)) {
-    return falla('El producto de este cobro sí se activó: ciérralo con «Marcar entregada», que deja la venta en el libro.')
+    if (!membresiaActiva || !cobro.membershipId) {
+      return falla('El producto de este cobro sí se activó: ciérralo con «Marcar entregada», que deja la venta en el libro.')
+    }
+    if (!motivoValeConProductoActivo(motivo)) {
+      return falla(
+        'La membresía de este cobro está activa: solo se cierra sin entregar si el dinero se devolvió o fue un cobro de prueba (y entonces se cancela). Si no, ciérralo con «Marcar entregada».'
+      )
+    }
   }
 
   const etiqueta = MOTIVOS_DE_CIERRE.find((m) => m.codigo === motivo)?.etiqueta ?? motivo
@@ -286,6 +300,38 @@ export async function cerrarCobroSinEntregar(
         data: { fulfillmentEstado: 'DESCARTADA', fulfillmentError: `Cerrado sin entregar: ${etiqueta}` },
       })
       if (r.count === 0) return false
+      if (membresiaActiva && cobro.membershipId && membresiaActiva.estado !== 'CANCELADA') {
+        // Igual que cancelar desde la ficha: también apaga la renovación y retira su consentimiento, para que el cron no
+        // vuelva a renovar con tarjeta una membresía que nadie pagó.
+        await tx.membership.update({
+          where: { id: cobro.membershipId },
+          data: { estado: 'CANCELADA', autoRenovar: false, motivoCancelacion: `Cobro cerrado sin entregar: ${etiqueta}` },
+        })
+        await revocarConsentimientos(tx, { tipo: 'RENOVACION_AUTOMATICA', membershipId: cobro.membershipId })
+        await tx.auditLog.create({
+          data: {
+            companyId,
+            userId: actor.userId,
+            accion: 'MEMBRESIA_CANCELADA',
+            entidadTipo: 'Membership',
+            entidadId: cobro.membershipId,
+            payload: { prevEstado: membresiaActiva.estado, porCobro: intentoId, motivo },
+            ipAddress: actor.ipAddress ?? null,
+            userAgent: actor.userAgent ?? null,
+          },
+        })
+        await registrarEventoMembresia(tx, {
+          companyId,
+          membershipId: cobro.membershipId,
+          clienteId: membresiaActiva.clienteId,
+          tipo: 'CANCELADA',
+          origen: 'ADMIN',
+          estadoAnterior: membresiaActiva.estado,
+          estadoNuevo: 'CANCELADA',
+          planAnteriorId: membresiaActiva.planId,
+          actorUserId: actor.userId,
+        })
+      }
       await tx.auditLog.create({
         data: {
           companyId,
@@ -302,6 +348,7 @@ export async function cerrarCobroSinEntregar(
             errorAnterior: cobro.fulfillmentError,
             intentosAnteriores: cobro.fulfillmentIntentos,
             situacion,
+            ...(membresiaActiva && cobro.membershipId ? { membresiaCancelada: cobro.membershipId } : {}),
           },
           ipAddress: actor.ipAddress ?? null,
           userAgent: actor.userAgent ?? null,
@@ -313,6 +360,17 @@ export async function cerrarCobroSinEntregar(
   } catch (e) {
     anotarFallo('conciliacion:cerrar-sin-entregar', { intentoId })(e)
     return falla('No se pudo cerrar el cobro. Revisa el registro del servidor e inténtalo de nuevo.')
+  }
+  if (membresiaActiva && cobro.membershipId && membresiaActiva.estado !== 'CANCELADA') {
+    // Fuera de la transacción, como al cancelar desde la ficha: que un satélite marque la baja en su copia.
+    await emitirCambioMembresiaAlBus({
+      tipo: 'CANCELADA',
+      companyId,
+      clienteId: membresiaActiva.clienteId,
+      membershipId: cobro.membershipId,
+      planId: membresiaActiva.planId,
+    }).catch(anotarFallo('conciliacion:cerrar-sin-entregar:bus', { intentoId }))
+    return { ok: true, mensaje: 'Cobro cerrado sin entregar y membresía cancelada. Queda en la bitácora con tu motivo y tu nota.' }
   }
   return { ok: true, mensaje: 'Cobro cerrado sin entregar. Queda en la bitácora con tu motivo y tu nota.' }
 }

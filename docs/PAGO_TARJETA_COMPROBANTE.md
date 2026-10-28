@@ -130,6 +130,13 @@ cobro»; 8 de los 9 de RD$ 14,400). La regla ya no se exige a un cobro **cerrado
 abierto sigue teniendo que decir qué se paga. `tests/postgres/conciliacion-cierre.db.test.ts` siembra esos cobros como existieron
 —antes de la regla— y ejerce las acciones con la regla de hoy.
 
+**Un cobro de prueba o reembolsado con la membresía activa se cierra sin entregar (oct-2026).** Una membresía con un pago
+aprobado no se puede borrar, y «Cerrar sin entregar» no se ofrecía con el producto activo: el cobro de prueba de agosto
+(«starlin prueba») no tenía ninguna salida. Ahora se ofrece, pero solo con los motivos `REEMBOLSADO` o `COBRO_DE_PRUEBA`
+(`MOTIVOS_CON_PRODUCTO_ACTIVO`), la pantalla avisa y la misma transacción **cancela la membresía** (con su renovación, su
+consentimiento, su evento y su asiento `MEMBRESIA_CANCELADA`). Con cualquier otro motivo, un producto activo se sigue
+cerrando con «Marcar entregada». Prueba: caso H de `conciliacion-cierre.db.test.ts`.
+
 **Decisión 2 resuelta por cómo ya funciona la caja:** cerrar una caja no exige ser quien la abrió; la acción de cierre solo pide
 ser personal de la misma empresa con la caja activada. La conciliación no añade un cierre propio porque el cierre necesita el
 efectivo contado: lleva a la caja, donde se hace.

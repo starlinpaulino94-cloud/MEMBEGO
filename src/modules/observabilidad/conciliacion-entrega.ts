@@ -224,6 +224,16 @@ export const MOTIVOS_DE_CIERRE = [
 
 export type MotivoDeCierre = (typeof MOTIVOS_DE_CIERRE)[number]['codigo']
 
+/**
+ * Los únicos motivos con los que se cierra sin entregar un cobro cuya MEMBRESÍA SIGUE ACTIVA: el dinero no se quedó, porque
+ * se devolvió o porque era una prueba. Cerrarlo así cancela esa membresía en la misma transacción: un cliente no puede
+ * conservar lo que no pagó. Con cualquier otro motivo, un producto activo se cierra con «Marcar entregada» (y factura).
+ */
+export const MOTIVOS_CON_PRODUCTO_ACTIVO = ['REEMBOLSADO', 'COBRO_DE_PRUEBA'] as const satisfies readonly MotivoDeCierre[]
+
+export const motivoValeConProductoActivo = (m: MotivoDeCierre): boolean =>
+  (MOTIVOS_CON_PRODUCTO_ACTIVO as readonly string[]).includes(m)
+
 export const esMotivoDeCierre = (v: unknown): v is MotivoDeCierre =>
   typeof v === 'string' && MOTIVOS_DE_CIERRE.some((m) => m.codigo === v)
 

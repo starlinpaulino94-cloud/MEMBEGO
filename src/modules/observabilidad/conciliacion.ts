@@ -84,6 +84,11 @@ export interface CasoDeConciliacion {
   diagnostico?: string
   /** Los datos del cobro para decidir sin abrir la base: referencia, autorización, estado, intentos, error, evidencia. */
   hechos?: HechoDeCaso[]
+  /**
+   * «Cerrar sin entregar» sobre una membresía que SIGUE activa: solo con un reembolso o un cobro de prueba
+   * (`MOTIVOS_CON_PRODUCTO_ACTIVO`), y cancela la membresía. La pantalla lo avisa y limita los motivos.
+   */
+  cierreCancelaMembresia?: boolean
 }
 
 export interface Hallazgo {
@@ -468,17 +473,20 @@ export async function conciliar(
           fecha: i.activadoAt ?? i.updatedAt,
           clienteId: i.clienteId,
           // «Cerrar sin entregar» existe para lo que reintentar no arregla: un reembolso, un cobro de prueba, un producto que ya
-          // no existe. No para un producto que SÍ está activo hoy: eso se cierra como entregado (y factura). Si se activó y
-          // después se borró, las dos salidas valen: entregado y facturado, o cerrado sin entregar si el dinero se devolvió.
+          // no existe. Si se activó y después se borró, las dos salidas valen: entregado y facturado, o cerrado sin entregar si
+          // el dinero se devolvió. Una MEMBRESÍA que sigue activa se cierra como entregada (y factura), salvo que el dinero no
+          // se quedara —reembolso o prueba—: entonces se cierra sin entregar y la membresía se cancela (oct-2026: el cobro de
+          // prueba de agosto no tenía salida, porque una membresía con pago aprobado no se puede borrar).
           acciones: laAplicaUnaPersona
             ? ['CERRAR_SIN_ENTREGAR', 'ABRIR_FICHA']
             : esperando
               ? ['REINTENTAR_ENTREGA', 'CERRAR_SIN_ENTREGAR', 'ABRIR_FICHA']
               : sinProducto
                 ? ['CERRAR_SIN_ENTREGAR']
-                : eliminado
+                : eliminado || i.membership
                   ? ['MARCAR_ENTREGADA', 'CERRAR_SIN_ENTREGAR', 'ABRIR_FICHA']
                   : ['MARCAR_ENTREGADA', 'ABRIR_FICHA'],
+          ...(situacion === 'REGISTRO_SIN_CERRAR' && !eliminado && i.membership ? { cierreCancelaMembresia: true } : {}),
           diagnostico: diagnosticoDeEntrega({
             situacion,
             estado: i.fulfillmentEstado as EstadoDeEntrega,

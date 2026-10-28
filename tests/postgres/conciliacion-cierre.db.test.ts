@@ -273,3 +273,38 @@ test('G · la regla sigue para lo abierto: un cobro nuevo sin membresía ni comp
   await prisma.membership.delete({ where: { id: m.id } })
   assert.equal((await prisma.pagoIntento.findUniqueOrThrow({ where: { id: i.id } })).membershipId, null)
 })
+
+test('H · un cobro de prueba con la membresía ACTIVA: solo se cierra sin entregar como prueba o reembolso, y la membresía se cancela', async () => {
+  const e = await crearEmpresa('h')
+  const agosto = new Date(Date.now() - 70 * DIA)
+  // Como «starlin prueba» en producción: activada con el cobro, sigue ACTIVA y con pago confirmado. No se puede borrar
+  // (tiene un pago aprobado), así que sin esta salida el cobro de prueba se quedaba en la conciliación para siempre.
+  const m = await prisma.membership.create({
+    data: {
+      companyId: e.companyId, clienteId: e.clienteId, planId: e.planId, estado: 'ACTIVA', pagoConfirmado: true,
+      fechaPago: mas(agosto, 300), autoRenovar: true,
+    },
+    select: { id: true },
+  })
+  const i = await cobroAntiguo(e, agosto, { clienteId: e.clienteId, membershipId: m.id })
+
+  const caso = casoDe(await conciliar(e.companyId), i.id)
+  assert.ok(caso)
+  assert.deepEqual([caso.tipo, caso.acciones, caso.cierreCancelaMembresia], ['REGISTRO_SIN_CERRAR', ['MARCAR_ENTREGADA', 'CERRAR_SIN_ENTREGAR', 'ABRIR_FICHA'], true])
+
+  const otro = await cerrarCobroSinEntregar(e.companyId, i.id, actor(e), 'RESUELTO_FUERA', 'se arregló con el cliente por WhatsApp')
+  assert.ok(!otro.ok && /devolvió o fue un cobro de prueba/.test(otro.error), 'con el producto activo, solo reembolso o prueba')
+  assert.equal((await prisma.membership.findUniqueOrThrow({ where: { id: m.id } })).estado, 'ACTIVA', 'el intento rechazado no toca nada')
+
+  const ok = await cerrarCobroSinEntregar(e.companyId, i.id, actor(e), 'COBRO_DE_PRUEBA', 'Cobro de prueba del dueño, reembolsado en CardNET.')
+  assert.ok(ok.ok, JSON.stringify(ok))
+  assert.match(ok.ok ? ok.mensaje : '', /membresía cancelada/)
+  const cobro = await prisma.pagoIntento.findUniqueOrThrow({ where: { id: i.id } })
+  assert.equal(cobro.fulfillmentEstado, 'DESCARTADA')
+  const membresia = await prisma.membership.findUniqueOrThrow({ where: { id: m.id } })
+  assert.deepEqual([membresia.estado, membresia.autoRenovar], ['CANCELADA', false], 'lo que no se pagó no se conserva, ni se renueva')
+  assert.equal(await prisma.transaction.count({ where: { pagoIntentoId: i.id } }), 0, 'sin venta: no se vendió nada')
+  const asientos = await prisma.auditLog.findMany({ where: { companyId: e.companyId, accion: { in: ['MEMBRESIA_CANCELADA', 'CONCILIACION_ENTREGA_CERRADA_SIN_ENTREGAR'] } }, select: { accion: true } })
+  assert.deepEqual(asientos.map((a) => a.accion).sort(), ['CONCILIACION_ENTREGA_CERRADA_SIN_ENTREGAR', 'MEMBRESIA_CANCELADA'])
+  assert.equal(casoDe(await conciliar(e.companyId), i.id), undefined, 'sale de la conciliación')
+})

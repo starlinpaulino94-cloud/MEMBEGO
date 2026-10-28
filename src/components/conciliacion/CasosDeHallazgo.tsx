@@ -19,7 +19,7 @@ import {
   marcarEntregadaAccion,
   reintentarEntregaAccion,
 } from '@/modules/observabilidad/conciliacion-actions'
-import { MOTIVOS_DE_CIERRE, NOTA_DE_CIERRE_MIN } from '@/modules/observabilidad/conciliacion-entrega'
+import { MOTIVOS_DE_CIERRE, NOTA_DE_CIERRE_MIN, motivoValeConProductoActivo } from '@/modules/observabilidad/conciliacion-entrega'
 import type { CasoDeConciliacion } from '@/modules/observabilidad/conciliacion'
 
 /**
@@ -280,6 +280,13 @@ function CerrarSinEntregar({
           </DialogDescription>
         </DialogHeader>
         {caso.diagnostico && <p className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">{caso.diagnostico}</p>}
+        {caso.cierreCancelaMembresia && (
+          <p role="note" className="rounded-lg border border-warning/40 bg-warning-soft p-3 text-xs text-warning-ink">
+            La membresía de este cobro está activa. Solo se cierra sin entregar si el dinero se devolvió o fue un cobro de
+            prueba, y al cerrarlo <strong>se cancela la membresía</strong> (y su renovación). Si el cliente pagó, usa «Marcar
+            entregada».
+          </p>
+        )}
         <div className="space-y-2">
           <Label htmlFor={`motivo-${caso.id}`}>Motivo</Label>
           <Select value={motivo} onValueChange={setMotivo}>
@@ -287,7 +294,7 @@ function CerrarSinEntregar({
               <SelectValue placeholder="Elige por qué no se entrega" />
             </SelectTrigger>
             <SelectContent>
-              {MOTIVOS_DE_CIERRE.map((m) => (
+              {MOTIVOS_DE_CIERRE.filter((m) => !caso.cierreCancelaMembresia || motivoValeConProductoActivo(m.codigo)).map((m) => (
                 <SelectItem key={m.codigo} value={m.codigo}>
                   {m.etiqueta}
                 </SelectItem>
