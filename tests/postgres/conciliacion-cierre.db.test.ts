@@ -45,12 +45,38 @@ const hallazgo = (r: Conciliacion, clave: string) => r.hallazgos.find((h) => h.c
 const casoDe = (r: Conciliacion, id: string) => r.hallazgos.flatMap((h) => h.casos.map((c) => ({ ...c, clave: h.clave }))).find((c) => c.id === id)
 const mas = (d: Date, ms: number) => new Date(d.getTime() + ms)
 
+/**
+ * LO QUE PASÓ EN AGOSTO, CON LAS REGLAS DE AGOSTO.
+ *
+ * Desde el 7-oct-2026 `pago_intentos_target_xor_check` exige que cada cobro apunte a una membresía O a una compra. Se
+ * añadió `NOT VALID`: no revisa lo que ya había, y por eso en producción siguen los cobros de agosto sin producto (su
+ * membresía se borró con la cuenta del cliente: `onDelete: SetNull`). Hoy esas filas no se pueden CREAR, así que para
+ * reproducirlas se hace lo que pasó: existir antes de la regla. Se quita, se siembra y se vuelve a poner igual que en la
+ * migración (`NOT VALID`), de modo que lo que la prueba ejerce después corre con la regla de hoy, como en producción.
+ */
+async function antesDeLaReglaDeOctubre<T>(sembrar: () => Promise<T>): Promise<T> {
+  // Se vuelve a poner la definición que tenga la base (`pg_get_constraintdef`, con su `NOT VALID`), no una copiada aquí:
+  // si una migración la cambia, la prueba ejerce la regla nueva sin tocarla.
+  const [regla] = await prisma.$queryRawUnsafe<{ def: string }[]>(
+    `SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname = 'pago_intentos_target_xor_check'`
+  )
+  assert.ok(regla, 'la base migrada debe tener pago_intentos_target_xor_check')
+  await prisma.$executeRawUnsafe('ALTER TABLE "pago_intentos" DROP CONSTRAINT "pago_intentos_target_xor_check"')
+  try {
+    return await sembrar()
+  } finally {
+    await prisma.$executeRawUnsafe(`ALTER TABLE "pago_intentos" ADD CONSTRAINT "pago_intentos_target_xor_check" ${regla.def}`)
+  }
+}
+
 /** Un cobro aprobado tal como lo dejó la columna de cumplimiento sobre un cobro de agosto: PENDIENTE, sin intentos, sin error. */
 async function cobroAntiguo(e: Empresa, cuando: Date, extra: Record<string, unknown>) {
-  return prisma.pagoIntento.create({
-    data: { companyId: e.companyId, proveedor: 'CARDNET', monto: PRECIO, estado: 'APROBADO', activadoAt: cuando, autorizacion: 'AUT-AGO', createdAt: cuando, updatedAt: cuando, ...extra },
-    select: { id: true },
-  })
+  return antesDeLaReglaDeOctubre(() =>
+    prisma.pagoIntento.create({
+      data: { companyId: e.companyId, proveedor: 'CARDNET', monto: PRECIO, estado: 'APROBADO', activadoAt: cuando, autorizacion: 'AUT-AGO', createdAt: cuando, updatedAt: cuando, ...extra },
+      select: { id: true },
+    })
+  )
 }
 
 /** Lo que `activarMembresia` anota al activar con un cobro: `PAGO_APROBADO`, automático (sin usuario), en el mismo instante. */
@@ -66,7 +92,8 @@ test('A · cobro de agosto entregado cuya membresía se borró: «registro sin c
   const m = await prisma.membership.create({ data: { companyId: e.companyId, clienteId: e.clienteId, planId: e.planId }, select: { id: true } })
   const i = await cobroAntiguo(e, agosto, { clienteId: e.clienteId, membershipId: m.id })
   await activacionEnBitacora(e.companyId, m.id, mas(agosto, 350))
-  await prisma.membership.delete({ where: { id: m.id } }) // la relación del cobro queda en nulo (onDelete: SetNull)
+  // La relación del cobro queda en nulo (onDelete: SetNull): en agosto, antes de la regla que hoy lo impediría.
+  await antesDeLaReglaDeOctubre(() => prisma.membership.delete({ where: { id: m.id } }))
   assert.equal((await prisma.pagoIntento.findUniqueOrThrow({ where: { id: i.id } })).membershipId, null)
 
   const r = await conciliar(e.companyId)
@@ -228,4 +255,21 @@ test('E · un cobro sin producto no toma como prueba la activación de OTRA empr
 
   const caso = casoDe(await conciliar(e.companyId), i.id)
   assert.equal(caso?.tipo, 'COBRO_SIN_PRODUCTO')
+})
+
+test('G · la regla sigue para lo abierto: un cobro nuevo sin membresía ni compra se rechaza; uno ya entregado puede perder su membresía', async () => {
+  const e = await crearEmpresa('g')
+  await assert.rejects(
+    prisma.pagoIntento.create({ data: { companyId: e.companyId, proveedor: 'CARDNET', monto: PRECIO, estado: 'APROBADO' } }),
+    /pago_intentos_target_xor_check/,
+    'un cobro ABIERTO tiene que decir qué se paga'
+  )
+  const m = await prisma.membership.create({ data: { companyId: e.companyId, clienteId: e.clienteId, planId: e.planId }, select: { id: true } })
+  const i = await prisma.pagoIntento.create({
+    data: { companyId: e.companyId, clienteId: e.clienteId, proveedor: 'CARDNET', membershipId: m.id, monto: PRECIO, estado: 'APROBADO', fulfillmentEstado: 'COMPLETADA' },
+    select: { id: true },
+  })
+  // Borrar la cuenta del cliente borra su membresía: el cobro ya entregado se queda sin ella y sin chocar con la regla.
+  await prisma.membership.delete({ where: { id: m.id } })
+  assert.equal((await prisma.pagoIntento.findUniqueOrThrow({ where: { id: i.id } })).membershipId, null)
 })
