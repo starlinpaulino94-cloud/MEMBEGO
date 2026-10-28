@@ -243,14 +243,15 @@ export function AppHeader({
           ) : (
             // Solo las dos últimas: la sección y la pantalla. Con cuatro («Empresa › Operaciones › Pagos › Conciliación»), las
             // primeras se comían el ancho y la que importa —el nombre de la pantalla— se quedaba en «D». El espacio y el dominio
-            // ya los dice el menú lateral, resaltado.
+            // ya los dice el menú lateral, resaltado. La sección solo desde 2xl: a 1 280 px, junto al conmutador de ámbito del
+            // superadmin, «Negocio › Empresas» dejaba la pantalla en «Emp…».
             migas.slice(-2).map((miga, i, visibles) => {
               const ultima = i === visibles.length - 1
               return (
-                <span key={`${miga.label}-${i}`} className={`flex items-center gap-1.5 ${ultima ? 'min-w-0' : 'shrink-0'}`}>
+                <span key={`${miga.label}-${i}`} className={cn('flex items-center gap-1.5', ultima ? 'min-w-0' : 'shrink-0', !ultima && 'max-2xl:hidden')}>
                   {i > 0 && (
                     <ChevronRight
-                      className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60"
+                      className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60 max-2xl:hidden"
                       aria-hidden
                     />
                   )}
