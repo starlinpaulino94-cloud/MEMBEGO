@@ -123,6 +123,13 @@ sesión, nunca del formulario. «Marcar entregada» solo se permite con evidenci
 escritura: «Generar comprobante» o la autorreparación la dejan en el día en que el cliente pagó. El número de ticket sigue el
 contador de la empresa, así que un comprobante tardío lleva un número mayor que sus vecinos de ese día.
 
+**Los cobros sin producto se pueden cerrar (migración `20261089`, oct-2026).** `pago_intentos_target_xor_check` (`20261036`)
+exige membresía O compra en cada cobro y se añadió `NOT VALID`, pero PostgreSQL la revisa en cada UPDATE: los cobros de agosto
+cuya membresía se borró con la cuenta del cliente no se podían marcar entregados ni cerrar sin entregar («No se pudo cerrar el
+cobro»; 8 de los 9 de RD$ 14,400). La regla ya no se exige a un cobro **cerrado** (`COMPLETADA` o `DESCARTADA`); un cobro
+abierto sigue teniendo que decir qué se paga. `tests/postgres/conciliacion-cierre.db.test.ts` siembra esos cobros como existieron
+—antes de la regla— y ejerce las acciones con la regla de hoy.
+
 **Decisión 2 resuelta por cómo ya funciona la caja:** cerrar una caja no exige ser quien la abrió; la acción de cierre solo pide
 ser personal de la misma empresa con la caja activada. La conciliación no añade un cierre propio porque el cierre necesita el
 efectivo contado: lleva a la caja, donde se hace.
