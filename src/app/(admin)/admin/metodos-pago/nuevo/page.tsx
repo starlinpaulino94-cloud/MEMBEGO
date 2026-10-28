@@ -2,6 +2,8 @@ import { requireRole } from '@/lib/auth/guards'
 import { sinEmpresa } from '@/lib/tenant'
 import { ADMIN_ROLES } from '@/types'
 import { MetodoPagoForm } from '@/components/admin/MetodoPagoForm'
+import Link from 'next/link'
+import { PageHeader } from '@/components/ui/page-header'
 
 export default async function NuevoMetodoPagoPage() {
   const user = await requireRole(ADMIN_ROLES)
@@ -17,13 +19,18 @@ export default async function NuevoMetodoPagoPage() {
       : undefined
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Nuevo método de pago</h1>
-        <p className="text-muted-foreground">
-          Configura las instrucciones que verán los clientes al pagar.
-        </p>
-      </div>
+    <div className="mx-auto w-full max-w-[720px] space-y-6">
+      <PageHeader
+        variant="formulario"
+        className="mb-0 sm:mb-0"
+        back={
+          <Link href="/admin/metodos-pago" className="text-muted-foreground hover:text-foreground">
+            ‹ Métodos de pago
+          </Link>
+        }
+        title="Nuevo método de pago"
+        description="Configura las instrucciones que verán los clientes al pagar."
+      />
       <MetodoPagoForm companies={companies} />
     </div>
   )

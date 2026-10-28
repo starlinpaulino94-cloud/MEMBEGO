@@ -2,7 +2,6 @@
 
 import { useActionState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   crearSucursal,
@@ -14,6 +13,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Switch } from '@/components/ui/switch'
+import { Campo } from '@/components/ui/campo'
+import { FormActions, FormSection } from '@/components/ui/form-section'
 
 interface Existing {
   id: string
@@ -39,71 +40,65 @@ export function SucursalForm({ existing }: { existing?: Existing }) {
   }, [state.success, existing, router])
 
   return (
-    <form action={formAction} className="space-y-5 max-w-lg">
+    <form action={formAction} className="space-y-8">
       {existing && <input type="hidden" name="id" value={existing.id} />}
 
       {state.error && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" role="alert">
           <AlertDescription>{state.error}</AlertDescription>
         </Alert>
       )}
 
-      <div className="space-y-2">
-        <Label htmlFor="nombre">Nombre *</Label>
-        <Input
-          id="nombre"
-          name="nombre"
-          defaultValue={existing?.nombre}
-          placeholder="Ej: Sucursal Norte"
-          required
-        />
-      </div>
+      <FormSection title="La sucursal" description="El nombre con que la reconoce tu equipo.">
+        <Campo id="nombre" etiqueta="Nombre">
+          {(control) => <Input name="nombre" defaultValue={existing?.nombre} placeholder="Ej: Sucursal Norte" required {...control} />}
+        </Campo>
+      </FormSection>
 
-      <div className="space-y-2">
-        <Label htmlFor="direccion">Dirección</Label>
-        <Input
-          id="direccion"
-          name="direccion"
-          defaultValue={existing?.direccion ?? ''}
-          placeholder="Ej: Av. Winston Churchill #45, Santo Domingo"
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="telefono">Teléfono</Label>
-        <Input
-          id="telefono"
-          name="telefono"
-          defaultValue={existing?.telefono ?? ''}
-          placeholder="Ej: 809-555-1234"
-        />
-      </div>
+      <FormSection title="Contacto" description="Dónde está y cómo contactarla.">
+        <Campo id="direccion" etiqueta="Dirección" opcional>
+          {(control) => (
+            <Input
+              name="direccion"
+              defaultValue={existing?.direccion ?? ''}
+              placeholder="Ej: Av. Winston Churchill #45, Santo Domingo"
+              {...control}
+            />
+          )}
+        </Campo>
+        <Campo id="telefono" etiqueta="Teléfono" opcional className="sm:max-w-xs">
+          {(control) => (
+            <Input name="telefono" type="tel" defaultValue={existing?.telefono ?? ''} placeholder="Ej: 809-555-1234" {...control} />
+          )}
+        </Campo>
+      </FormSection>
 
       {existing && (
-        <div className="flex items-center gap-3">
-          <Switch
-            id="activa"
-            name="activa"
-            defaultChecked={existing.activa}
-            onCheckedChange={(checked) => {
-              const el = document.querySelector<HTMLInputElement>('input[name="activa"]')
-              if (el) el.value = String(checked)
-            }}
-          />
-          <Label htmlFor="activa">Sucursal activa</Label>
-          <input type="hidden" name="activa" defaultValue={String(existing.activa)} />
-        </div>
+        <FormSection title="Estado" description="Solo las sucursales activas aparecen en el escáner del empleado.">
+          <div className="flex items-center gap-3">
+            <Switch
+              id="activa"
+              name="activa"
+              defaultChecked={existing.activa}
+              onCheckedChange={(checked) => {
+                const el = document.querySelector<HTMLInputElement>('input[name="activa"]')
+                if (el) el.value = String(checked)
+              }}
+            />
+            <Label htmlFor="activa">Sucursal activa</Label>
+            <input type="hidden" name="activa" defaultValue={String(existing.activa)} />
+          </div>
+        </FormSection>
       )}
 
-      <div className="flex gap-3 pt-1">
-        <Button type="submit" disabled={pending}>
-          {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          {existing ? 'Guardar cambios' : 'Crear sucursal'}
-        </Button>
-        <Button type="button" variant="outline" onClick={() => router.back()}>
+      <FormActions>
+        <Button type="button" variant="ghost" onClick={() => router.back()}>
           Cancelar
         </Button>
-      </div>
+        <Button type="submit" loading={pending}>
+          {existing ? 'Guardar cambios' : 'Crear sucursal'}
+        </Button>
+      </FormActions>
     </form>
   )
 }

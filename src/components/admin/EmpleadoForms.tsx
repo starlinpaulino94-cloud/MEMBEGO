@@ -12,7 +12,9 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/ui/password-input'
-import { Label } from '@/components/ui/label'
+import { Campo } from '@/components/ui/campo'
+import { FormActions, FormSection } from '@/components/ui/form-section'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   AlertDialog,
@@ -52,60 +54,52 @@ export function NuevoEmpleadoForm() {
   }, [state.success, router])
 
   return (
-    <form action={action} className="space-y-4">
+    <form action={action} className="space-y-8">
       {state.error && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" role="alert">
           <AlertDescription>{state.error}</AlertDescription>
         </Alert>
       )}
-      <div className="space-y-2">
-        <Label htmlFor="nombre">Nombre</Label>
-        <Input id="nombre" name="nombre" required placeholder="Nombre completo" />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="email">Correo electrónico</Label>
-        <Input
-          id="email"
-          name="email"
-          type="email"
-          required
-          placeholder="empleado@correo.com"
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="password">Contraseña</Label>
-        <PasswordInput
-          id="password"
-          name="password"
-          required
-          minLength={6}
-          placeholder="Mínimo 6 caracteres"
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="rol">Rol</Label>
-        <select
-          id="rol"
-          name="rol"
-          defaultValue="EMPLEADO"
-          required
-          className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-        >
-          {Object.entries(ROL_LABEL).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-        <p className="text-xs text-muted-foreground">
-          Administrador, Gerente y Cajero pueden aprobar pagos y usar todos los
-          módulos del panel.
-        </p>
-      </div>
-      <Button type="submit" disabled={pending} className="w-full">
-        {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-        Crear miembro
-      </Button>
+
+      <FormSection title="La persona" description="Con este correo y esta contraseña entra al panel o al escáner.">
+        <Campo id="nombre" etiqueta="Nombre">
+          {(control) => <Input name="nombre" required autoComplete="off" placeholder="Nombre completo" {...control} />}
+        </Campo>
+        <Campo id="email" etiqueta="Correo electrónico">
+          {(control) => <Input name="email" type="email" required autoComplete="off" placeholder="empleado@correo.com" {...control} />}
+        </Campo>
+        <Campo id="password" etiqueta="Contraseña" ayuda="Mínimo 6 caracteres. Compártela con la persona por un canal privado.">
+          {(control) => <PasswordInput name="password" required minLength={6} autoComplete="new-password" {...control} />}
+        </Campo>
+      </FormSection>
+
+      <FormSection title="Qué puede hacer" description="El rol decide qué partes del panel ve. Puedes cambiarlo después.">
+        <Campo id="rol" etiqueta="Rol" ayuda="Administrador, Gerente y Cajero pueden aprobar pagos y usar todos los módulos del panel.">
+          {(control) => (
+            <Select name="rol" defaultValue="EMPLEADO" required>
+              <SelectTrigger className="w-full" {...control}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(ROL_LABEL).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </Campo>
+      </FormSection>
+
+      <FormActions>
+        <Button type="button" variant="ghost" onClick={() => router.back()}>
+          Cancelar
+        </Button>
+        <Button type="submit" loading={pending}>
+          Crear miembro
+        </Button>
+      </FormActions>
     </form>
   )
 }

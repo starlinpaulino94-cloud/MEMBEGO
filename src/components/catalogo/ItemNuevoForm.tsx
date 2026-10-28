@@ -2,16 +2,16 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { crearItemCatalogo } from '@/modules/catalog/actions'
 import { ETIQUETA_TIPO } from '@/modules/catalog/formato'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Campo } from '@/components/ui/campo'
+import { FormActions, FormSection } from '@/components/ui/form-section'
 
 const TIPOS = Object.keys(ETIQUETA_TIPO)
 
@@ -53,75 +53,76 @@ export function ItemNuevoForm({ monedaPorDefecto = 'DOP' }: { monedaPorDefecto?:
   }
 
   return (
-    <form onSubmit={enviar} className="max-w-lg space-y-5">
+    <form onSubmit={enviar} className="space-y-8">
       {error && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" role="alert">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
-      <div className="space-y-2">
-        <Label htmlFor="name">Nombre *</Label>
-        <Input id="name" name="name" required maxLength={160} placeholder="Ej: Lavado completo" />
-      </div>
+      <FormSection title="Qué es" description="El nombre y el tipo con que aparece en tu catálogo.">
+        <Campo id="name" etiqueta="Nombre">
+          {(control) => <Input name="name" required maxLength={160} placeholder="Ej: Lavado completo" {...control} />}
+        </Campo>
+        <Campo id="tipo" etiqueta="Tipo" className="sm:max-w-xs">
+          {(control) => (
+            <Select value={tipo} onValueChange={setTipo}>
+              <SelectTrigger className="w-full" {...control}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TIPOS.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {ETIQUETA_TIPO[t]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </Campo>
+        <Campo id="description" etiqueta="Descripción" opcional>
+          {(control) => <Textarea name="description" rows={3} maxLength={4000} {...control} />}
+        </Campo>
+      </FormSection>
 
-      <div className="space-y-2">
-        <Label htmlFor="tipo">Tipo *</Label>
-        <Select value={tipo} onValueChange={setTipo}>
-          <SelectTrigger id="tipo">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {TIPOS.map((t) => (
-              <SelectItem key={t} value={t}>
-                {ETIQUETA_TIPO[t]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      <FormSection title="Precio" description="Lo que paga el cliente. El precio anterior muestra el descuento; el costo solo lo ves tú.">
+        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_7rem]">
+          <Campo id="price" etiqueta="Precio">
+            {(control) => <Input name="price" inputMode="decimal" required placeholder="0.00" {...control} />}
+          </Campo>
+          <Campo id="currency" etiqueta="Moneda">
+            {(control) => <Input name="currency" defaultValue={monedaPorDefecto} maxLength={3} className="uppercase" {...control} />}
+          </Campo>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Campo id="compareAtPrice" etiqueta="Precio anterior" opcional>
+            {(control) => <Input name="compareAtPrice" inputMode="decimal" placeholder="Para mostrar el descuento" {...control} />}
+          </Campo>
+          <Campo id="cost" etiqueta="Costo" opcional>
+            {(control) => <Input name="cost" inputMode="decimal" placeholder="Solo lo ves tú" {...control} />}
+          </Campo>
+        </div>
+      </FormSection>
 
-      <div className="space-y-2">
-        <Label htmlFor="description">Descripción</Label>
-        <Textarea id="description" name="description" rows={3} maxLength={4000} />
-      </div>
+      <FormSection title="Códigos" description="Para encontrarlo en el inventario y leerlo con el escáner.">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Campo id="sku" etiqueta="SKU" opcional>
+            {(control) => <Input name="sku" maxLength={40} placeholder="Automático si lo dejas vacío" {...control} />}
+          </Campo>
+          <Campo id="barcode" etiqueta="Código de barras" opcional>
+            {(control) => <Input name="barcode" maxLength={64} {...control} />}
+          </Campo>
+        </div>
+      </FormSection>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="price">Precio *</Label>
-          <Input id="price" name="price" inputMode="decimal" required placeholder="0.00" />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="currency">Moneda</Label>
-          <Input id="currency" name="currency" defaultValue={monedaPorDefecto} maxLength={3} className="uppercase" />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="compareAtPrice">Precio anterior</Label>
-          <Input id="compareAtPrice" name="compareAtPrice" inputMode="decimal" placeholder="Para mostrar el descuento" />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="cost">Costo</Label>
-          <Input id="cost" name="cost" inputMode="decimal" placeholder="Solo lo ves tú" />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="sku">SKU</Label>
-          <Input id="sku" name="sku" maxLength={40} placeholder="Automático si lo dejas vacío" />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="barcode">Código de barras</Label>
-          <Input id="barcode" name="barcode" maxLength={64} />
-        </div>
-      </div>
-
-      <div className="flex gap-3">
-        <Button type="submit" disabled={pending}>
-          {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Crear
-        </Button>
-        <Button type="button" variant="outline" onClick={() => router.back()}>
+      <FormActions>
+        <Button type="button" variant="ghost" onClick={() => router.back()}>
           Cancelar
         </Button>
-      </div>
+        <Button type="submit" loading={pending}>
+          Crear borrador
+        </Button>
+      </FormActions>
     </form>
   )
 }

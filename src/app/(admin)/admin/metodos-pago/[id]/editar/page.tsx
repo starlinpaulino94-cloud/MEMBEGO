@@ -4,6 +4,8 @@ import { ADMIN_ROLES } from '@/types'
 import { requireRole } from '@/lib/auth/guards'
 import { requireCompanyContext } from '@/lib/auth/company-context'
 import { MetodoPagoForm } from '@/components/admin/MetodoPagoForm'
+import Link from 'next/link'
+import { PageHeader } from '@/components/ui/page-header'
 
 export default async function EditarMetodoPagoPage({
   params,
@@ -22,11 +24,18 @@ export default async function EditarMetodoPagoPage({
   if (companyId && method.companyId !== companyId) return notFound()
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Editar método de pago</h1>
-        <p className="text-muted-foreground">{method.nombre}</p>
-      </div>
+    <div className="mx-auto w-full max-w-[720px] space-y-6">
+      <PageHeader
+        variant="formulario"
+        className="mb-0 sm:mb-0"
+        back={
+          <Link href="/admin/metodos-pago" className="text-muted-foreground hover:text-foreground">
+            ‹ Métodos de pago
+          </Link>
+        }
+        title="Editar método de pago"
+        description={method.nombre}
+      />
       <MetodoPagoForm
         existing={{
           id: method.id,
