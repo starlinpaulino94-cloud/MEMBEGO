@@ -70,18 +70,26 @@ test.describe('Experiencia comercial · recorrido completo', () => {
     expect(sucursalId).toBeTruthy()
   })
 
-  test('la empresa encuentra Comercio en el menú: Catálogo, Inventario, Pedidos y Ofertas', async ({ browser }) => {
+  test('la empresa encuentra Comercio en el menú: Catálogo (con Inventario), Pedidos y Beneficios', async ({ browser }) => {
     const ctx = await browser.newContext()
     const p = await ctx.newPage()
     await entrarComo(ctx, 'pedidosAdmin', BASE, empresa.id)
     await p.goto('/admin/dashboard')
     const menu = p.getByRole('navigation', { name: /Módulos de/ })
     await expect(menu.getByText('Comercio', { exact: true })).toBeVisible()
-    for (const nombre of ['Catálogo', 'Inventario', 'Pedidos Membego', 'Ofertas y Promociones']) {
+    // Desde que el menú de empresa pasó de 45 entradas a 24 con pestañas (1f0c3d9), Inventario es una pestaña de
+    // Catálogo y las ofertas viven en «Beneficios y regalos». La prueba seguía buscando las entradas sueltas de antes.
+    for (const nombre of ['Catálogo', 'Pedidos Membego', 'Beneficios y regalos']) {
       await expect(menu.getByRole('link', { name: new RegExp(`^${nombre}`) }).first()).toBeVisible()
     }
-    // El dashboard enseña la fila de comercio y el CTA de crear producto.
+    // El dashboard enseña la fila de comercio, y su tarjeta de Catálogo invita a crear el primero. El botón «Nuevo
+    // producto o servicio» salió del Resumen con la fase 5.1 (d1387d1): vive en Catálogo, junto a la pestaña Inventario.
     await expect(p.getByRole('heading', { name: 'Comercio Membego' })).toBeVisible()
+    await expect(p.getByRole('link', { name: /Catálogo[\s\S]*Crea tu primer producto/ })).toBeVisible()
+    await p.goto('/admin/catalogo')
+    await expect(
+      p.getByRole('navigation', { name: 'Secciones de Catálogo' }).getByRole('link', { name: /^Inventario/ })
+    ).toBeVisible()
     await expect(p.getByRole('link', { name: 'Nuevo producto o servicio' })).toBeVisible()
     await ctx.close()
   })
