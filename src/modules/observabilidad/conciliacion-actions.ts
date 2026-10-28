@@ -3,6 +3,7 @@
 import { requireSection } from '@/lib/auth/guards'
 import { getRequestMeta } from '@/lib/server-utils'
 import {
+  anularPagoNoRecibido,
   cerrarCobroSinEntregar,
   generarComprobanteDeCobro,
   generarComprobantesPendientes,
@@ -63,6 +64,11 @@ export async function cerrarSinEntregarAccion(intentoId: string, motivo: string,
   return ejecutar(intentoId, (companyId, idLimpio, actor) =>
     cerrarCobroSinEntregar(companyId, idLimpio, actor, motivo, typeof nota === 'string' ? nota : '')
   )
+}
+
+/** El id es el de la MEMBRESÍA (caso «sin venta en el libro y sin cobro de pasarela»), no el de un cobro. */
+export async function anularPagoNoRecibidoAccion(membershipId: string, nota: string): Promise<ResultadoDeAccion> {
+  return ejecutar(membershipId, (companyId, idLimpio, actor) => anularPagoNoRecibido(companyId, idLimpio, actor, typeof nota === 'string' ? nota : ''))
 }
 
 /** Los periodos que la pantalla ofrece: el lote no acepta uno que la persona no haya podido ver. */

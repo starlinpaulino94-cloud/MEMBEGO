@@ -41,7 +41,7 @@ test('H7 · cada acción del servidor exige la misma función que confirmar un p
   assert.match(ACCIONES, /requireSection\('pagos', 'confirmar_pago'\)/)
   assert.match(ACCIONES, /user\.metadata\.companyId|user\?\.metadata\.companyId/)
   assert.doesNotMatch(ACCIONES, /formData|companyId:\s*string\)/, 'la empresa no viene del cliente')
-  for (const accion of ['generarComprobanteAccion', 'reintentarEntregaAccion', 'marcarEntregadaAccion']) {
+  for (const accion of ['generarComprobanteAccion', 'reintentarEntregaAccion', 'marcarEntregadaAccion', 'anularPagoNoRecibidoAccion']) {
     assert.match(ACCIONES, new RegExp(`export async function ${accion}`))
   }
 })
@@ -52,6 +52,7 @@ test('H7 · las acciones asientan la bitácora y ninguna recobra', () => {
     'CONCILIACION_ENTREGA_REINTENTADA',
     'CONCILIACION_ENTREGA_MARCADA',
     'CONCILIACION_ENTREGA_CERRADA_SIN_ENTREGAR',
+    'CONCILIACION_PAGO_ANULADO',
   ]) {
     assert.match(SERVICIO, new RegExp(accion))
   }
