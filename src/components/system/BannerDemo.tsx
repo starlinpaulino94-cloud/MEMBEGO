@@ -14,7 +14,35 @@
 
 import { FlaskConical } from 'lucide-react'
 
-export function BannerDemo({ nombreEmpresa }: { nombreEmpresa?: string | null }) {
+/**
+ * `variante="panel"`: la franja amarilla viva de los paneles (oct 2026). El tinte ámbar al 15 % se leía como un aviso
+ * apagado y sucio; aquí el amarillo es el fondo entero, el texto casi negro (11:1) y una pastilla oscura dice PRÁCTICA
+ * antes que nada. El portal del cliente sigue con la versión de siempre.
+ */
+export function BannerDemo({
+  nombreEmpresa,
+  variante = 'cliente',
+}: {
+  nombreEmpresa?: string | null
+  variante?: 'cliente' | 'panel'
+}) {
+  if (variante === 'panel') {
+    return (
+      <div
+        role="status"
+        className="sticky top-14 z-40 mb-6 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-demo-border bg-demo px-4 py-2.5 text-sm text-demo-foreground shadow-sm"
+      >
+        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-demo-foreground px-2.5 py-0.5 text-xs font-bold tracking-wide text-demo">
+          <FlaskConical className="h-3.5 w-3.5" aria-hidden />
+          PRÁCTICA
+        </span>
+        <span className="min-w-0 flex-1 basis-56">
+          {nombreEmpresa ? <span className="font-semibold">{nombreEmpresa}: </span> : null}
+          los cobros y los datos de esta empresa no son reales.
+        </span>
+      </div>
+    )
+  }
   return (
     <div
       role="status"

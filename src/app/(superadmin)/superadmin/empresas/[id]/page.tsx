@@ -53,7 +53,7 @@ export default async function EmpresaDetailPage({
   const ofreceDemoExcursiones =
     !!ficha?.esDemo && capacidadesDeEmpresa(ficha).activas.has('EXCURSIONES')
   const Icon = company.type === 'carwash' ? Car : UtensilsCrossed
-  const iconBg = company.type === 'carwash' ? 'bg-info/10' : 'bg-warning/15'
+  const iconBg = company.type === 'carwash' ? 'bg-info-soft' : 'bg-warning-soft'
   const iconColor = company.type === 'carwash' ? 'text-primary' : 'text-warning'
 
   return (
@@ -89,7 +89,7 @@ export default async function EmpresaDetailPage({
                   <Badge
                     className={
                       company.isActive
-                        ? 'bg-success/15 text-success'
+                        ? 'bg-success-soft text-success-ink'
                         : 'bg-muted text-muted-foreground'
                     }
                   >

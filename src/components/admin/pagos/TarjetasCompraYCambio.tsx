@@ -91,7 +91,7 @@ export function TarjetaCambioPlan({
       {c.comprobanteUrl ? (
         <ComprobanteAdjunto url={c.comprobanteUrl} alt="Comprobante del cambio" />
       ) : (
-        <p className="rounded-lg bg-warning/15 p-3 text-xs text-warning">El cliente aún no ha subido el comprobante del nuevo plan.</p>
+        <p className="rounded-lg bg-warning-soft p-3 text-xs text-warning-ink">El cliente aún no ha subido el comprobante del nuevo plan.</p>
       )}
 
       {c.comprobanteNota && <NotaDelCliente texto={c.comprobanteNota} />}

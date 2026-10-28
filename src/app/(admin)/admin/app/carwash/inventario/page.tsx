@@ -178,7 +178,7 @@ export default async function InventarioPage({
                       </span>{' '}
                       <span className="text-xs text-muted-foreground">{p.unidad}</span>
                       {bajo && (
-                        <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-bold uppercase text-destructive">
+                        <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-danger-soft px-2 py-0.5 text-xs font-bold uppercase text-danger-ink">
                           <TriangleAlert className="h-3 w-3" /> bajo
                         </span>
                       )}

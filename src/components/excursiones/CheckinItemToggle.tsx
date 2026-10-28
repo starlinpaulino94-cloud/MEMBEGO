@@ -46,7 +46,7 @@ export function CheckinItemToggle({
       disabled={isPending}
       className={`h-7 px-2.5 text-xs font-semibold gap-1.5 transition-all active:scale-95 shrink-0 ${
         estaEmbarcado
-          ? 'border-success/30 text-success bg-success/5 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30'
+          ? 'border-success/30 text-success bg-success/5 hover:bg-danger-soft hover:text-destructive hover:border-destructive/30'
           : 'bg-primary text-primary-foreground hover:bg-primary/90'
       }`}
       title={estaEmbarcado ? 'Haz clic para desmarcar check-in' : 'Confirmar check-in de esta actividad'}

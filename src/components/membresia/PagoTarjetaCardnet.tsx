@@ -186,7 +186,7 @@ export function PagoTarjetaCardnet({ membershipId, compraId, montoTexto, urlExit
 
   if (fase === 'ok') {
     return (
-      <div className="rounded-2xl border border-success/25 bg-success/10 p-5 text-center">
+      <div className="rounded-2xl border border-success/25 bg-success-soft p-5 text-center">
         <ShieldCheck className="mx-auto h-8 w-8 text-success" aria-hidden />
         <p className="mt-2 font-semibold text-success">Pago aprobado</p>
         <p className="mt-1 text-sm text-muted-foreground">Activando tu compra…</p>
@@ -303,7 +303,7 @@ export function PagoTarjetaCardnet({ membershipId, compraId, montoTexto, urlExit
           </div>
 
           {mensaje && (
-            <p className="rounded-lg border border-destructive/30 bg-destructive/10 p-2.5 text-sm text-destructive">
+            <p className="rounded-lg border border-destructive/30 bg-danger-soft p-2.5 text-sm text-danger-ink">
               {mensaje}
             </p>
           )}

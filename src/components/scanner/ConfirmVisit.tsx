@@ -215,7 +215,7 @@ export function ConfirmVisit({
       <div
         className={cn(
           'flex items-center gap-3 rounded-xl border px-4 py-3',
-          isValid ? 'border-success/25 bg-success/10' : 'border-destructive/25 bg-destructive/10'
+          isValid ? 'border-success/25 bg-success-soft' : 'border-destructive/25 bg-danger-soft'
         )}
       >
         {isValid ? (
@@ -257,7 +257,7 @@ export function ConfirmVisit({
             <div
               className={cn(
                 'flex h-16 w-16 items-center justify-center rounded-2xl',
-                isValid ? 'bg-success/10' : 'bg-destructive/10'
+                isValid ? 'bg-success-soft' : 'bg-danger-soft'
               )}
             >
               <User className={cn('h-8 w-8', isValid ? 'text-success' : 'text-destructive')} />
@@ -342,7 +342,7 @@ export function ConfirmVisit({
           {alertas.map((alerta) => (
             <div
               key={alerta}
-              className="flex items-center gap-2 rounded-lg border border-warning/30 bg-warning/15 px-3 py-2 text-sm text-warning"
+              className="flex items-center gap-2 rounded-lg border border-warning/30 bg-warning-soft px-3 py-2 text-sm text-warning-ink"
             >
               <AlertTriangle className="h-4 w-4 shrink-0" />
               {alerta}

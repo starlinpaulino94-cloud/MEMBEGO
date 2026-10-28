@@ -7,27 +7,27 @@ type StatusVariant = 'success' | 'warning' | 'info' | 'destructive'
 const VARIANT: Record<StatusVariant, { icon: LucideIcon; box: string; icono: string; titulo: string }> = {
   success: {
     icon: CheckCircle2,
-    box: 'border-success/25 bg-success/10',
+    box: 'border-success/25 bg-success/10 panel:border-success/30 panel:bg-success-soft',
     icono: 'text-success',
-    titulo: 'text-success',
+    titulo: 'text-success panel:text-success-ink',
   },
   warning: {
     icon: AlertTriangle,
-    box: 'border-warning/30 bg-warning/15',
+    box: 'border-warning/30 bg-warning/15 panel:border-warning/40 panel:bg-warning-soft',
     icono: 'text-warning',
-    titulo: 'text-warning',
+    titulo: 'text-warning panel:text-warning-ink',
   },
   info: {
     icon: Info,
-    box: 'border-info/25 bg-info/10',
+    box: 'border-info/25 bg-info/10 panel:border-info/30 panel:bg-info-soft',
     icono: 'text-info',
-    titulo: 'text-info',
+    titulo: 'text-info panel:text-info-ink',
   },
   destructive: {
     icon: XCircle,
-    box: 'border-destructive/25 bg-destructive/10',
+    box: 'border-destructive/25 bg-destructive/10 panel:border-destructive/30 panel:bg-danger-soft',
     icono: 'text-destructive',
-    titulo: 'text-destructive',
+    titulo: 'text-destructive panel:text-danger-ink',
   },
 }
 

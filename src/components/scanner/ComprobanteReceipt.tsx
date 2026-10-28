@@ -65,7 +65,7 @@ function fmtDateTime(d: Date) {
 function InfoRow({ label, value, icon: Icon }: { label: string; value: string; icon: typeof User }) {
   return (
     <div className="flex items-center gap-2.5 py-1.5">
-      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-success/10">
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-success-soft">
         <Icon className="h-3.5 w-3.5 text-success" />
       </div>
       <div className="min-w-0 flex-1">
@@ -149,7 +149,7 @@ export function ComprobanteReceipt({
       <div className="space-y-5">
         {/* Success header */}
         <div className="text-center">
-          <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-success/15">
+          <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-success-soft">
             <CheckCircle2 className="h-9 w-9 text-success" />
           </div>
           <h3 className="text-xl font-bold text-foreground">Uso registrado correctamente</h3>

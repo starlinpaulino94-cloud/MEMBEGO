@@ -274,7 +274,7 @@ function PreviewPanel({ estimacion }: { estimacion: Estimacion }) {
         </ul>
       )}
       {estimacion.bajoUmbral && (
-        <p className="rounded bg-destructive/10 p-2 text-xs font-medium text-destructive">
+        <p className="rounded bg-danger-soft p-2 text-xs font-medium text-danger-ink">
           Bajo el umbral mínimo: las campañas con esta audiencia quedarán bloqueadas.
         </p>
       )}

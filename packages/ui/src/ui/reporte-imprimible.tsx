@@ -147,7 +147,9 @@ export function ReporteImprimible({
           )}
         </div>
         {controles && (
-          <div className="print:hidden flex shrink-0 flex-wrap items-center gap-2">{controles}</div>
+          // `panel:max-w-full`: en un móvil, «Exportar CSV · Exportar Excel · Imprimir» no cabían en una fila y, sin tope de
+          // ancho, la fila no se partía: «Imprimir o guardar PDF» quedaba cortado fuera de la pantalla en los reportes del panel.
+          <div className="print:hidden flex shrink-0 flex-wrap items-center gap-2 panel:max-w-full">{controles}</div>
         )}
       </div>
 

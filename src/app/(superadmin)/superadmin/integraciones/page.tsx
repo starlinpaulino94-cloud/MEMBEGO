@@ -163,7 +163,7 @@ export default async function IntegracionesPage() {
             <CardContent>
               {atascados.length === 0 ? (
                 <div className="flex flex-col items-center gap-2 py-6 text-center">
-                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-success/10">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-success-soft">
                     <CircleCheck className="h-6 w-6 text-success" aria-hidden />
                   </span>
                   <p className="text-h4 font-semibold">Todos los sistemas reciben sus eventos</p>

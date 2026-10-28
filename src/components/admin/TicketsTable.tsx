@@ -201,7 +201,7 @@ export function TicketsTable({
                           {t.empresaEsDemo && mostrarEmpresa && (
                             <Badge
                               variant="outline"
-                              className="border-warning/40 bg-warning/10 text-caption text-warning"
+                              className="border-warning/40 bg-warning-soft text-caption text-warning-ink"
                             >
                               Práctica
                             </Badge>

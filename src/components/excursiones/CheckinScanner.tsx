@@ -329,8 +329,8 @@ export function CheckinScanner() {
                           <span
                             className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                               yaEmbarcado
-                                ? 'bg-success/10 text-success border border-success/20'
-                                : 'bg-warning/10 text-warning border border-warning/20'
+                                ? 'bg-success-soft text-success-ink border border-success/20'
+                                : 'bg-warning-soft text-warning-ink border border-warning/20'
                             }`}
                           >
                             {yaEmbarcado
@@ -529,7 +529,7 @@ export function CheckinScanner() {
                     size="sm"
                     disabled={cobrandoSolo}
                     onClick={handleCobrarSolo}
-                    className="text-xs border-warning/40 text-warning hover:bg-warning/10 gap-1.5"
+                    className="text-xs border-warning/40 text-warning hover:bg-warning-soft gap-1.5"
                   >
                     {cobrandoSolo ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -545,7 +545,7 @@ export function CheckinScanner() {
 
           {/* MENSAJE DE BLOQUEO POR FALTA DE PAGO */}
           {reserva.saldo > 0.01 && (!cobrarSaldo || (Number(montoCobro) || 0) < reserva.saldo - 0.01) && (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs font-semibold text-destructive flex items-center gap-2">
+            <div className="rounded-lg border border-destructive/30 bg-danger-soft p-3 text-xs font-semibold text-danger-ink flex items-center gap-2">
               <Lock className="h-4 w-4 shrink-0" />
               <span>
                 Embarque bloqueado por falta de pago: Debes marcar y registrar el cobro de los {formatMoney(reserva.saldo, { moneda: reserva.moneda }, 2)} pendientes para autorizar el acceso.

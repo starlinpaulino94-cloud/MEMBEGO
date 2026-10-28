@@ -107,7 +107,7 @@ export default async function CitasAdminPage({
       </div>
 
       {!cfg?.activa && (
-        <div className="rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm text-foreground">
+        <div className="rounded-2xl border border-warning/30 bg-warning-soft p-4 text-sm text-foreground">
           Tu agenda está <b>apagada</b>: los clientes no pueden reservar. Actívala en{' '}
           <Link href="/admin/citas/configuracion" className="font-semibold underline">
             configurar agenda

@@ -252,7 +252,7 @@ export function ComunicacionConfigForm({
                   onClick={() => toggleDia(d.value)}
                   className={`h-9 w-12 rounded-lg border text-sm font-medium transition ${
                     dias.includes(d.value)
-                      ? 'border-success/40 bg-success/10 text-success'
+                      ? 'border-success/40 bg-success-soft text-success-ink'
                       : 'border-border bg-background text-muted-foreground hover:bg-muted'
                   }`}
                 >

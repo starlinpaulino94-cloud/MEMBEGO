@@ -571,6 +571,27 @@ Cada uno con variante `-foreground` para uso como relleno sólido.
 - **Pendiente** (🔴): no existe token para el estado *pendiente/neutral* que
   pide el encargo. Hoy se resuelve con `--muted-foreground`
 
+### Tintes vivos de los paneles (oct 2026)
+
+El estado pintado con un 10 % de su propio color (`bg-success/10 text-success`) quedaba gris sobre blanco: los paneles se
+veían apagados. En los paneles (admin, superadmin, empleado, vendedor) cada estado tiene un fondo pastel con saturación
+propia y un texto que se lee encima (≥ 4,5:1):
+
+| Fondo | Texto | Uso |
+|---|---|---|
+| `bg-success-soft` (`#DCFAE6`) | `text-success-ink` (`#067647`) | Publicada, activa, pagada |
+| `bg-warning-soft` (`#FEF0C7`) | `text-warning-ink` (`#B54708`) | Pendiente, sin publicar |
+| `bg-danger-soft` (`#FEE4E2`) | `text-danger-ink` (`#B42318`) | Suspendida, rechazada |
+| `bg-info-soft` | `text-info-ink` | Informativo (cian, separado de la marca) |
+
+- En las pantallas de los paneles se usan directamente. En `@membego/ui`, que también pinta el portal del cliente, van
+  detrás de la variante **`panel:`** (`panel:bg-success-soft`): solo se activa cuando la página tiene un `AppShell`
+  (`data-superficie="panel"`, buscado con `:root:has()` para alcanzar también diálogos y menús en portal). El portal del
+  cliente no cambia.
+- Empresa de práctica: `bg-demo` / `text-demo-foreground` / `border-demo-border` (amarillo vivo, 11:1), con
+  `BannerDemo variante="panel"`.
+- Logos sin imagen: `InicialesEmpresa`, un tinte por empresa (`bg-tinte-*` / `text-tinte-*-ink`) elegido por su nombre.
+
 ## 8.4 · Prohibiciones
 
 | Prohibido | Por qué |

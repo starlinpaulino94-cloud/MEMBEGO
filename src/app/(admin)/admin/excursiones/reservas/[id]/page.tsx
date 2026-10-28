@@ -174,7 +174,7 @@ export default async function ReservaDetallePage({
                   <div className="flex items-center gap-3 min-w-0">
                     <span
                       className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold shrink-0 ${esPd
-                        ? 'bg-success/10 text-success'
+                        ? 'bg-success-soft text-success-ink'
                         : 'bg-primary text-primary-foreground'
                         }`}
                     >
@@ -184,12 +184,12 @@ export default async function ReservaDetallePage({
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-xs sm:text-sm font-bold text-foreground truncate">{act.nombre}</p>
                         {esPd && (
-                          <span className="text-xs font-bold bg-success/10 text-success px-2 py-0.5 rounded-full border border-success/20 shrink-0">
+                          <span className="text-xs font-bold bg-success-soft text-success-ink px-2 py-0.5 rounded-full border border-success/20 shrink-0">
                             Daypass
                           </span>
                         )}
                         {item.checkinAt && (
-                          <span className="text-xs font-bold bg-success/15 text-success px-2 py-0.5 rounded-full shrink-0">
+                          <span className="text-xs font-bold bg-success-soft text-success-ink px-2 py-0.5 rounded-full shrink-0">
                             ✓ Embarcado
                           </span>
                         )}

@@ -39,7 +39,7 @@ function Contador({ valor, tono }: { valor: number; tono?: 'peligro' }) {
         // El diseño distingue el contador que INFORMA (gris) del que AVISA
         // (rojo, «En riesgo»). Todo azul, nada destaca.
         tono === 'peligro'
-          ? 'bg-destructive/10 text-destructive'
+          ? 'bg-danger-soft text-danger-ink'
           : 'bg-sidebar-accent text-sidebar-accent-foreground'
       )}
       // El número por sí solo no dice de qué es. En el menú se entiende por
@@ -94,7 +94,7 @@ export function ModuloNav({
           'group relative flex min-h-9 items-center gap-2.5 rounded-lg px-2.5 py-2 text-[14.5px] font-medium outline-none transition-colors duration-fast',
           'focus-visible:ring-2 focus-visible:ring-sidebar-ring',
           activo
-            ? 'bg-sidebar-selected text-sidebar-selected-foreground'
+            ? 'bg-sidebar-selected font-semibold text-sidebar-selected-foreground elevation-1'
             : 'text-sidebar-foreground hover:bg-sidebar-hover hover:text-sidebar-accent-foreground'
         )}
       >

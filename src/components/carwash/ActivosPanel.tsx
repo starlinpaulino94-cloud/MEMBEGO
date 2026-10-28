@@ -54,15 +54,15 @@ function fmtFecha(d: Date | null) {
 }
 
 const CHIP_ESTADO: Record<string, string> = {
-  OPERATIVO: 'bg-success/15 text-success',
-  EN_MANTENIMIENTO: 'bg-warning/15 text-warning',
-  DANADO: 'bg-destructive/10 text-destructive',
+  OPERATIVO: 'bg-success-soft text-success-ink',
+  EN_MANTENIMIENTO: 'bg-warning-soft text-warning-ink',
+  DANADO: 'bg-danger-soft text-danger-ink',
   BAJA: 'bg-muted text-muted-foreground',
 }
 
 const URGENCIA: Record<UrgenciaMantenimiento, { label: string; clase: string } | null> = {
-  VENCIDO: { label: 'Mantenimiento vencido', clase: 'bg-destructive/10 text-destructive' },
-  PRONTO: { label: 'Le toca pronto', clase: 'bg-warning/15 text-warning' },
+  VENCIDO: { label: 'Mantenimiento vencido', clase: 'bg-danger-soft text-danger-ink' },
+  PRONTO: { label: 'Le toca pronto', clase: 'bg-warning-soft text-warning-ink' },
   AL_DIA: null,
   SIN_PROGRAMA: null,
 }

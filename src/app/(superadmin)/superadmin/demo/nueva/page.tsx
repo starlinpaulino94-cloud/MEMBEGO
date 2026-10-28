@@ -26,7 +26,7 @@ export default async function NuevaEmpresaDemoPage() {
         <ArrowLeft className="h-4 w-4" /> Volver a demostración
       </Link>
 
-      <div className="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning/10 p-3 text-small text-foreground">
+      <div className="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning-soft p-3 text-small text-foreground">
         <FlaskConical className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
         <p>
           Esta empresa nace marcada como <strong>de práctica</strong>: no cobrará con tarjeta, no

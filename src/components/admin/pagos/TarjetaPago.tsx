@@ -92,7 +92,7 @@ export function ComprobanteAdjunto({ url, alt }: { url: string; alt: string }) {
 /** La nota que dejó el cliente al subir el comprobante. */
 export function NotaDelCliente({ texto }: { texto: string }) {
   return (
-    <div className="rounded-lg bg-warning/15 p-3 text-sm text-warning">
+    <div className="rounded-lg bg-warning-soft p-3 text-sm text-warning-ink">
       <p className="font-medium">Nota del cliente:</p>
       <p>{texto}</p>
     </div>

@@ -76,7 +76,7 @@ export function EstadoPasarelas({
       {estadoCardnet.avisoPruebas && (
         <div
           role="alert"
-          className="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning/10 p-4 text-sm"
+          className="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning-soft p-4 text-sm"
         >
           <FlaskConical className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
           <div>
@@ -87,7 +87,7 @@ export function EstadoPasarelas({
       )}
 
       {sinCobroEnLinea && (
-        <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm">
+        <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-danger-soft p-4 text-sm">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
           <div>
             <p className="font-bold text-destructive">

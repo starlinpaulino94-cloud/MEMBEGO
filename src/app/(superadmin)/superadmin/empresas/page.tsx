@@ -18,6 +18,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { buttonVariants } from '@/components/ui/button'
 import { formatMoneyRD } from '@/lib/format'
 import { BotonExportar } from '@/components/ui/boton-exportar'
+import { InicialesEmpresa } from '@/components/superadmin/InicialesEmpresa'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,9 +48,7 @@ function TarjetaEmpresa({ e }: { e: EmpresaFila }) {
                 <Image src={e.logoUrl} alt="" fill className="object-cover" />
               </span>
             ) : (
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-brand text-overline text-white">
-                {e.name.slice(0, 2).toUpperCase()}
-              </span>
+              <InicialesEmpresa nombre={e.name} className="h-10 w-10 rounded-xl" />
             )}
             <span className="min-w-0">
               <span className="block truncate font-semibold text-foreground">{e.name}</span>

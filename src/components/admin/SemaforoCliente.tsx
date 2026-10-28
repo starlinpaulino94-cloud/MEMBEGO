@@ -15,9 +15,9 @@ import {
  * color.
  */
 const CLASES: Record<'success' | 'warning' | 'danger' | 'muted', string> = {
-  success: 'bg-success/15 text-success',
-  warning: 'bg-warning/15 text-warning',
-  danger: 'bg-destructive/10 text-destructive',
+  success: 'bg-success-soft text-success-ink',
+  warning: 'bg-warning-soft text-warning-ink',
+  danger: 'bg-danger-soft text-danger-ink',
   muted: 'bg-muted text-muted-foreground',
 }
 

@@ -47,10 +47,10 @@ export default async function ObservabilidadPage() {
    */
   const colorEstado =
     estado === 'ok'
-      ? 'bg-success/15 text-success'
+      ? 'bg-success-soft text-success-ink'
       : estado === 'degradado'
-        ? 'bg-warning/15 text-warning'
-        : 'bg-destructive/15 text-destructive'
+        ? 'bg-warning-soft text-warning-ink'
+        : 'bg-danger-soft text-danger-ink'
 
   return (
     <div className="space-y-6">

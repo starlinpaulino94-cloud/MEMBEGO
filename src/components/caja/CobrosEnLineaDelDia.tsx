@@ -38,7 +38,7 @@ export function CobrosEnLineaDelDia({ datos, timeZone }: { datos: Datos; timeZon
       </div>
 
       {datos.truncado && (
-        <p className="mt-3 rounded-lg bg-warning/10 px-3 py-2 text-caption text-foreground" data-testid="cobros-en-linea-truncado">
+        <p className="mt-3 rounded-lg bg-warning-soft px-3 py-2 text-caption text-foreground" data-testid="cobros-en-linea-truncado">
           Hoy hay más cobros que los que caben en esta lista: se muestran los primeros {items.length}. El total de arriba incluye todos.
         </p>
       )}

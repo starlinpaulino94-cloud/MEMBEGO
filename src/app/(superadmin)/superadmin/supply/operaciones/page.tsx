@@ -67,7 +67,7 @@ export default async function OperacionesPage() {
       />
 
       {!resumen.baseViva && (
-        <Card className="border-destructive/40 bg-destructive/10">
+        <Card className="border-destructive/40 bg-danger-soft">
           <CardContent className="py-3 text-sm">
             <strong>La base de datos no responde.</strong> Las cifras de abajo no se pudieron medir: lo que se ve no es
             «todo en cero», es «no se sabe».

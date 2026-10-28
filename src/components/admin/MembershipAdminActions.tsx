@@ -97,7 +97,7 @@ export function MembershipAdminActions({ membershipId, estado, renovacion }: Pro
           campos={{ membershipId }}
           size="sm"
           variant="outline"
-          className="border-warning/30 text-warning hover:bg-warning/15 hover:text-warning"
+          className="border-warning/30 text-warning hover:bg-warning-soft hover:text-warning"
           alExito={refrescar}
           confirmacion={{
             titulo: '¿Desactivar esta membresía?',
@@ -117,7 +117,7 @@ export function MembershipAdminActions({ membershipId, estado, renovacion }: Pro
           campos={{ membershipId }}
           size="sm"
           variant="outline"
-          className="border-destructive/25 text-destructive hover:bg-destructive/10 hover:text-destructive"
+          className="border-destructive/25 text-destructive hover:bg-danger-soft hover:text-destructive"
           alExito={refrescar}
           confirmacion={{
             titulo: '¿Cancelar esta membresía?',

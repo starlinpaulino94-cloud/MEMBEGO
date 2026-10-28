@@ -6,6 +6,11 @@
 @source "../../packages/ui/src";
 
 @custom-variant dark (&:is(.dark *));
+/* Lo que solo cambia en los PANELES (admin, superadmin, empleado, vendedor).
+   `AppShell` lleva `data-superficie="panel"`; con `:has()` en la raíz, la
+   variante alcanza también lo que Radix pinta en un portal (diálogos, menús),
+   que vive fuera del AppShell. El portal del cliente no la lleva y no cambia. */
+@custom-variant panel (&:is(:root:has([data-superficie="panel"]) *));
 
 @theme inline {
   --font-sans: var(--font-geist-sans);
@@ -47,6 +52,30 @@
   --color-danger: var(--destructive);
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
+  /* Tintes vivos (ver `:root`): fondo pastel + texto que se lee encima. */
+  --color-success-soft: var(--success-soft);
+  --color-success-ink: var(--success-ink);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-ink: var(--warning-ink);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-ink: var(--danger-ink);
+  --color-info-soft: var(--info-soft);
+  --color-info-ink: var(--info-ink);
+  --color-demo: var(--demo);
+  --color-demo-border: var(--demo-border);
+  --color-demo-foreground: var(--demo-foreground);
+  --color-tinte-violeta: var(--tinte-violeta);
+  --color-tinte-violeta-ink: var(--tinte-violeta-ink);
+  --color-tinte-turquesa: var(--tinte-turquesa);
+  --color-tinte-turquesa-ink: var(--tinte-turquesa-ink);
+  --color-tinte-naranja: var(--tinte-naranja);
+  --color-tinte-naranja-ink: var(--tinte-naranja-ink);
+  --color-tinte-rosa: var(--tinte-rosa);
+  --color-tinte-rosa-ink: var(--tinte-rosa-ink);
+  --color-tinte-azul: var(--tinte-azul);
+  --color-tinte-azul-ink: var(--tinte-azul-ink);
+  --color-tinte-verde: var(--tinte-verde);
+  --color-tinte-verde-ink: var(--tinte-verde-ink);
 
   /* Supply · paleta del rediseño (Stitch). Solo la usan las pantallas de
      Supply; los valores viven en el bloque `--sv2-*` más abajo. */
@@ -394,6 +423,38 @@
      el boton azul con texto blanco de la misma pantalla. */
   --sidebar-selected: oklch(0.55 0.22 255);
   --sidebar-selected-foreground: oklch(0.99 0 0);
+
+  /* TINTES VIVOS de los paneles (oct 2026). El estado con un 10 % de su propio
+     color sobre blanco quedaba gris y apagado: «Publicada», «Pendiente» o
+     «Suspendida» se leían como etiquetas sin color. `-soft` es un fondo pastel
+     con saturación propia y `-ink` el texto que va encima (≥ 4.5:1 sobre su
+     `-soft`). Solo los usan los paneles: en `@membego/ui` van detrás de la
+     variante `panel:`, así que el portal del cliente no cambia. */
+  --success-soft: oklch(0.958 0.041 156.4);
+  --success-ink: oklch(0.499 0.117 157.1);
+  --warning-soft: oklch(0.956 0.055 91.4);
+  --warning-ink: oklch(0.539 0.156 43);
+  --danger-soft: oklch(0.939 0.029 23);
+  --danger-ink: oklch(0.5 0.182 29.5);
+  --info-soft: oklch(0.951 0.03 225);
+  --info-ink: oklch(0.49 0.1 228);
+  /* El aviso de empresa de PRÁCTICA: amarillo vivo con texto casi negro (11:1). */
+  --demo: oklch(0.883 0.165 92.2);
+  --demo-border: oklch(0.833 0.17 90.6);
+  --demo-foreground: oklch(0.252 0.052 92.1);
+  /* Logos sin imagen: un tinte por empresa (lo elige `tinteDeNombre`). */
+  --tinte-violeta: oklch(0.943 0.028 292.6);
+  --tinte-violeta-ink: oklch(0.491 0.241 292.6);
+  --tinte-turquesa: oklch(0.953 0.050 186.4);
+  --tinte-turquesa-ink: oklch(0.511 0.086 186.4);
+  --tinte-naranja: oklch(0.954 0.037 38.4);
+  --tinte-naranja-ink: oklch(0.553 0.174 38.4);
+  --tinte-rosa: oklch(0.948 0.028 4.0);
+  --tinte-rosa-ink: oklch(0.525 0.199 4.0);
+  --tinte-azul: oklch(0.932 0.032 264.4);
+  --tinte-azul-ink: oklch(0.488 0.217 264.4);
+  --tinte-verde: oklch(0.962 0.044 150.1);
+  --tinte-verde-ink: oklch(0.527 0.137 150.1);
 }
 
 .dark {
@@ -450,6 +511,28 @@
   --sidebar-rail: oklch(0.085 0.004 260);
   --sidebar-selected: oklch(0.55 0.22 255);
   --sidebar-selected-foreground: oklch(0.99 0 0);
+
+  /* Tintes vivos en oscuro: fondo profundo del mismo matiz, texto claro. */
+  --success-soft: oklch(0.3 0.07 158);
+  --success-ink: oklch(0.84 0.14 158);
+  --warning-soft: oklch(0.32 0.07 70);
+  --warning-ink: oklch(0.86 0.13 80);
+  --danger-soft: oklch(0.3 0.09 25);
+  --danger-ink: oklch(0.84 0.1 25);
+  --info-soft: oklch(0.3 0.06 228);
+  --info-ink: oklch(0.84 0.09 225);
+  --tinte-violeta: oklch(0.3 0.07 292.6);
+  --tinte-violeta-ink: oklch(0.85 0.1 292.6);
+  --tinte-turquesa: oklch(0.3 0.07 186.4);
+  --tinte-turquesa-ink: oklch(0.85 0.1 186.4);
+  --tinte-naranja: oklch(0.3 0.07 38.4);
+  --tinte-naranja-ink: oklch(0.85 0.1 38.4);
+  --tinte-rosa: oklch(0.3 0.07 4.0);
+  --tinte-rosa-ink: oklch(0.85 0.1 4.0);
+  --tinte-azul: oklch(0.3 0.07 264.4);
+  --tinte-azul-ink: oklch(0.85 0.1 264.4);
+  --tinte-verde: oklch(0.3 0.07 150.1);
+  --tinte-verde-ink: oklch(0.85 0.1 150.1);
 }
 
 /* Landing pública: identidad azul + blanco original de MembeGo. Se aplica al
@@ -530,6 +613,28 @@
      el boton azul con texto blanco de la misma pantalla. */
   --sidebar-selected: oklch(0.55 0.22 255);
   --sidebar-selected-foreground: oklch(0.99 0 0);
+
+  /* Tintes vivos: el mismo valor que en claro (ver `:root`). */
+  --success-soft: oklch(0.958 0.041 156.4);
+  --success-ink: oklch(0.499 0.117 157.1);
+  --warning-soft: oklch(0.956 0.055 91.4);
+  --warning-ink: oklch(0.539 0.156 43);
+  --danger-soft: oklch(0.939 0.029 23);
+  --danger-ink: oklch(0.5 0.182 29.5);
+  --info-soft: oklch(0.951 0.03 225);
+  --info-ink: oklch(0.49 0.1 228);
+  --tinte-violeta: oklch(0.943 0.028 292.6);
+  --tinte-violeta-ink: oklch(0.491 0.241 292.6);
+  --tinte-turquesa: oklch(0.953 0.050 186.4);
+  --tinte-turquesa-ink: oklch(0.511 0.086 186.4);
+  --tinte-naranja: oklch(0.954 0.037 38.4);
+  --tinte-naranja-ink: oklch(0.553 0.174 38.4);
+  --tinte-rosa: oklch(0.948 0.028 4.0);
+  --tinte-rosa-ink: oklch(0.525 0.199 4.0);
+  --tinte-azul: oklch(0.932 0.032 264.4);
+  --tinte-azul-ink: oklch(0.488 0.217 264.4);
+  --tinte-verde: oklch(0.962 0.044 150.1);
+  --tinte-verde-ink: oklch(0.527 0.137 150.1);
 }
 
 /* ── Supply · paleta del rediseño (Stitch, "Precision Procurement Engine") ──

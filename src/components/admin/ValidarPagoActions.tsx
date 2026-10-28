@@ -61,7 +61,7 @@ export function RechazarPagoButton({ membershipId }: { membershipId: string }) {
   return (
     <Dialog open={open} onOpenChange={setManualOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline" className="border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive">
+        <Button size="sm" variant="outline" className="border-destructive/30 text-destructive hover:bg-danger-soft hover:text-destructive">
           <X className="h-4 w-4" />
           Rechazar
         </Button>
@@ -114,7 +114,7 @@ export function SolicitarEvidenciaButton({ membershipId }: { membershipId: strin
   return (
     <Dialog open={open} onOpenChange={setManualOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline" className="border-warning/30 text-warning hover:bg-warning/15 hover:text-warning">
+        <Button size="sm" variant="outline" className="border-warning/30 text-warning hover:bg-warning-soft hover:text-warning">
           <RefreshCw className="h-4 w-4" />
           Nueva evidencia
         </Button>

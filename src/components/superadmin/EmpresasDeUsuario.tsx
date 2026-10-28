@@ -35,7 +35,7 @@ export function EmpresasDeUsuario({ empresas }: { empresas: EmpresaDeUsuario[] }
           variant="outline"
           className={
             e.activa
-              ? 'border-info/30 bg-info/10 text-caption text-info'
+              ? 'border-info/30 bg-info-soft text-caption text-info-ink'
               : 'text-caption text-muted-foreground'
           }
         >

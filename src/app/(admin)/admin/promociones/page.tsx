@@ -57,20 +57,20 @@ function PromoCard({ p, showCompany }: { p: PromoRow; showCompany: boolean }) {
       <CardContent className="p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-warning/15 p-2">
+            <div className="rounded-lg bg-warning-soft p-2">
               <Gift className="h-5 w-5 text-warning" />
             </div>
             <div>
               <p className="font-semibold text-foreground">{p.titulo}</p>
               <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs">
-                <span className="rounded-full bg-info/10 px-2 py-0.5 font-medium text-info">
+                <span className="rounded-full bg-info-soft px-2 py-0.5 font-medium text-info-ink">
                   {PROMO_TIPO_LABEL[p.tipo] ?? p.tipo}
                 </span>
                 <span
                   className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium ${
                     p.visibilidad === 'privada'
                       ? 'bg-muted text-muted-foreground'
-                      : 'bg-success/10 text-success'
+                      : 'bg-success-soft text-success-ink'
                   }`}
                 >
                   {p.visibilidad === 'privada' ? (

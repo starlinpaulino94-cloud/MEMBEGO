@@ -134,7 +134,7 @@ export default async function CapacidadesSuperadminPage({
           <h2 className="mb-1 flex flex-wrap items-center gap-2 text-lg font-bold text-foreground">
             {seleccionada.name}
             {seleccionada.esDemo && (
-              <span className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-caption font-medium text-warning">
+              <span className="rounded-full border border-warning/40 bg-warning-soft px-2 py-0.5 text-caption font-medium text-warning-ink">
                 Práctica
               </span>
             )}

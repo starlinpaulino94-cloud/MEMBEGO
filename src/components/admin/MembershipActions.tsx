@@ -118,7 +118,7 @@ export function CancelForm({ membershipId }: { membershipId: string }) {
             type="button"
             variant="outline"
             disabled={pending}
-            className="w-full border-destructive/25 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            className="w-full border-destructive/25 text-destructive hover:bg-danger-soft hover:text-destructive"
           >
             {pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Cancelar membresía

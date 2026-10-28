@@ -351,8 +351,8 @@ export function EditorInicio({
           className={cn(
             'rounded-lg border p-3 text-sm',
             mensaje.ok
-              ? 'border-success/30 bg-success/10'
-              : 'border-destructive/30 bg-destructive/10 text-destructive'
+              ? 'border-success/30 bg-success-soft'
+              : 'border-destructive/30 bg-danger-soft text-danger-ink'
           )}
         >
           {mensaje.texto}

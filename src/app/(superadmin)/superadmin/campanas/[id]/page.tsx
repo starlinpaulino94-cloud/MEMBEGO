@@ -144,7 +144,7 @@ export default async function CampanaGlobalDetallePage({
               )}
               <span
                 className={`self-start rounded-full px-2 py-0.5 text-overline ${
-                  p.aplicadaAt ? 'bg-success/15 text-success' : 'bg-muted text-muted-foreground'
+                  p.aplicadaAt ? 'bg-success-soft text-success-ink' : 'bg-muted text-muted-foreground'
                 }`}
               >
                 {p.aplicadaAt ? 'creada' : 'pendiente'}

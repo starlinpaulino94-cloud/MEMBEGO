@@ -32,6 +32,7 @@ import {
   type EmpresaPanel,
   type Metrica,
 } from '@/modules/superadmin/panel'
+import { InicialesEmpresa } from '@/components/superadmin/InicialesEmpresa'
 
 export const dynamic = 'force-dynamic'
 
@@ -79,9 +80,7 @@ function TarjetaEmpresa({ c }: { c: EmpresaPanel }) {
                 <Image src={c.logoUrl} alt="" fill className="object-cover" />
               </span>
             ) : (
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-brand text-overline text-white">
-                {c.name.slice(0, 2).toUpperCase()}
-              </span>
+              <InicialesEmpresa nombre={c.name} className="h-8 w-8 rounded-lg" />
             )}
             <CardTitle className="truncate text-base">{c.name}</CardTitle>
           </div>

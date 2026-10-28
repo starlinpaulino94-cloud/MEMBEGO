@@ -115,7 +115,7 @@ export function LiquidacionAcciones({
           size="sm"
           variant="outline"
           onClick={() => setAnularOpen(true)}
-          className="gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10"
+          className="gap-1.5 text-destructive hover:text-destructive hover:bg-danger-soft"
         >
           <XCircle className="h-4 w-4" />
           Anular liquidación

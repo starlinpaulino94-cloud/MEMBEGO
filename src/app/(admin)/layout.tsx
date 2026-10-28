@@ -185,7 +185,7 @@ export default async function AdminLayout({
       <SentryUserSync userId={user.metadata.dbUserId} email={user.email} role={user.metadata.role} companyId={user.metadata.companyId} />
       {/* Antes que nada: si esta empresa es de práctica, que se sepa desde el
           primer vistazo y en todas las pantallas del panel. */}
-      {demo && <BannerDemo nombreEmpresa={demo} />}
+      {demo && <BannerDemo nombreEmpresa={demo} variante="panel" />}
       {/* Viniste de un paso del asistente de configuración: el camino de vuelta (7.5). */}
       <RetornoAlAsistente />
       {children}

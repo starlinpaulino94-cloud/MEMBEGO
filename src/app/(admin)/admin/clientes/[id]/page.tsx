@@ -195,7 +195,7 @@ export default async function ClienteDetailPage({
                 href={`https://wa.me/${cliente.telefono.replace(/\D/g, '')}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-success/30 bg-success/10 px-3 text-small font-medium text-success transition hover:bg-success/15"
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-success/30 bg-success-soft px-3 text-small font-medium text-success-ink transition hover:bg-success-soft"
               >
                 <MessageCircle className="h-4 w-4" aria-hidden /> WhatsApp
               </a>
@@ -337,7 +337,7 @@ export default async function ClienteDetailPage({
                 {/* El cliente programó su cancelación desde la app: el negocio
                     tiene que verlo ANTES de renovar a mano por costumbre. */}
                 {membership.canceladaAlVencimiento && (
-                  <p className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-foreground">
+                  <p className="rounded-lg border border-warning/30 bg-warning-soft p-3 text-sm text-foreground">
                     El cliente canceló esta membresía el{' '}
                     {fmtDate(membership.canceladaAlVencimiento)}: sigue activa hasta su
                     vencimiento y no debe renovarse.
@@ -346,7 +346,7 @@ export default async function ClienteDetailPage({
 
                 {/* Comprobante de pago */}
                 {membership.comprobanteUrl && (
-                  <div className="rounded-lg border border-warning/30 bg-warning/15 p-4 space-y-3">
+                  <div className="rounded-lg border border-warning/30 bg-warning-soft p-4 space-y-3">
                     <p className="text-sm font-medium text-warning flex items-center gap-2">
                       <FileText className="h-4 w-4" />
                       Comprobante enviado por el cliente
@@ -364,7 +364,7 @@ export default async function ClienteDetailPage({
 
                 {/* Motivo de rechazo */}
                 {membership.rechazadoReason && (
-                  <div className="rounded-lg border border-destructive/25 bg-destructive/10 p-3">
+                  <div className="rounded-lg border border-destructive/25 bg-danger-soft p-3">
                     <p className="text-sm font-medium text-destructive">Motivo de rechazo</p>
                     <p className="text-sm text-destructive">{membership.rechazadoReason}</p>
                   </div>

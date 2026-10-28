@@ -44,9 +44,9 @@ function fmtFecha(d: Date) {
 }
 
 const CHIP: Record<string, string> = {
-  PENDIENTE: 'bg-warning/15 text-warning',
-  FACTURADO: 'bg-info/15 text-info',
-  PAGADO: 'bg-success/15 text-success',
+  PENDIENTE: 'bg-warning-soft text-warning-ink',
+  FACTURADO: 'bg-info-soft text-info-ink',
+  PAGADO: 'bg-success-soft text-success-ink',
   ANULADO: 'bg-muted text-muted-foreground',
 }
 
@@ -79,7 +79,7 @@ export function EstadoCuenta({ cuenta }: { cuenta: CuentaDetalle }) {
       {cuenta.limiteCredito != null &&
         cuenta.limiteCredito > 0 &&
         cuenta.totales.saldo > cuenta.limiteCredito && (
-          <p className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+          <p className="rounded-xl border border-destructive/30 bg-danger-soft p-4 text-sm text-danger-ink">
             La deuda viva ({fmtRD(cuenta.totales.saldo)}) pasó el límite acordado de{' '}
             {fmtRD(cuenta.limiteCredito)}. Es un aviso, no un bloqueo: sus vehículos se siguen
             atendiendo normal.

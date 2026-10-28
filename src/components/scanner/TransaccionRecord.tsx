@@ -51,7 +51,7 @@ const ESTADO_UI: Record<string, { label: string; desc: string; icon: typeof Chec
     label: 'Transacción aplicada',
     desc: 'La operación se completó y sus efectos fueron aplicados.',
     icon: CheckCircle2,
-    box: 'border-success/25 bg-success/10',
+    box: 'border-success/25 bg-success-soft',
     icono: 'text-success',
     badge: 'success',
   },
@@ -59,7 +59,7 @@ const ESTADO_UI: Record<string, { label: string; desc: string; icon: typeof Chec
     label: 'Transacción aprobada',
     desc: 'Validada y aprobada; pendiente de aplicar sus efectos.',
     icon: BadgeCheck,
-    box: 'border-info/25 bg-info/10',
+    box: 'border-info/25 bg-info-soft',
     icono: 'text-info',
     badge: 'info',
   },
@@ -83,7 +83,7 @@ const ESTADO_UI: Record<string, { label: string; desc: string; icon: typeof Chec
     label: 'Transacción cancelada',
     desc: 'La operación fue cancelada antes de aplicarse.',
     icon: XCircle,
-    box: 'border-warning/30 bg-warning/10',
+    box: 'border-warning/30 bg-warning-soft',
     icono: 'text-warning',
     badge: 'warning',
   },
@@ -91,7 +91,7 @@ const ESTADO_UI: Record<string, { label: string; desc: string; icon: typeof Chec
     label: 'Transacción revertida',
     desc: 'La operación se aplicó y luego fue revertida.',
     icon: RotateCcw,
-    box: 'border-destructive/25 bg-destructive/10',
+    box: 'border-destructive/25 bg-danger-soft',
     icono: 'text-destructive',
     badge: 'destructive',
   },
@@ -99,7 +99,7 @@ const ESTADO_UI: Record<string, { label: string; desc: string; icon: typeof Chec
     label: 'Transacción expirada',
     desc: 'La operación expiró sin completarse.',
     icon: Clock,
-    box: 'border-warning/30 bg-warning/10',
+    box: 'border-warning/30 bg-warning-soft',
     icono: 'text-warning',
     badge: 'warning',
   },
@@ -107,7 +107,7 @@ const ESTADO_UI: Record<string, { label: string; desc: string; icon: typeof Chec
     label: 'Transacción con error',
     desc: 'La operación falló durante su ejecución.',
     icon: AlertTriangle,
-    box: 'border-destructive/25 bg-destructive/10',
+    box: 'border-destructive/25 bg-danger-soft',
     icono: 'text-destructive',
     badge: 'destructive',
   },
@@ -251,7 +251,7 @@ export function TransaccionRecord({
 
       {/* Cancelación / reversión / error */}
       {tx.cancelacion && (
-        <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5 text-sm text-warning">
+        <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning-soft px-3 py-2.5 text-sm text-warning-ink">
           <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
             <p className="font-semibold">Cancelada el {fmtFechaHora(tx.cancelacion.fecha).fecha} a las {fmtFechaHora(tx.cancelacion.fecha).hora}</p>
@@ -260,7 +260,7 @@ export function TransaccionRecord({
         </div>
       )}
       {tx.reversion && (
-        <div className="flex items-start gap-2 rounded-lg border border-destructive/25 bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+        <div className="flex items-start gap-2 rounded-lg border border-destructive/25 bg-danger-soft px-3 py-2.5 text-sm text-danger-ink">
           <RotateCcw className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
             <p className="font-semibold">Revertida el {fmtFechaHora(tx.reversion.fecha).fecha} a las {fmtFechaHora(tx.reversion.fecha).hora}</p>
@@ -269,7 +269,7 @@ export function TransaccionRecord({
         </div>
       )}
       {tx.errorDetalle && (
-        <div className="flex items-start gap-2 rounded-lg border border-destructive/25 bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+        <div className="flex items-start gap-2 rounded-lg border border-destructive/25 bg-danger-soft px-3 py-2.5 text-sm text-danger-ink">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <p>{tx.errorDetalle}</p>
         </div>

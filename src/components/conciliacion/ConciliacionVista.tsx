@@ -16,8 +16,8 @@ import { Tabla } from '@/components/ui/tabla'
 const num = (n: number) => new Intl.NumberFormat('es-DO').format(n)
 
 const CLASE_SEVERIDAD: Record<Severidad, string> = {
-  ALTA: 'bg-destructive/10 text-destructive',
-  MEDIA: 'bg-warning/15 text-foreground',
+  ALTA: 'bg-danger-soft text-danger-ink',
+  MEDIA: 'bg-warning-soft text-foreground',
   BAJA: 'bg-muted text-muted-foreground',
 }
 
@@ -66,7 +66,7 @@ export function ConciliacionVista({ hallazgos, generadoEn, controles }: { hallaz
           <Celda label="Media e informativa" valor={`${num(resumen.porSeveridad.MEDIA)} · ${num(resumen.porSeveridad.BAJA)}`} nota="Media · informativa" />
         </div>
         {conError.length > 0 && (
-          <p className="mt-3 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm" role="alert">
+          <p className="mt-3 rounded-lg border border-warning/40 bg-warning-soft px-4 py-3 text-sm" role="alert">
             No se pudo evaluar: {conError.map((h) => h.regla.codigo).join(', ')}. Los demás resultados valen; intenta de nuevo.
           </p>
         )}

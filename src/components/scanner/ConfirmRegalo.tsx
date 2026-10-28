@@ -62,7 +62,7 @@ export function ConfirmRegalo({
     return (
       <div className="space-y-5">
         <div className="text-center">
-          <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-success/15">
+          <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-success-soft">
             <CheckCircle2 className="h-9 w-9 text-success" />
           </div>
           <h3 className="text-h2 text-foreground">Canje registrado</h3>
@@ -110,7 +110,7 @@ export function ConfirmRegalo({
       <div
         className={cn(
           'flex items-center gap-3 rounded-xl border px-4 py-3',
-          puede ? 'border-success/25 bg-success/10' : 'border-destructive/25 bg-destructive/10'
+          puede ? 'border-success/25 bg-success-soft' : 'border-destructive/25 bg-danger-soft'
         )}
       >
         {puede ? (
@@ -149,7 +149,7 @@ export function ConfirmRegalo({
             <div
               className={cn(
                 'flex h-16 w-16 items-center justify-center rounded-2xl',
-                puede ? 'bg-success/10' : 'bg-destructive/10'
+                puede ? 'bg-success-soft' : 'bg-danger-soft'
               )}
             >
               <User className={cn('h-8 w-8', puede ? 'text-success' : 'text-destructive')} />
@@ -191,7 +191,7 @@ export function ConfirmRegalo({
         </div>
 
         {puede && regalo.restantesPeriodo === 1 && (
-          <p className="mt-3 rounded-lg border border-warning/30 bg-warning/15 px-3 py-2 text-sm text-warning">
+          <p className="mt-3 rounded-lg border border-warning/30 bg-warning-soft px-3 py-2 text-sm text-warning-ink">
             Es el último uso de este período; el cupo se renueva solo.
           </p>
         )}

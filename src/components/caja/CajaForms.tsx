@@ -154,11 +154,11 @@ export function BuscadorOrdenes({ q, cajaId }: { q: string; cajaId?: string }) {
 }
 
 const ESTADO_CHIP: Record<string, string> = {
-  PENDIENTE: 'bg-warning/15 text-warning',
-  PENDIENTE_PAGO: 'bg-info/10 text-info',
-  EN_VALIDACION: 'bg-info/10 text-info',
-  SOLICITADA: 'bg-warning/15 text-warning',
-  RECHAZADA: 'bg-destructive/10 text-destructive',
+  PENDIENTE: 'bg-warning-soft text-warning-ink',
+  PENDIENTE_PAGO: 'bg-info-soft text-info-ink',
+  EN_VALIDACION: 'bg-info-soft text-info-ink',
+  SOLICITADA: 'bg-warning-soft text-warning-ink',
+  RECHAZADA: 'bg-danger-soft text-danger-ink',
   CAMBIO_PLAN: 'bg-primary/10 text-primary',
 }
 
@@ -190,7 +190,7 @@ export function OrdenCobroCard({
 
   if (state.success) {
     return (
-      <div className="rounded-2xl border border-success/25 bg-success/10 p-4 text-sm">
+      <div className="rounded-2xl border border-success/25 bg-success-soft p-4 text-sm">
         <p className="font-semibold text-success">Cobro registrado ✔</p>
         <p className="mt-1 text-foreground">
           {orden.clienteNombre} · {orden.detalle} · RD${orden.monto.toLocaleString('es-DO')}

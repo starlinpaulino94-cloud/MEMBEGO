@@ -53,7 +53,7 @@ export const ESTADO_LABELS: Record<string, string> = {
 /** Clases de badge por estado de la automatización instalada. */
 export const ESTADO_BADGE: Record<string, string> = {
   DRAFT: 'bg-muted text-muted-foreground',
-  PUBLISHED: 'bg-success/10 text-success',
-  PAUSED: 'bg-warning/15 text-warning-foreground',
+  PUBLISHED: 'bg-success-soft text-success-ink',
+  PAUSED: 'bg-warning-soft text-warning-foreground',
   ARCHIVED: 'bg-muted text-muted-foreground/60',
 }

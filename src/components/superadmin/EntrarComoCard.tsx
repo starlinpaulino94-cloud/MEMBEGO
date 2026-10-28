@@ -69,7 +69,7 @@ export function EntrarComoCard() {
         {state.error && <p className="text-sm text-destructive">{state.error}</p>}
 
         {state.url && (
-          <div className="space-y-2 rounded-xl border border-warning/30 bg-warning/10 p-4">
+          <div className="space-y-2 rounded-xl border border-warning/30 bg-warning-soft p-4">
             <p className="text-sm font-semibold text-foreground">
               Enlace para {state.destinatario}
             </p>

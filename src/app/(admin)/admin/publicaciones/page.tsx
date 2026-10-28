@@ -23,8 +23,8 @@ export const dynamic = 'force-dynamic'
 
 const TIPO_META: Record<string, { label: string; icon: LucideIcon; chip: string }> = {
   EVENTO: { label: 'Evento', icon: CalendarDays, chip: 'bg-primary/10 text-primary' },
-  NOTICIA: { label: 'Noticia', icon: Newspaper, chip: 'bg-info/10 text-info' },
-  BENEFICIO: { label: 'Beneficio', icon: BadgeCheck, chip: 'bg-success/10 text-success' },
+  NOTICIA: { label: 'Noticia', icon: Newspaper, chip: 'bg-info-soft text-info-ink' },
+  BENEFICIO: { label: 'Beneficio', icon: BadgeCheck, chip: 'bg-success-soft text-success-ink' },
 }
 
 // Sección del perfil público donde se muestra cada tipo de publicación.

@@ -44,14 +44,14 @@ export function FormSolicitudMerchant({ prellenado, solicitudId, respondiendoA }
   }, [estado, router])
 
   if (estado.success) {
-    return <p className="rounded-lg bg-success/10 p-3 text-sm text-success" data-testid="solicitud-enviada">{estado.success}</p>
+    return <p className="rounded-lg bg-success-soft p-3 text-sm text-success-ink" data-testid="solicitud-enviada">{estado.success}</p>
   }
 
   return (
     <form action={enviar} className="space-y-4" data-testid="form-solicitud-merchant">
       {solicitudId && <input type="hidden" name="applicationId" value={solicitudId} />}
       {respondiendoA && (
-        <div className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm" data-testid="peticion-membego">
+        <div className="rounded-lg border border-warning/40 bg-warning-soft p-3 text-sm" data-testid="peticion-membego">
           <p className="font-medium">Membego pidió más información</p>
           <p>{respondiendoA}</p>
         </div>

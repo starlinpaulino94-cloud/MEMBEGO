@@ -5,7 +5,7 @@ import { SectionHeader } from '@/components/ui/section-header'
 
 const num = (n: number) => new Intl.NumberFormat('es-DO').format(n)
 
-const CLASE: Record<Severidad, string> = { ALTA: 'bg-destructive/10 text-destructive', MEDIA: 'bg-warning/15 text-foreground' }
+const CLASE: Record<Severidad, string> = { ALTA: 'bg-danger-soft text-danger-ink', MEDIA: 'bg-warning-soft text-foreground' }
 const ETIQUETA: Record<Severidad, string> = { ALTA: 'Alta', MEDIA: 'Media' }
 
 function Celda({ label, valor, nota }: { label: string; valor: string; nota: string }) {

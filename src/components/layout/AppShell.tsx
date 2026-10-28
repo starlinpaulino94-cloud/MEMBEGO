@@ -191,7 +191,9 @@ export function AppShell({
         <NavProgress />
       </Suspense>
 
-      <div className="flex min-h-screen w-full overflow-x-clip bg-background">
+      {/* `data-superficie="panel"`: activa la variante `panel:` de globals.css (tintes vivos de los estados). La busca `:root:has()`,
+          así que también llega a los diálogos y menús que Radix pinta fuera de aquí. El portal del cliente no la lleva. */}
+      <div data-superficie="panel" className="flex min-h-screen w-full overflow-x-clip bg-background">
         {/* Menú de escritorio. `self-start` + `h-screen` es lo que hace que
             `sticky` funcione dentro de un contenedor flex (ver cabecera). */}
         <aside
