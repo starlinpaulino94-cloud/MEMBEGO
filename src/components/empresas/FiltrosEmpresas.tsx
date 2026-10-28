@@ -46,12 +46,13 @@ export function FiltrosEmpresas({
 }) {
   const fichas = fichasDeFiltro(f, BASE)
   const clase =
-    'h-10 rounded-xl border border-input bg-background px-3 text-sm text-foreground'
+    'h-10 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground lg:w-auto'
 
   return (
     <div className="space-y-3">
-      <Form action={BASE} className="flex flex-col gap-3 lg:flex-row lg:items-end">
-        <div className="relative flex-1 lg:max-w-sm">
+      {/* Dos por fila en el móvil: uno debajo de otro, los seis controles ocupaban media pantalla antes de la primera empresa. */}
+      <Form action={BASE} className="grid grid-cols-2 gap-3 lg:flex lg:flex-wrap lg:items-end">
+        <div className="relative col-span-2 min-w-0 flex-1 lg:min-w-64 lg:max-w-sm">
           <label htmlFor="q" className="mb-1 block text-caption text-muted-foreground">
             Buscar
           </label>
@@ -150,7 +151,7 @@ export function FiltrosEmpresas({
 
         <button
           type="submit"
-          className="h-10 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          className="col-span-2 h-10 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 lg:col-span-1"
         >
           Aplicar
         </button>

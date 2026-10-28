@@ -1,10 +1,11 @@
 import Link from 'next/link'
 import Image from 'next/image'
-import { Building2, ChevronRight, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
 import { listarEmpresas, type EmpresaFila } from '@/modules/empresas/lista'
 import {
   POR_PAGINA,
+  hayFiltro,
   hrefPagina,
   leerFiltroEmpresas,
   type FiltroEmpresas,
@@ -13,8 +14,7 @@ import { desdeHace } from '@/lib/plural'
 import { FiltrosEmpresas } from '@/components/empresas/FiltrosEmpresas'
 import { AccionesEmpresa } from '@/components/empresas/AccionesEmpresa'
 import { EstadoEmpresa } from '@/components/empresas/EstadoEmpresa'
-import { StatCard } from '@/components/ui/stat-card'
-import { Card, CardContent } from '@/components/ui/card'
+import { Tabla, type Columna } from '@/components/ui/tabla'
 import { buttonVariants } from '@/components/ui/button'
 import { formatMoneyRD } from '@/lib/format'
 import { BotonExportar } from '@/components/ui/boton-exportar'
@@ -27,96 +27,93 @@ export const metadata = { title: 'Empresas' }
 const BASE = '/superadmin/empresas'
 
 /**
- * DOS CIFRAS GRANDES Y EL RESTO EN UNA LÍNEA.
+ * UNA TABLA, NO UNA PARED DE TARJETAS (piloto de rediseño, oct 2026).
  *
- * Antes eran cinco del mismo tamaño —Clientes, Sucursales, Planes, Activas,
- * Ingresos— y «Sucursales: 1» pesaba lo mismo que «Ingresos: RD$66,200». Cuando
- * todo destaca, nada destaca; y en un móvil de 360 px cada una quedaba en unos
- * 60 px y las cifras de dinero se partían.
+ * Cada empresa era una tarjeta con dos cifras grandes, cuatro pequeñas y un pie: con cuatro empresas la pantalla ya
+ * pasaba del alto de un portátil, y comparar dos negocios obligaba a saltar con la vista de una tarjeta a otra porque
+ * cada cifra estaba en un sitio distinto. En una tabla la misma cifra de todas está en la misma columna.
+ *
+ * En el móvil la tabla no cabe: cada empresa es una fila de lista —logo, nombre, lo esencial en una línea y su estado—
+ * que lleva a su ficha, donde está todo lo demás.
  */
-function TarjetaEmpresa({ e }: { e: EmpresaFila }) {
+
+function LogoEmpresa({ e, className }: { e: EmpresaFila; className: string }) {
+  return e.logoUrl ? (
+    <span className={`relative block shrink-0 overflow-hidden border border-border/60 ${className}`}>
+      <Image src={e.logoUrl} alt="" fill className="object-cover" />
+    </span>
+  ) : (
+    <InicialesEmpresa nombre={e.name} className={className} />
+  )
+}
+
+function Actividad({ e }: { e: EmpresaFila }) {
   return (
-    <Card className="border-border/60 shadow-card">
-      <CardContent className="pt-5">
-        <div className="flex items-start justify-between gap-3">
-          <Link
-            href={`${BASE}/${e.id}`}
-            className="flex min-w-0 flex-1 items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            {e.logoUrl ? (
-              <span className="relative block h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-border/60">
-                <Image src={e.logoUrl} alt="" fill className="object-cover" />
-              </span>
-            ) : (
-              <InicialesEmpresa nombre={e.name} className="h-10 w-10 rounded-xl" />
-            )}
-            <span className="min-w-0">
-              <span className="block truncate font-semibold text-foreground">{e.name}</span>
-              <span className="block truncate text-caption text-muted-foreground">
-                {[e.categoria, e.ciudad].filter(Boolean).join(' · ') || 'Sin categoría'}
-              </span>
-            </span>
+    <span className={e.enSilencio ? 'font-medium text-warning-ink' : 'text-muted-foreground'}>
+      {e.desdeUltimaActividad === null ? 'Sin actividad' : desdeHace(e.desdeUltimaActividad)}
+    </span>
+  )
+}
+
+const COLUMNAS: Columna<EmpresaFila>[] = [
+  {
+    clave: 'empresa',
+    encabezado: 'Empresa',
+    celda: (e) => (
+      <span className="flex min-w-0 items-center gap-3">
+        <LogoEmpresa e={e} className="h-8 w-8 rounded-lg" />
+        <span className="min-w-0">
+          <Link href={`${BASE}/${e.id}`} className="block truncate font-medium text-foreground hover:text-primary hover:underline">
+            {e.name}
           </Link>
-          <div className="flex shrink-0 items-start gap-1.5">
-            <EstadoEmpresa
-              isActive={e.isActive}
-              isPublished={e.isPublished}
-              esDemo={e.esDemo}
-              soloExcepciones
-            />
-            <AccionesEmpresa empresa={e} />
-          </div>
-        </div>
-
-        <div className="mt-4 grid grid-cols-2 gap-3">
-          <div className="rounded-xl bg-muted/40 py-3 text-center">
-            <p className="text-h2 tabular-nums text-foreground">{e.clientes}</p>
-            <p className="text-caption text-muted-foreground">Clientes</p>
-          </div>
-          <div className="rounded-xl bg-muted/40 py-3 text-center">
-            <p className="text-h2 tabular-nums text-foreground">
-              {formatMoneyRD(e.ingresosHistoricos)}
-            </p>
-            <p className="text-caption text-muted-foreground">Cobrado histórico</p>
-          </div>
-        </div>
-
-        <dl className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-caption text-muted-foreground">
-          <div className="flex gap-1">
-            <dt>Membresías vigentes:</dt>
-            <dd className="tabular-nums text-foreground">{e.membresiasVigentes}</dd>
-          </div>
-          <div className="flex gap-1">
-            <dt>Este mes:</dt>
-            <dd className="tabular-nums text-foreground">{formatMoneyRD(e.cobradoMes)}</dd>
-          </div>
-          <div className="flex gap-1">
-            <dt>Sucursales:</dt>
-            <dd className="tabular-nums text-foreground">{e.sucursales}</dd>
-          </div>
-          <div className="flex gap-1">
-            <dt>Planes:</dt>
-            <dd className="tabular-nums text-foreground">{e.planes}</dd>
-          </div>
-        </dl>
-
-        <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-3 text-caption">
-          <span className={e.enSilencio ? 'font-medium text-warning' : 'text-muted-foreground'}>
-            Actividad: {desdeHace(e.desdeUltimaActividad)}
+          <span className="block truncate text-caption text-muted-foreground">
+            {[e.categoria, e.ciudad].filter(Boolean).join(' · ') || 'Sin categoría'}
           </span>
-          {/* ENLACE, no un botón que navega. Antes era `router.push` dentro de
-              un `<button>`: no se abría en pestaña nueva, no se podía copiar y
-              un lector de pantalla lo anunciaba como botón. Y es la acción
-              principal de cada tarjeta. */}
-          <Link
-            href={`${BASE}/${e.id}`}
-            className="inline-flex items-center gap-0.5 font-medium text-primary hover:underline"
-          >
-            Ver dashboard <ChevronRight aria-hidden className="h-3 w-3" />
-          </Link>
-        </div>
-      </CardContent>
-    </Card>
+        </span>
+      </span>
+    ),
+  },
+  {
+    clave: 'estado',
+    encabezado: 'Estado',
+    celda: (e) => <EstadoEmpresa isActive={e.isActive} isPublished={e.isPublished} esDemo={e.esDemo} unico />,
+  },
+  { clave: 'clientes', encabezado: 'Clientes', tipo: 'numero' },
+  { clave: 'membresiasVigentes', encabezado: 'Vigentes', tipo: 'numero', prioridad: 3 },
+  { clave: 'cobradoMes', encabezado: 'Este mes', tipo: 'dinero' },
+  { clave: 'ingresosHistoricos', encabezado: 'Histórico', tipo: 'dinero', prioridad: 3 },
+  { clave: 'actividad', encabezado: 'Última actividad', prioridad: 2, celda: (e) => <Actividad e={e} /> },
+  {
+    clave: 'acciones',
+    encabezado: 'Acciones',
+    soloLector: true,
+    alineacion: 'derecha',
+    celda: (e) => <AccionesEmpresa empresa={e} />,
+  },
+]
+
+function FilaMovil({ e }: { e: EmpresaFila }) {
+  return (
+    <li className="border-b border-border/60 last:border-0">
+      <Link
+        href={`${BASE}/${e.id}`}
+        className="flex items-center gap-3 px-4 py-3.5 outline-none transition-colors duration-fast hover:bg-muted/50 focus-visible:bg-muted/50"
+      >
+        <LogoEmpresa e={e} className="h-10 w-10 rounded-xl" />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-semibold text-foreground">{e.name}</span>
+          <span className="block truncate text-caption">
+            {/* Lo que cabe en un móvil: clientes y cuándo se movió por última vez. Las vigentes, solo si hay. */}
+            <span className="text-muted-foreground">
+              {e.clientes} cliente{e.clientes === 1 ? '' : 's'}
+              {e.membresiasVigentes > 0 ? ` · ${e.membresiasVigentes} vigente${e.membresiasVigentes === 1 ? '' : 's'}` : ''} ·{' '}
+            </span>
+            <Actividad e={e} />
+          </span>
+        </span>
+        <EstadoEmpresa isActive={e.isActive} isPublished={e.isPublished} esDemo={e.esDemo} unico />
+      </Link>
+    </li>
   )
 }
 
@@ -124,7 +121,7 @@ function Paginacion({ f, total }: { f: FiltroEmpresas; total: number }) {
   const paginas = Math.max(1, Math.ceil(total / POR_PAGINA))
   if (paginas <= 1) return null
   return (
-    <nav className="flex items-center justify-center gap-3 pt-2" aria-label="Paginación">
+    <nav className="flex items-center justify-center gap-3" aria-label="Paginación">
       <Link
         href={hrefPagina(f, BASE, Math.max(1, f.pagina - 1))}
         aria-disabled={f.pagina <= 1}
@@ -164,16 +161,26 @@ export default async function SuperadminEmpresas({
   // dato equivocado: el archivo no dice de qué es.
   const exportHref = hrefPagina(f, `${BASE}/exportar`, 1)
 
+  // El marco del pie lo pone la tabla; la lista del móvil lo pinta con `marcoPie`.
+  const pie = (
+    <div className="flex flex-wrap items-center justify-between gap-3 text-caption text-muted-foreground">
+      <span>
+        {d.total} de {d.totalAmbito} empresa{d.totalAmbito !== 1 ? 's' : ''}
+      </span>
+      <Paginacion f={f} total={d.total} />
+    </div>
+  )
+
   return (
     <div className="space-y-6 animate-fade-up">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-h1 text-foreground">Empresas</h1>
-          <p className="text-small text-muted-foreground">
-            CRM de empresas registradas en la plataforma
+          <p className="mt-1 text-small text-muted-foreground">
+            {d.total} empresa{d.total !== 1 ? 's' : ''} · {d.activas} activa{d.activas !== 1 ? 's' : ''}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <BotonExportar href={exportHref} />
           <Link href={`${BASE}/nueva`} className={buttonVariants()}>
             <Plus className="mr-2 h-4 w-4" /> Nueva empresa
@@ -182,55 +189,74 @@ export default async function SuperadminEmpresas({
       </div>
 
       {/*
-        LAS CUATRO CIFRAS SON DEL FILTRO APLICADO, y las de práctica ya no se
-        cuelan: antes esta pantalla decía 100 clientes y el Resumen 99, porque
-        aquí la empresa de prueba contaba como un negocio real.
+        LAS CIFRAS SON DEL FILTRO APLICADO, y las de práctica ya no se cuelan: antes esta pantalla decía 100 clientes y el
+        Resumen 99, porque aquí la empresa de prueba contaba como un negocio real.
 
-        «Ingresos totales» pasa a decir de cuándo habla, y se le añade el mes en
-        curso: la cifra histórica no sirve para decidir nada, y estaba junto a
-        tres números de estado actual como si fuera del mismo tramo.
+        Una franja, no cuatro tarjetas con brillo de color: son totales de la tabla de abajo, no la noticia de la
+        pantalla. El número de empresas y de activas ya lo dice la línea bajo el título.
       */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <StatCard label="Empresas" value={d.total} accent="brand" />
-        <StatCard label="Activas" value={d.activas} accent="success" />
-        <StatCard label="Clientes" value={d.clientes.toLocaleString('es-DO')} accent="brand" />
-        <StatCard
-          label="Cobrado este mes"
-          value={formatMoneyRD(d.cobradoMes)}
-          accent="brand"
-          sub={`Histórico: ${formatMoneyRD(d.ingresosHistoricos)}`}
+      <section
+        aria-label="Totales"
+        className="grid grid-cols-1 divide-y divide-border rounded-xl border border-border bg-card shadow-sm sm:grid-cols-3 sm:divide-x sm:divide-y-0"
+      >
+        {[
+          ['Cobrado este mes', formatMoneyRD(d.cobradoMes)],
+          ['Cobrado desde el inicio', formatMoneyRD(d.ingresosHistoricos)],
+          ['Clientes', d.clientes.toLocaleString('es-DO')],
+        ].map(([etiqueta, valor]) => (
+          <div key={etiqueta} className="px-5 py-3.5">
+            <p className="text-caption text-muted-foreground">{etiqueta}</p>
+            <p className="mt-0.5 text-h3 tabular-nums text-foreground">{valor}</p>
+          </div>
+        ))}
+      </section>
+
+      <section aria-label="Listado de empresas" className="space-y-3">
+        <FiltrosEmpresas
+          f={f}
+          categorias={d.categorias}
+          ciudades={d.ciudades}
+          hayDemos={d.hayDemos}
         />
-      </div>
 
-      <FiltrosEmpresas
-        f={f}
-        categorias={d.categorias}
-        ciudades={d.ciudades}
-        hayDemos={d.hayDemos}
-      />
+        {d.filas.length > 0 && (
+          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm md:hidden">
+            <ul aria-label="Empresas">
+              {d.filas.map((e) => (
+                <FilaMovil key={e.id} e={e} />
+              ))}
+            </ul>
+            <div className="border-t border-border px-4 py-3">{pie}</div>
+          </div>
+        )}
 
-      <p className="text-caption text-muted-foreground">
-        {d.total} de {d.totalAmbito} empresa{d.totalAmbito !== 1 ? 's' : ''}
-      </p>
-
-      {d.filas.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/60 py-16">
-          <Building2 aria-hidden className="mb-3 h-10 w-10 text-muted-foreground/40" />
-          <p className="font-medium text-muted-foreground">Sin resultados</p>
-          <p className="text-small text-muted-foreground/60">Ajusta los filtros o la búsqueda.</p>
-          <Link href={BASE} className="mt-3 text-small text-primary hover:underline">
-            Limpiar filtros
-          </Link>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {d.filas.map((e) => (
-            <TarjetaEmpresa key={e.id} e={e} />
-          ))}
-        </div>
-      )}
-
-      <Paginacion f={f} total={d.total} />
+        <Tabla
+          caption="Empresas de la plataforma"
+          columnas={COLUMNAS}
+          filas={d.filas}
+          claveDe={(e) => e.id}
+          formato={{ dinero: (v) => formatMoneyRD(Number(v)) }}
+          enlace={({ href, className, children }) => (
+            <Link href={href} className={className}>
+              {children}
+            </Link>
+          )}
+          filaNavegable
+          hayFiltros={hayFiltro(f)}
+          vacio={{ titulo: 'Todavía no hay empresas', descripcion: 'Crea la primera con «Nueva empresa».' }}
+          sinResultados={{
+            titulo: 'Ninguna empresa coincide',
+            descripcion: 'Ajusta los filtros o la búsqueda.',
+            accion: (
+              <Link href={BASE} className="text-small text-primary hover:underline">
+                Limpiar filtros
+              </Link>
+            ),
+          }}
+          pie={pie}
+          className={d.filas.length > 0 ? 'max-md:hidden' : undefined}
+        />
+      </section>
     </div>
   )
 }

@@ -1,38 +1,25 @@
 import Link from 'next/link'
-import Form from 'next/form'
 import Image from 'next/image'
-import {
-  Building2,
-  Users,
-  CheckCircle2,
-  Clock,
-  ArrowRight,
-  Wallet,
-  Activity,
-  LifeBuoy,
-  EyeOff,
-  MoonStar,
-  FlaskConical,
-} from 'lucide-react'
+import { ArrowRight, CircleCheck } from 'lucide-react'
 import { requireRole } from '@/lib/auth/guards'
-import { StatCard } from '@/components/ui/stat-card'
-import { AlertTile } from '@/components/ui/alert-tile'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { StatusChip } from '@/components/ui/status-chip'
+import { Tabla, type Columna } from '@/components/ui/tabla'
+import { cn } from '@/lib/utils'
 import { formatDate } from '@/lib/format'
 import { ACCION_LABEL, ENTIDAD_LABEL } from '@/modules/auditoria/queries'
 import { DIAS_SILENCIO } from '@/modules/empresas/silencio'
 import { hrefFiltro } from '@/modules/membresias/filtros'
-import { desdeHace } from '@/lib/plural'
+import { desdeHace, plural } from '@/lib/plural'
 import {
   PERIODOS,
-  PERIODO_LABEL,
   getPanelPlataforma,
   leerPeriodo,
   type EmpresaPanel,
   type Metrica,
 } from '@/modules/superadmin/panel'
 import { InicialesEmpresa } from '@/components/superadmin/InicialesEmpresa'
+import { EstadoEmpresa } from '@/components/empresas/EstadoEmpresa'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,98 +37,77 @@ const money = (n: number) =>
     maximumFractionDigits: 0,
   }).format(n)
 
-/**
- * Comparación contra el mismo tramo anterior.
- *
- * Cuando antes no hubo NADA no se pinta un porcentaje: no existe el «infinito
- * por ciento» y un «+100 %» al pasar de 0 a 3 sería una escala inventada. En ese
- * caso se dice que no hay con qué comparar, que es la verdad.
- */
-function comparacion(m: Metrica, formato: (n: number) => string = String): string {
-  if (m.variacion === null) return m.anterior === 0 ? 'sin periodo previo' : ''
-  const signo = m.variacion >= 0 ? '+' : ''
-  return `${signo}${m.variacion} % · antes ${formato(m.anterior)}`
-}
-
-/** La misma tarjeta para las reales y las de práctica: las distingue el apartado
- *  donde salen y su etiqueta, no un aspecto distinto. */
-function TarjetaEmpresa({ c }: { c: EmpresaPanel }) {
+/** La variación como insignia: verde si sube, roja si baja. Sin periodo previo no se inventa un porcentaje. */
+function Variacion({ m }: { m: Metrica }) {
+  if (m.variacion === null) return null
   return (
-    <Card className="card-interactive border-border/60 shadow-card">
-      <CardHeader className="pb-3">
-        {/* `min-w-0`: CardHeader es una rejilla y, sin él, esta fila no se
-            encogía y las insignias se salían de la tarjeta. Con `flex-wrap`,
-            si el nombre (al menos 10rem) y las insignias no caben, las
-            insignias bajan de línea en vez de dejar el nombre en «To…». */}
-        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-          <div className="flex min-w-0 flex-1 basis-40 items-center gap-2.5">
-            {c.logoUrl ? (
-              <span className="relative block h-8 w-8 shrink-0 overflow-hidden rounded-lg border border-border/60">
-                <Image src={c.logoUrl} alt="" fill className="object-cover" />
-              </span>
-            ) : (
-              <InicialesEmpresa nombre={c.name} className="h-8 w-8 rounded-lg" />
-            )}
-            <CardTitle className="truncate text-base">{c.name}</CardTitle>
-          </div>
-          {/* ESTAR ACTIVA Y ESTAR PUBLICADA SON DOS COSAS. Antes compartían un
-              solo hueco y la insignia «Inactiva» tapaba si además estaba
-              publicada o no, que es lo que hay que arreglar en cada caso. */}
-          <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
-            {c.esDemo && <Badge variant="warning">Demo</Badge>}
-            {!c.isActive && <Badge variant="destructive">Inactiva</Badge>}
-            {!c.esDemo && (
-              <Badge variant={c.isPublished ? 'success' : 'warning'}>
-                {c.isPublished ? 'Publicada' : 'Sin publicar'}
-              </Badge>
-            )}
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {/* «Planes» salía de aquí: lo repetían las tarjetas de arriba y no
-            distinguía una empresa de otra. Lo que sí distingue —y avisa de la
-            que se está apagando— es cuánto hace que pasó algo. */}
-        <div className="grid grid-cols-3 gap-3 text-center">
-          {[
-            { label: 'Clientes', value: String(c.clientes), alerta: false },
-            { label: 'Activas', value: String(c.activas), alerta: false },
-            { label: 'Actividad', value: desdeHace(c.desdeUltimaActividad), alerta: c.enSilencio },
-          ].map((s) => (
-            <div key={s.label} className="rounded-xl bg-muted/40 py-3">
-              <p
-                className={`tabular-nums ${
-                  s.label === 'Actividad'
-                    ? `text-small font-semibold ${s.alerta ? 'text-warning' : 'text-foreground'}`
-                    : 'text-h2 text-foreground'
-                }`}
-              >
-                {s.value}
-              </p>
-              <p className="text-caption text-muted-foreground">{s.label}</p>
-            </div>
-          ))}
-        </div>
-
-        {c.pendientes > 0 && (
-          <Link
-            // Las N membresías PENDIENTE_PAGO de ESTA empresa, en la lista donde
-            // se validan. Antes iba a Operaciones, que es la cobertura de
-            // configuración y no tiene ningún pago (auditoría admin · D-05).
-            href={hrefFiltro(
-              { estado: 'PENDIENTE_PAGO', empresa: c.id, ambito: c.esDemo ? 'practica' : 'reales' },
-              '/superadmin/membresias'
-            )}
-            className="mt-3 flex items-center justify-end gap-1 text-caption font-medium text-warning hover:underline"
-          >
-            {c.pendientes} pago{c.pendientes !== 1 ? 's' : ''} pendiente
-            {c.pendientes !== 1 ? 's' : ''} <ArrowRight className="h-3 w-3" />
-          </Link>
-        )}
-      </CardContent>
-    </Card>
+    <Badge variant={m.variacion >= 0 ? 'success' : 'destructive'} className="tabular-nums">
+      {m.variacion >= 0 ? '+' : '−'}
+      {Math.abs(m.variacion)} %
+    </Badge>
   )
 }
+
+/**
+ * LO QUE PIDE TRABAJO, COMO UNA LISTA (piloto de rediseño, oct 2026).
+ *
+ * Eran cuatro baldosas del mismo tamaño, también las que estaban en cero: «Tickets abiertos: 0» ocupaba lo mismo que
+ * «2 empresas en silencio», y para saber CUÁLES había que ir a otra pantalla. Ahora cada asunto pendiente es una fila
+ * que dice cuántos, cuáles y adónde ir; lo que está en cero baja a una sola línea de «al día».
+ */
+interface Asunto {
+  clave: string
+  titulo: string
+  detalle: string
+  href: string
+  accion: string
+  /** El tono y su palabra van en `StatusChip`: el color no es la única señal. */
+  tono: 'danger' | 'warning' | 'info'
+  etiqueta: string
+}
+
+function nombres(empresas: EmpresaPanel[], conTiempo = false): string {
+  const lista = empresas.slice(0, 3).map((e) => (conTiempo ? `${e.name} (${desdeHace(e.desdeUltimaActividad)})` : e.name))
+  return lista.join(' · ') + (empresas.length > 3 ? ` y ${empresas.length - 3} más` : '')
+}
+
+const COLUMNAS_EMPRESA: Columna<EmpresaPanel>[] = [
+  {
+    clave: 'empresa',
+    encabezado: 'Empresa',
+    celda: (c) => (
+      <span className="flex min-w-0 items-center gap-2.5">
+        {c.logoUrl ? (
+          <span className="relative block h-8 w-8 shrink-0 overflow-hidden rounded-lg border border-border/60">
+            <Image src={c.logoUrl} alt="" fill className="object-cover" />
+          </span>
+        ) : (
+          <InicialesEmpresa nombre={c.name} className="h-8 w-8 rounded-lg" />
+        )}
+        <Link href={`/superadmin/empresas/${c.id}`} className="truncate font-medium text-foreground hover:text-primary hover:underline">
+          {c.name}
+        </Link>
+      </span>
+    ),
+  },
+  {
+    clave: 'estado',
+    encabezado: 'Estado',
+    celda: (c) => <EstadoEmpresa isActive={c.isActive} isPublished={c.isPublished} esDemo={c.esDemo} unico />,
+  },
+  { clave: 'clientes', encabezado: 'Clientes', tipo: 'numero' },
+  { clave: 'activas', encabezado: 'Activas', tipo: 'numero', prioridad: 2 },
+  {
+    clave: 'actividad',
+    encabezado: 'Última actividad',
+    prioridad: 2,
+    celda: (c) => (
+      <span className={c.enSilencio ? 'font-medium text-warning-ink' : 'text-muted-foreground'}>
+        {c.desdeUltimaActividad === null ? 'Sin actividad' : desdeHace(c.desdeUltimaActividad)}
+      </span>
+    ),
+  },
+]
 
 export default async function SuperadminDashboard({
   searchParams,
@@ -152,240 +118,274 @@ export default async function SuperadminDashboard({
   const periodo = leerPeriodo((await searchParams).dias)
   const d = await getPanelPlataforma(periodo)
 
+  const silenciosas = d.empresas.filter((e) => e.enSilencio)
+  const sinPublicar = d.empresas.filter((e) => !e.isPublished)
+  const asuntos: Asunto[] = []
+  if (d.porValidar > 0) {
+    asuntos.push({
+      clave: 'pagos',
+      titulo: `${plural(d.porValidar, 'pago', 'pagos')} por validar`,
+      detalle: 'Comprobantes, cobros en sucursal, compras y cambios de plan esperando a alguien',
+      // La cola de comprobantes de la plataforma es la lista de Membresías (D-05), no Operaciones.
+      href: hrefFiltro({ estado: 'PENDIENTE_PAGO' }, '/superadmin/membresias'),
+      accion: 'Revisar',
+      tono: 'warning',
+      etiqueta: 'Pendiente',
+    })
+  }
+  if (d.ticketsAbiertos > 0) {
+    asuntos.push({
+      clave: 'tickets',
+      titulo: plural(d.ticketsAbiertos, 'ticket abierto', 'tickets abiertos'),
+      detalle: 'Empresas esperando respuesta de soporte',
+      href: '/superadmin/tickets',
+      accion: 'Responder',
+      tono: 'danger',
+      etiqueta: 'Urgente',
+    })
+  }
+  if (d.enSilencio > 0) {
+    asuntos.push({
+      clave: 'silencio',
+      titulo: `${plural(d.enSilencio, 'empresa', 'empresas')} sin actividad en ${DIAS_SILENCIO} días`,
+      detalle: nombres(silenciosas, true) || 'Activas, pero sin una sola señal de vida',
+      href: '/superadmin/empresas?orden=actividad',
+      accion: 'Ver',
+      tono: 'warning',
+      etiqueta: 'Aviso',
+    })
+  }
+  if (d.sinPublicar > 0) {
+    asuntos.push({
+      clave: 'sin-publicar',
+      titulo: `${plural(d.sinPublicar, 'empresa', 'empresas')} sin publicar`,
+      detalle: sinPublicar.length > 0 ? `${nombres(sinPublicar)}: no ${sinPublicar.length === 1 ? 'aparece' : 'aparecen'} en el directorio` : 'No aparecen en el directorio',
+      href: '/superadmin/empresas?estado=sin-publicar',
+      accion: 'Ver',
+      tono: 'info',
+      etiqueta: 'Info',
+    })
+  }
+  const alDia = [
+    d.porValidar === 0 && '0 pagos por validar',
+    d.ticketsAbiertos === 0 && '0 tickets abiertos',
+    d.enSilencio === 0 && 'ninguna empresa en silencio',
+    d.sinPublicar === 0 && 'todas publicadas',
+  ].filter(Boolean)
+
+  const cifras = [
+    {
+      etiqueta: 'Empresas',
+      valor: String(d.totalEmpresas),
+      sub: d.demos.length > 0 ? <>+{d.demos.length} de práctica, aparte</> : <>reales</>,
+      href: '/superadmin/empresas',
+    },
+    {
+      etiqueta: 'Clientes',
+      valor: d.totalClientes.toLocaleString('es-DO'),
+      sub: (
+        <>
+          {plural(d.nuevos.valor, 'nuevo', 'nuevos')} <Variacion m={d.nuevos} />
+        </>
+      ),
+      href: '/superadmin/usuarios',
+    },
+    {
+      etiqueta: 'Membresías activas',
+      valor: d.totalActivas.toLocaleString('es-DO'),
+      sub: <>al cierre de hoy</>,
+      href: '/superadmin/membresias',
+    },
+    {
+      // Misma definición de «cobrado» que el Resumen de la empresa y Reportes (`modules/pagos/cobrado.ts`).
+      etiqueta: 'Cobrado',
+      valor: money(d.cobrado.valor),
+      sub: (
+        <>
+          <Variacion m={d.cobrado} /> {d.cobrado.variacion === null ? 'sin periodo previo' : `antes ${money(d.cobrado.anterior)}`}
+        </>
+      ),
+      href: '/superadmin/reportes',
+    },
+  ]
+
   return (
-    <div className="space-y-8 animate-fade-up">
+    <div className="space-y-6 animate-fade-up">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-overline">Plataforma</p>
-          <h1 className="text-h1 mt-1 text-foreground">Centro de control</h1>
+        <div className="min-w-0">
+          <h1 className="text-h1 text-foreground">Centro de control</h1>
+          <p className="mt-1 text-small text-muted-foreground">Toda la plataforma · sin empresas de práctica</p>
         </div>
-        {/* Selector de periodo. `next/form` = sin JavaScript de cliente: el
-            panel entero sigue siendo un componente de servidor. */}
-        <Form action="/superadmin/dashboard" className="flex items-center gap-2">
-          <label htmlFor="dias" className="sr-only">
-            Periodo
-          </label>
-          <select
-            id="dias"
-            name="dias"
-            defaultValue={String(periodo)}
-            className="h-9 rounded-xl border border-input bg-background px-3 text-sm"
-          >
-            {PERIODOS.map((p) => (
-              <option key={p} value={p}>
-                {PERIODO_LABEL[p]}
-              </option>
+        {/* El periodo como segmentos que son ENLACES: se ve cuál está puesto sin abrir un desplegable, y cada uno es una
+            URL (`?dias=`) que se comparte. Antes era un `<select>` con un botón «Ver» al lado. */}
+        <nav aria-label="Periodo" className="inline-flex rounded-xl bg-muted p-1">
+          {PERIODOS.map((p) => (
+            <Link
+              key={p}
+              href={`/superadmin/dashboard?dias=${p}`}
+              aria-current={p === periodo ? 'page' : undefined}
+              className={cn(
+                'rounded-lg px-3 py-1.5 text-small font-medium transition-colors duration-fast',
+                p === periodo ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              {p} días
+            </Link>
+          ))}
+        </nav>
+      </div>
+
+      {/* Primero lo que pide trabajo: las cifras informan; esto no puede esperar a un scroll. */}
+      <section aria-labelledby="atencion" className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+        <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-3.5">
+          <h2 id="atencion" className="text-h4 text-foreground">
+            Necesita tu atención
+          </h2>
+          {asuntos.length > 0 && (
+            <span className="text-caption text-muted-foreground">{plural(asuntos.length, 'asunto', 'asuntos')}</span>
+          )}
+        </div>
+        {asuntos.length === 0 ? (
+          <p className="flex items-center gap-2 px-5 py-4 text-small text-foreground">
+            <CircleCheck aria-hidden className="h-4 w-4 text-success" />
+            Todo al día: nada espera por ti ahora mismo.
+          </p>
+        ) : (
+          <ul>
+            {asuntos.map((a) => (
+              <li key={a.clave} className="flex items-center gap-3 border-b border-border/60 px-5 py-3.5 last:border-0">
+                <div className="min-w-0 flex-1">
+                  <p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium text-foreground">
+                    <StatusChip tone={a.tono}>{a.etiqueta}</StatusChip>
+                    {a.titulo}
+                  </p>
+                  <p className="truncate text-caption text-muted-foreground">{a.detalle}</p>
+                </div>
+                <Link
+                  href={a.href}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-small font-medium text-foreground transition-colors duration-fast hover:bg-muted"
+                >
+                  {a.accion}
+                  <span className="sr-only">: {a.titulo}</span>
+                </Link>
+              </li>
             ))}
-          </select>
-          <button
-            type="submit"
-            className="h-9 rounded-xl border border-input bg-card px-3 text-sm font-medium hover:bg-muted"
+          </ul>
+        )}
+        {asuntos.length > 0 && alDia.length > 0 && (
+          <p className="border-t border-border bg-muted/40 px-5 py-2.5 text-caption text-muted-foreground">
+            Al día: {alDia.join(' · ')}
+          </p>
+        )}
+      </section>
+
+      {/* Cuatro cifras en UNA franja: son el contexto, no la noticia. Antes eran cuatro tarjetas con icono y brillo de
+          color que competían con los avisos. */}
+      <section aria-label="Cifras del periodo" className="grid grid-cols-2 overflow-hidden rounded-xl border border-border bg-card shadow-sm lg:grid-cols-4">
+        {cifras.map((c, i) => (
+          <Link
+            key={c.etiqueta}
+            href={c.href}
+            className={cn(
+              'block px-5 py-4 outline-none transition-colors duration-fast hover:bg-muted/40 focus-visible:bg-muted/40',
+              i % 2 === 1 && 'border-l border-border',
+              i >= 2 && 'max-lg:border-t lg:border-l'
+            )}
           >
-            Ver
-          </button>
-        </Form>
-      </div>
+            <p className="text-caption text-muted-foreground">{c.etiqueta}</p>
+            <p className="mt-0.5 text-h2 tabular-nums text-foreground">{c.valor}</p>
+            <p className="mt-1 flex flex-wrap items-center gap-1.5 text-caption text-muted-foreground">{c.sub}</p>
+          </Link>
+        ))}
+      </section>
 
-      {/*
-        EN MÓVIL, LO ACCIONABLE PRIMERO. Las métricas informan; la salud pide
-        trabajo. En pantalla ancha caben las dos cosas a la vista y el orden de
-        lectura natural es de arriba abajo, así que se conserva; apiladas en un
-        teléfono, poner cuatro cifras por delante deja los avisos a un scroll de
-        distancia. `order-*` cambia el orden visual sin tocar el del DOM, que es
-        el que siguen el teclado y los lectores de pantalla.
-      */}
-      <div className="flex flex-col gap-8">
-        <section className="order-2 lg:order-1">
-          <h2 className="sr-only">Métricas de la plataforma</h2>
-          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-            <StatCard
-              label="Empresas"
-              value={d.totalEmpresas}
-              icon={Building2}
-              accent="brand"
-              href="/superadmin/empresas"
-              hrefLabel="ver todas las empresas"
-              sub={d.demos.length > 0 ? `+${d.demos.length} de práctica` : undefined}
-            />
-            <StatCard
-              label="Clientes totales"
-              value={d.totalClientes}
-              icon={Users}
-              accent="brand"
-              href="/superadmin/usuarios"
-              hrefLabel="ver los usuarios"
-              sub={`+${d.nuevos.valor} en el periodo · ${comparacion(d.nuevos)}`}
-            />
-            <StatCard
-              label="Membresías activas"
-              value={d.totalActivas}
-              icon={CheckCircle2}
-              accent="success"
-              href="/superadmin/membresias"
-              hrefLabel="ver las membresías"
-            />
-            {/* El dinero faltaba por completo: un centro de control de una
-                plataforma sin lo cobrado no contesta la primera pregunta que se
-                hace quien la opera. Misma definición que usan el Resumen de la
-                empresa y Reportes (`modules/pagos/cobrado.ts`). */}
-            <StatCard
-              label="Cobrado"
-              value={money(d.cobrado.valor)}
-              icon={Wallet}
-              accent="brand"
-              href="/superadmin/reportes"
-              hrefLabel="ver los reportes"
-              sub={comparacion(d.cobrado, money) || PERIODO_LABEL[periodo]}
-            />
-          </div>
-        </section>
-
-        <section className="order-1 lg:order-2">
-          <h2 className="text-h4 mb-3 text-foreground">Salud de la plataforma</h2>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <AlertTile
-              label="Pagos por validar"
-              value={d.porValidar}
-              // Operaciones es la cobertura de configuración, no una cola de
-              // pagos (D-05). La cola de comprobantes de la plataforma es la
-              // lista de Membresías. Ojo: este número suma cuatro colas
-              // (comprobantes, cobros en sucursal, compras y cambios de plan) y
-              // la lista solo enseña las membresías; el resto se valida en
-              // `/admin/pagos` de cada empresa.
-              href={hrefFiltro({ estado: 'PENDIENTE_PAGO' }, '/superadmin/membresias')}
-              icon={Clock}
-              tono="warning"
-            />
-            <AlertTile
-              label="Empresas sin publicar"
-              value={d.sinPublicar}
-              href="/superadmin/empresas"
-              icon={EyeOff}
-              tono="info"
-            />
-            <AlertTile
-              label="Empresas en silencio"
-              value={d.enSilencio}
-              href="/superadmin/empresas"
-              icon={MoonStar}
-              tono="warning"
-              sufijo={`sin actividad en ${DIAS_SILENCIO} días`}
-            />
-            <AlertTile
-              label="Tickets abiertos"
-              value={d.ticketsAbiertos}
-              href="/superadmin/tickets"
-              icon={LifeBuoy}
-              tono="danger"
-            />
-          </div>
-        </section>
-      </div>
-
-      {/* `minmax(0, …)` y `grid-cols-1`: con pistas `auto`/`fr` a secas la
-          columna crecía hasta el ancho mínimo de su contenido y, en móvil, las
-          tarjetas de empresa y la actividad se salían por la derecha. Las dos
-          columnas, solo desde xl: entre lg y xl, junto a la barra lateral, las
-          tarjetas de empresa quedaban a ~180 px y sus cifras se montaban. */}
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-        <div>
+      {/* `minmax(0, …)` y `grid-cols-1`: con pistas `auto`/`fr` a secas la columna crecía hasta el ancho mínimo de su
+          contenido y, en móvil, la tabla y la actividad se salían por la derecha. Las dos columnas, solo desde 2xl: a
+          1 366 px, junto al menú, la tabla de empresas quedaba en ~600 px y «Última actividad» se cortaba. */}
+      <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+        <section aria-labelledby="empresas" className="min-w-0">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-h4 text-foreground">Empresas</h2>
+            <h2 id="empresas" className="text-h4 text-foreground">
+              Empresas
+            </h2>
             <Link
               href="/superadmin/empresas"
               className="inline-flex items-center gap-1 text-small font-medium text-primary hover:underline"
             >
-              Administrar <ArrowRight className="h-3.5 w-3.5" />
+              Ver todas <ArrowRight aria-hidden className="h-3.5 w-3.5" />
             </Link>
           </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {d.empresas.map((c) => (
-              <TarjetaEmpresa key={c.id} c={c} />
-            ))}
-          </div>
+          <Tabla
+            caption="Empresas de la plataforma"
+            columnas={COLUMNAS_EMPRESA}
+            filas={d.empresas}
+            claveDe={(c) => c.id}
+            filaNavegable
+            vacio={{ titulo: 'Todavía no hay empresas reales' }}
+            // Las de práctica siguen a la vista —una demo que no se ve es una que alguien deja encendida y olvida—,
+            // pero en una línea: sus números no cuentan en ninguna cifra de esta pantalla.
+            pie={
+              d.demos.length > 0 ? (
+                <span className="flex flex-wrap items-center justify-between gap-2 text-caption">
+                  <span>
+                    {d.demos.length} de práctica: {d.demos.map((c) => c.name).join(', ')}
+                  </span>
+                  <Link href="/superadmin/demo" className="font-medium text-primary hover:underline">
+                    Administrar
+                  </Link>
+                </span>
+              ) : undefined
+            }
+          />
+        </section>
 
-          {/* Las de práctica siguen a la vista: una empresa demo que no se ve es
-              una que alguien deja encendida y olvida. Pero sin encabezado con
-              enlace propio cuando es una sola — era más cabecera que contenido. */}
-          {d.demos.length > 0 && (
-            <div className="mt-6">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-h4 flex items-center gap-2 text-foreground">
-                  <FlaskConical aria-hidden className="h-4 w-4 text-warning" />
-                  De demostración
-                </h2>
-                <Link
-                  href="/superadmin/demo"
-                  className="inline-flex items-center gap-1 text-small font-medium text-primary hover:underline"
-                >
-                  Administrar <ArrowRight className="h-3.5 w-3.5" />
-                </Link>
-              </div>
-              <p className="mb-3 text-caption text-muted-foreground">
-                Para entrenar al personal. Sus clientes, cobros y números no cuentan en ninguna
-                cifra de esta pantalla.
-              </p>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                {d.demos.map((c) => (
-                  <TarjetaEmpresa key={c.id} c={c} />
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div>
+        <section aria-labelledby="actividad" className="min-w-0">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-h4 text-foreground">Actividad reciente</h2>
+            <h2 id="actividad" className="text-h4 text-foreground">
+              Actividad reciente
+            </h2>
             <Link
               href="/superadmin/auditoria"
               className="inline-flex items-center gap-1 text-small font-medium text-primary hover:underline"
             >
-              Ver todo <ArrowRight className="h-3.5 w-3.5" />
+              Auditoría <ArrowRight aria-hidden className="h-3.5 w-3.5" />
             </Link>
           </div>
-          <Card className="border-border/60 shadow-card">
-            <CardContent className="pt-5">
-              {d.actividad.length === 0 ? (
-                <p className="py-6 text-center text-small text-muted-foreground">
-                  La actividad de todas las empresas aparecerá aquí.
-                </p>
-              ) : (
-                <ul className="divide-y divide-border/50">
-                  {d.actividad.map((a) => (
-                    <li key={a.id} className="flex items-center gap-3 py-2.5 text-sm">
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                        <Activity aria-hidden className="h-3.5 w-3.5" />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium text-foreground">
-                          {/* El mapa CANÓNICO de la bitácora, no una copia local
-                              a la que le faltaban entradas: por eso esta lista
-                              enseñaba «CUENTA_ELIMINADA» en crudo. */}
-                          {ACCION_LABEL[a.accion] ?? a.accion}
-                        </p>
-                        <p className="truncate text-caption text-muted-foreground">
-                          {/* `entidadTipo` ya se consultaba y no se pintaba: la
-                              lista decía QUÉ pasó pero no A QUÉ. */}
-                          {[
-                            a.entidadTipo ? (ENTIDAD_LABEL[a.entidadTipo] ?? a.entidadTipo) : null,
-                            a.empresa ?? 'Plataforma',
-                            a.autor,
-                          ]
-                            .filter(Boolean)
-                            .join(' · ')}
-                        </p>
-                      </div>
-                      <span className="shrink-0 text-caption text-muted-foreground">
-                        {fmtHora(a.createdAt)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+          <div className="rounded-xl border border-border bg-card px-5 shadow-sm">
+            {d.actividad.length === 0 ? (
+              <p className="py-8 text-center text-small text-muted-foreground">
+                La actividad de todas las empresas aparecerá aquí.
+              </p>
+            ) : (
+              <ul className="divide-y divide-border/60">
+                {d.actividad.map((a) => (
+                  <li key={a.id} className="flex items-center gap-3 py-3 text-sm">
+                    <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-primary" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium text-foreground">
+                        {/* El mapa CANÓNICO de la bitácora: con una copia local a la que le faltaban entradas, esta
+                            lista enseñaba «CUENTA_ELIMINADA» en crudo. */}
+                        {ACCION_LABEL[a.accion] ?? a.accion}
+                      </p>
+                      <p className="truncate text-caption text-muted-foreground">
+                        {[
+                          a.entidadTipo ? (ENTIDAD_LABEL[a.entidadTipo] ?? a.entidadTipo) : null,
+                          a.empresa ?? 'Plataforma',
+                          a.autor,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </p>
+                    </div>
+                    <time dateTime={a.createdAt.toISOString()} className="shrink-0 text-caption text-muted-foreground">
+                      {fmtHora(a.createdAt)}
+                    </time>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
       </div>
     </div>
   )

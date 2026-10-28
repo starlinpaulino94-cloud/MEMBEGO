@@ -148,6 +148,9 @@ el mismo componente que `/admin/tickets`.
   copiadas tres veces cambiando solo el color. Además, el color ya no es la única
   señal: encendido cambia el grosor del icono y lleva su propio texto para
   lectores de pantalla.
+  *Retirado en oct 2026:* el Centro de control pasó a una lista «Necesita tu
+  atención» (cada asunto dice cuántos, cuáles y adónde ir; lo que está en cero
+  baja a una línea de «al día») y `AlertTile` se quedó sin consumidores.
 - **`StatCard`** — gana `href` y `hrefLabel`.
 - **`BandejaTickets`** — la bandeja, montada en dos rutas.
 

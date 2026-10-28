@@ -28,7 +28,22 @@ export const ESTADO_EMPRESA_LABEL = {
   publicada: 'Publicada',
   sinPublicar: 'Sin publicar',
   demo: 'Demo',
+  practica: 'Práctica',
 } as const
+
+/**
+ * Un solo estado, el que hay que atender primero: práctica, luego suspendida, luego sin publicar. Para las listas
+ * densas (la tabla de Empresas), donde dos insignias por fila se leían como ruido.
+ */
+export function estadoUnicoEmpresa(e: { isActive: boolean; isPublished: boolean; esDemo: boolean }): {
+  etiqueta: string
+  variante: 'success' | 'warning' | 'destructive'
+} {
+  if (e.esDemo) return { etiqueta: ESTADO_EMPRESA_LABEL.practica, variante: 'warning' }
+  if (!e.isActive) return { etiqueta: ESTADO_EMPRESA_LABEL.suspendida, variante: 'destructive' }
+  if (!e.isPublished) return { etiqueta: ESTADO_EMPRESA_LABEL.sinPublicar, variante: 'warning' }
+  return { etiqueta: ESTADO_EMPRESA_LABEL.publicada, variante: 'success' }
+}
 
 export function EstadoEmpresa({
   isActive,
@@ -36,12 +51,20 @@ export function EstadoEmpresa({
   esDemo,
   /** En listas densas basta con lo que NO es normal. */
   soloExcepciones = false,
+  /** Una sola insignia (ver `estadoUnicoEmpresa`). */
+  unico = false,
 }: {
   isActive: boolean
   isPublished: boolean
   esDemo: boolean
   soloExcepciones?: boolean
+  unico?: boolean
 }) {
+  if (unico) {
+    const estado = estadoUnicoEmpresa({ isActive, isPublished, esDemo })
+    return <Badge variant={estado.variante}>{estado.etiqueta}</Badge>
+  }
+
   if (esDemo) {
     return <Badge variant="warning">{ESTADO_EMPRESA_LABEL.demo}</Badge>
   }
