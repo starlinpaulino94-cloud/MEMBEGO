@@ -1054,7 +1054,7 @@ const HUB_EXPERIENCIA: NavGroup = {
       label: 'Editor de inicio',
       icon: Palette,
       description: 'Cómo se ve tu empresa en la app de tus clientes y cómo te encuentran al buscar.',
-      pestanas: [{ href: '/admin/personalizacion', label: 'Inicio' }, '/admin/sinonimos'],
+      pestanas: [{ href: '/admin/personalizacion', label: 'Inicio' }, { href: '/admin/personalizacion/carrusel', label: 'Carrusel' }, '/admin/sinonimos'],
       keywords: ['editor', 'inicio', 'home', 'app'],
     }),
   ],

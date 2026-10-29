@@ -4,6 +4,7 @@ import { requireRole } from '@/lib/auth/guards'
 import { PageHeader } from '@/components/ui/page-header'
 import { Button } from '@/components/ui/button'
 import { CapacidadesPanel } from '@/components/capacidades/CapacidadesPanel'
+import { SelectorDeEmpresa } from '@/components/capacidades/SelectorDeEmpresa'
 import {
   CATEGORIA_LABELS,
   capacidadesDeEmpresa,
@@ -96,23 +97,17 @@ export default async function CapacidadesSuperadminPage({
         </label>
         <label className="space-y-1.5 text-sm font-medium text-foreground">
           Empresa
-          <select
-            name="empresa"
-            defaultValue={seleccionada?.id ?? ''}
-            className="mt-1 block h-10 min-w-64 rounded-xl border border-input bg-background px-3 text-sm"
-          >
-            {empresas.map((e) => (
-              <option key={e.id} value={e.id}>
-                {/* Práctica, suspendida y «ajustada» a la vista: configurar los
-                    módulos de una empresa de entrenamiento creyéndola real es
-                    fácil cuando el selector solo enseña el nombre. */}
-                {e.name}
-                {e.esDemo ? ' · práctica' : ''}
-                {!e.isActive ? ' · suspendida' : ''}
-                {ajustada(e) ? ' · ajustada' : ''}
-              </option>
-            ))}
-          </select>
+          {/* Práctica, suspendida y «ajustada» a la vista: configurar los módulos de
+              una empresa de entrenamiento creyéndola real es fácil cuando el
+              selector solo enseña el nombre. Y elegir una empresa la CARGA: antes
+              había que pulsar «Ver» y, sin hacerlo, se guardaba en otra. */}
+          <SelectorDeEmpresa
+            seleccionada={seleccionada?.id ?? ''}
+            empresas={empresas.map((e) => ({
+              id: e.id,
+              etiqueta: `${e.name}${e.esDemo ? ' · práctica' : ''}${!e.isActive ? ' · suspendida' : ''}${ajustada(e) ? ' · ajustada' : ''}`,
+            }))}
+          />
         </label>
         <Button type="submit" variant="secondary">
           Ver
@@ -166,6 +161,7 @@ export default async function CapacidadesSuperadminPage({
           )}
           <CapacidadesPanel
             companyId={seleccionada.id}
+            empresa={seleccionada.name}
             categoria={efectivas.categoria}
             activas={[...efectivas.activas]}
             modulosCliente={efectivas.modulosCliente}

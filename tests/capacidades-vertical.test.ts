@@ -237,3 +237,15 @@ test('el catálogo expone la puerta única', () => {
   assert.match(CATALOGO, /export function capacidadesDeEmpresa/)
   assert.match(CATALOGO, /export function categoriaDeEmpresa/)
 })
+
+// ───────────── Elegir empresa la carga, y el botón dice a quién se guarda ─────────────
+
+test('el selector de empresa carga la empresa elegida y el botón de guardar lleva su nombre', () => {
+  const selector = readFileSync(join('src', 'components', 'capacidades', 'SelectorDeEmpresa.tsx'), 'utf8')
+  assert.match(selector, /onChange=\{\(e\) => e\.currentTarget\.form\?\.requestSubmit\(\)\}/, 'elegir una empresa debe cargarla, sin pulsar «Ver»')
+  const pagina = readFileSync(join('src', 'app', '(superadmin)', 'superadmin', 'capacidades', 'page.tsx'), 'utf8')
+  assert.match(pagina, /<SelectorDeEmpresa/)
+  assert.match(pagina, /empresa=\{seleccionada\.name\}/)
+  const panel = readFileSync(join('src', 'components', 'capacidades', 'CapacidadesPanel.tsx'), 'utf8')
+  assert.match(panel, /Guardar capacidades de \{empresa\}/, 'quien guarda tiene que leer a qué empresa se lo guarda')
+})

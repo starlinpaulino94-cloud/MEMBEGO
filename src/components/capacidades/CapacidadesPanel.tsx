@@ -36,11 +36,14 @@ const init: CapacidadesActionState = {}
 
 export function CapacidadesPanel({
   companyId,
+  empresa,
   categoria,
   activas,
   modulosCliente = {},
 }: {
   companyId: string
+  /** Para decir A QUIÉN se le guarda: el botón lleva su nombre. */
+  empresa: string
   categoria: CategoriaNegocio
   /** Estado EFECTIVO actual (base + overrides) para precargar los toggles. */
   activas: Capacidad[]
@@ -180,7 +183,7 @@ export function CapacidadesPanel({
 
       <Button type="submit" disabled={pending} className="gap-2">
         {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-        Guardar capacidades
+        Guardar capacidades de {empresa}
       </Button>
 
       {/* Las secciones se nombran UNA A UNA, no «se apagarán algunas»: el

@@ -36,6 +36,56 @@ el cliente.
 La vista previa del teléfono usa `TarjetaBanner`, el mismo componente que
 `VibeHero` en el inicio del cliente.
 
+## El carrusel se fabrica solo (aprobado 2026-10-29)
+
+Lo que una empresa publica entra solo al carrusel del inicio de sus clientes,
+sin armar nada: **promociones, productos y servicios, ofertas y planes**, de lo
+más reciente a lo más viejo, con la imagen y el color de cada pieza.
+
+**El orden y los topes** (`ordenarNovedades` / `armarCola`, puros):
+
+1. Lo **fijado** por la empresa, por su orden.
+2. Lo demás, de lo más reciente a lo más viejo.
+3. Máximo `MAX_CARRUSEL` (6) tarjetas y `MAX_POR_EMPRESA` (3) por empresa; lo
+   fijado no cuenta contra el tope de su empresa.
+4. Una promoción u oferta sale al vencer. Un producto, servicio o plan deja de
+   ser novedad a los `DIAS_NOVEDAD` (30) días, salvo que esté fijado.
+5. Los banners a medida de la pestaña «Inicio» van siempre primero.
+
+**La plantilla se elige sola** (`plantillaAutomatica`): promoción con arte
+propio → Solo imagen; sin arte, Descuento con sello o Titular arriba; producto
+o servicio → Precio grande; oferta → Antes y ahora; membresía → Membresía; lo que
+vence en menos de 72 h → Cuenta atrás. La empresa puede cambiarla por pieza.
+Una plantilla que pide lo que falta (fotos, precio, fecha) cae a la más parecida
+(`formatoRealizable`): nunca se pinta un hueco.
+
+**El color**: el dominante de la foto (calculado con `sharp` la primera vez que
+se necesita y guardado en `banners_inicio.colorDominante`; solo se baja de
+nuestro propio almacenamiento), si no el de marca de la empresa, si no el del
+rubro (`RUBRO_BANNER`: color, verbo del botón y etiqueta). El texto sale claro u
+oscuro según el fondo (`textoSobre`).
+
+**Las diez plantillas**: Solo imagen, Titular arriba, Texto encima, Precio
+grande, Antes y ahora, Descuento con sello, Cuenta atrás, Tres en uno, Collage y
+Membresía (`FORMATOS_BANNER`, pintadas por `TarjetaBanner`). Los banners a medida
+solo admiten las tres primeras (`FORMATOS_A_MEDIDA`); el resto nacen de una pieza.
+
+**Lo que decide la empresa** vive en `banners_inicio` (un registro por pieza y
+solo si decidió algo): fijar, ocultar, plantilla, orden de lo fijado. Se hace en
+**Editor de inicio → Carrusel** (`CarruselLista`) y con la pregunta que sale al
+publicar:
+
+- **«¿La destacamos en el inicio?»** (`DestacarEnInicio`) aparece al crear una
+  promoción, al publicar un producto o servicio y al publicar una oferta. Enseña
+  la tarjeta tal como se verá, con la plantilla recomendada y las que caben.
+  «Destacar ahora» la fija primera; «Ahora no» no cambia nada (la pieza ya entró
+  sola). Si la pieza no es pública todavía, el aviso no sale. Los planes no
+  tienen aviso (siguen entrando solos y se destacan desde la lista).
+
+Las acciones (`banners-acciones.ts`) exigen la sección donde se crea cada pieza
+(promociones, catálogo, deals, planes) y comprueban que la pieza es pública y de
+la empresa de la sesión.
+
 ## Un banner enganchado a productos y servicios
 
 El destino «Productos y servicios» (`ctaDestino.tipo = 'catalogo'`) engancha
@@ -65,6 +115,9 @@ orden marcado). Al tocar el banner se abre la **colección**:
 | Editor del panel | `src/components/admin/EditorInicio.tsx` |
 | Subida de la imagen (autoriza antes de escribir) | `src/modules/home/imagen-banner-accion.ts` |
 | Qué URLs de imagen acepta un banner | `src/modules/home/imagen-banner.ts` y `hero-publico.ts` |
+| Cola automática, plantillas y color (puros) | `src/modules/home/banner-formatos.ts`, `banner-hero.ts` |
+| Piezas públicas, ajustes y lista del panel | `src/modules/home/novedades-auto.ts`, `color-dominante.ts` |
+| Destacar, ajustar, mover | `src/modules/home/banners-acciones.ts`, `src/components/admin/DestacarEnInicio.tsx`, `CarruselLista.tsx` |
 | Colección (ids, título, carga y página) | `src/modules/home/coleccion.ts`, `coleccion-carga.ts`, `src/components/catalogo/ColeccionDeBanner.tsx` |
 | Ítems por id y empresas relacionadas | `src/modules/catalog/publico.ts` |
 
@@ -84,4 +137,4 @@ orden marcado). Al tocar el banner se abre la **colección**:
 - **«Solo imagen» sin imagen no se puede guardar**: si ni la subida ni el
   destino aportan una, el servidor lo rechaza con un mensaje claro.
 
-Las pruebas están en `tests/banner-formatos.test.ts` y `tests/banner-coleccion.test.ts`.
+Las pruebas están en `tests/banner-formatos.test.ts`, `tests/banner-coleccion.test.ts` y `tests/banner-novedades.test.ts`.

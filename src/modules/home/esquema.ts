@@ -3,6 +3,7 @@ import { MAX_ITEMS_BANNER } from './coleccion'
 import {
   COLORES_PANEL,
   COLOR_PANEL_POR_DEFECTO,
+  FORMATOS_A_MEDIDA,
   FORMATOS_BANNER,
   FORMATO_BANNER_POR_DEFECTO,
   formatoRequiereTexto,
@@ -46,8 +47,14 @@ export const HeroSlide = z
     imagenUrl: z.string().trim().max(500).nullable().default(null),
     ctaTexto: z.string().trim().min(1).max(40),
     ctaDestino: DestinoCTA,
-    /** Cómo va el texto sobre la imagen (ver `banner-formatos.ts`). Lo guardado sin formato era texto encima. */
-    formato: z.enum(FORMATOS_BANNER).default(FORMATO_BANNER_POR_DEFECTO),
+    /**
+     * Cómo va el texto sobre la imagen (ver `banner-formatos.ts`). Lo guardado
+     * sin formato era texto encima. Un banner a medida solo admite las
+     * plantillas que no dependen de una pieza (precio, vencimiento…).
+     */
+    formato: z.enum(FORMATOS_BANNER).default(FORMATO_BANNER_POR_DEFECTO).refine((f) => FORMATOS_A_MEDIDA.includes(f), {
+      message: 'Esa plantilla solo existe para los banners automáticos.',
+    }),
     /** Solo «Titular arriba»: el color del panel donde va el titular. */
     colorPanel: z.enum(COLORES_PANEL).default(COLOR_PANEL_POR_DEFECTO),
     /** Bajo la tarjeta: negocio y botón. No aplica a «Texto encima», que ya los lleva dentro. */

@@ -91,6 +91,18 @@ export interface HeroInicio {
   readonly colorPanel?: ColorPanel
   /** Negocio y botón bajo la tarjeta (solo imagen y titular arriba). Ausente = sí. */
   readonly mostrarPie?: boolean
+  /** «Antes y ahora»: el precio anterior, ya formateado. */
+  readonly precioAntes?: string | null
+  /** «Cuenta atrás»: cuándo vence (ISO). */
+  readonly vence?: string | null
+  /** «Tres en uno» y «Collage»: las fotos además de `imagen`. */
+  readonly imagenes?: readonly string[]
+  /** «Membresía»: «4 lavados · 1 encerado». */
+  readonly detalle?: string | null
+  /** Fondo de las plantillas con panel de color: el dominante de la foto, el de marca o el del rubro. `#rrggbb` o `hsl()`. */
+  readonly colorFondo?: string | null
+  /** De qué pieza nació un banner automático; ausente = banner a medida o relleno. */
+  readonly origen?: { readonly tipo: 'PROMOCION' | 'CATALOGO' | 'OFERTA' | 'PLAN'; readonly id: string }
 }
 
 /** Fila de la tarjeta «Ofertas Relámpago» del rediseño violeta. */

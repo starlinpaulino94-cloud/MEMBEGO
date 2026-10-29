@@ -1149,6 +1149,7 @@ model Company {
   citas             Cita[]
   // Home comercial (F2): revisiones de composición y sinónimos de búsqueda.
   homeRevisiones    HomeRevision[]
+  bannersInicio     BannerInicio[]
   busquedaSinonimos BusquedaSinonimo[]
   ofertaPrivadas    OfertaPrivada[]
   regalos           Regalo[]

@@ -39,6 +39,7 @@ const DECLARADOS = new Map<string, string>([
   ['src/components/facturas/FacturaPrintDialog.tsx', 'comprobante impreso'],
   ['src/components/scanner/ComprobanteReceipt.tsx', 'comprobante impreso'],
   ['src/components/admin/ReceiptTemplateEditor.tsx', 'vista previa del ticket impreso'],
+  ['src/components/cliente/inicio/TarjetaBanner.tsx', 'botón blanco sobre el panel de color de la pieza; el panel usa texto claro u oscuro según su fondo (textoSobre)'],
   // `src/app/(admin)/admin/registros/page.tsx` estaba aquí por su
   // `text-black`: ahora el color del papel lo pone `ReporteImprimible` en su
   // `@media print`, así que la página ya no mezcla nada.

@@ -28,7 +28,7 @@ import { fechaEditorialIso } from '@/modules/home/editor-contrato'
 import {
   COLORES_PANEL,
   COLORES_PANEL_INFO,
-  FORMATOS_BANNER,
+  FORMATOS_A_MEDIDA,
   FORMATOS_BANNER_INFO,
   FORMATO_BANNER_NUEVO,
   COLOR_PANEL_POR_DEFECTO,
@@ -713,7 +713,7 @@ export function EditorInicio({
                       Si la imagen ya trae su texto, elige «Solo imagen»: así nada se pisa.
                     </p>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                      {FORMATOS_BANNER.map((f) => (
+                      {FORMATOS_A_MEDIDA.map((f) => (
                         <Button
                           key={f}
                           type="button"

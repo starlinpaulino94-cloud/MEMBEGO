@@ -120,7 +120,7 @@ test('público: LISTA BLANCA — ni el presupuesto, ni la cuota, ni lo reservado
   }
   assert.deepEqual(Object.keys(o).sort(), [
     // `comercial` (Supplier & Fulfillment Commerce §12–§19): quién vende y quién financia, ya resuelto; no lleva ids ni dinero interno.
-    'ahorro', 'comercial', 'currency', 'description', 'empresa', 'endsAt', 'etiqueta', 'id', 'imageUrl', 'itemName', 'itemSlug', 'precioAhora', 'precioAntes', 'quedan', 'soloClientesNuevos', 'sucursales', 'title', 'variantName', 'voucherDays',
+    'ahorro', 'comercial', 'currency', 'description', 'empresa', 'endsAt', 'etiqueta', 'id', 'imageUrl', 'itemName', 'itemSlug', 'precioAhora', 'precioAntes', 'publicadaEn', 'quedan', 'soloClientesNuevos', 'sucursales', 'title', 'variantName', 'voucherDays',
   ])
 })
 
