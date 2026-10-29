@@ -9,11 +9,13 @@ import { ChangePasswordForm } from '@/components/cliente/ChangePasswordForm'
 import { UbicacionViviendaForm } from '@/components/cliente/UbicacionViviendaForm'
 import { LocationService } from '@/modules/geo/ubicaciones/service'
 import { ResumenIdentidad } from '@/components/cliente/identidad/ResumenIdentidad'
+import { NotificacionesPushAjuste } from '@/components/cliente/NotificacionesPushAjuste'
 import { leerPanelDeIdentidad } from '@/modules/identidad/identidadPuerta'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
   ArrowLeft,
+  BellRing,
   Car,
   ChevronRight,
   CreditCard,
@@ -146,6 +148,17 @@ export default async function AjustesPage() {
             notifPromos={cliente.notifPromos}
             notifRecordatorios={cliente.notifRecordatorios}
           />
+        </CardContent>
+      </Card>
+      <Card className="border-border/60 shadow-card">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-h4">
+            <BellRing className="h-4 w-4 text-muted-foreground" aria-hidden />
+            Notificaciones en este dispositivo
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <NotificacionesPushAjuste />
         </CardContent>
       </Card>
       <Card className="border-border/60 shadow-card">

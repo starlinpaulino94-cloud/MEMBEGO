@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
+import { NotificacionesPush } from '@/components/system/NotificacionesPush'
 import { CLAVE_COMPACTO } from './nav-compacto'
 import { AppSidebar } from '@/components/layout/AppSidebar'
 import { AppHeader } from '@/components/layout/AppHeader'
@@ -270,6 +271,9 @@ export function AppShell({
               'mx-auto w-full max-w-7xl px-4 py-8 md:px-6 lg:px-8'
             )}
           >
+            {/* Avisos fuera de la app (Web Push) para el personal: un pago o un
+                comprobante nuevo no puede esperar a que alguien abra el panel. */}
+            <NotificacionesPush />
             {/* Las pestañas del módulo al que pertenece la ruta (fase 6): las decide nav-config, no cada pantalla. */}
             <PestanasModulo ctx={ctx} />
             {children}

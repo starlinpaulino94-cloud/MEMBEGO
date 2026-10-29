@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import Image from 'next/image'
+import { OlvidarPushDeEsteNavegador } from '@/components/system/OlvidarPushDeEsteNavegador'
 
 /**
  * Superficie de autenticación — BLANCA (DS 2.0 · Fase 2).
@@ -39,6 +40,8 @@ export default function AuthLayout({
         </div>
 
         <div className="w-full max-w-md" suppressHydrationWarning>{children}</div>
+        {/* Quien llega aquí ya no tiene sesión: este navegador deja de recibir sus avisos push. */}
+        <OlvidarPushDeEsteNavegador />
       </main>
 
       {/* `prefetch={false}`: aquí /privacy y /terms redirigen a la landing (otro dominio) y el prefetch de Next

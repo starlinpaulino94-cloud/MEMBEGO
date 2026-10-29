@@ -1,6 +1,7 @@
 import 'server-only'
 import { z } from 'zod'
 import { sinEmpresa } from '@/lib/tenant'
+import { enviarWebPushNotificaciones } from './web-push'
 
 export interface NotificacionPush {
   readonly id: string
@@ -29,11 +30,21 @@ interface ExpoMessage {
   }
 }
 
+/**
+ * Un aviso recién creado sale por los DOS canales a la vez: la app nativa
+ * (Expo, `push_tokens`) y el navegador (Web Push, `web_push_suscripciones`,
+ * que es como llega a la PWA instalada mientras MembeGo no está en las
+ * tiendas). Cada canal es fail-open por su cuenta; que uno falle no retiene al
+ * otro, y ninguno de los dos retrasa a quien llamó más que una ida a la red.
+ */
 export async function enviarPushNotificaciones(
   notificaciones: readonly NotificacionPush[],
 ): Promise<void> {
   if (notificaciones.length === 0) return
+  await Promise.all([enviarExpoPushNotificaciones(notificaciones), enviarWebPushNotificaciones(notificaciones)])
+}
 
+async function enviarExpoPushNotificaciones(notificaciones: readonly NotificacionPush[]): Promise<void> {
   try {
     const userIds = [...new Set(notificaciones.map((notification) => notification.userId))]
     const tokens = await sinEmpresa('push: buscar tokens de destinatarios', (tx) =>

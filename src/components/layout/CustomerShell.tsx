@@ -5,6 +5,7 @@ import { BottomNav } from '@/components/layout/BottomNav'
 import { TabsEscritorio } from '@/components/layout/TabsEscritorio'
 import { BannerDemo } from '@/components/system/BannerDemo'
 import { SentryUserSync } from '@/components/SentryUserSync'
+import { NotificacionesPush } from '@/components/system/NotificacionesPush'
 import { ExcursionCarritoWrapper } from '@/components/excursiones/ExcursionCarritoWrapper'
 
 /**
@@ -145,6 +146,8 @@ export function CustomerShell({
 
       {demoNombre && <BannerDemo nombreEmpresa={demoNombre} />}
       <main className="con-dock-inferior mx-auto w-full max-w-md px-4 py-4 md:max-w-3xl lg:max-w-7xl lg:px-6">
+        {/* Avisos fuera de la app (Web Push): se ofrece una vez dentro, no al aterrizar. */}
+        <NotificacionesPush />
         {children}
       </main>
 

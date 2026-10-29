@@ -3,7 +3,9 @@ import { Geist, Geist_Mono, Plus_Jakarta_Sans } from 'next/font/google'
 import { Toaster } from '@/components/ui/sonner'
 import { ThemeProvider } from '@/components/ThemeProvider'
 import { RegistrarSW } from '@/components/system/RegistrarSW'
+import { InstalarApp } from '@/components/system/InstalarApp'
 import { SCRIPT_COMPACTO } from '@/components/layout/nav-compacto'
+import { SCRIPT_INSTALACION } from '@/lib/pwa/instalacion'
 import { SITE_DESCRIPTION, SITE_NAME, landingUrl } from '@/lib/site'
 import './globals.css'
 
@@ -138,6 +140,9 @@ export default function RootLayout({
     <html lang="es" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: SCRIPT_COMPACTO }} />
+        {/* Captura `beforeinstallprompt` ANTES de hidratar: Chrome lo dispara una
+            sola vez y puede hacerlo antes de que monte ningún componente. */}
+        <script dangerouslySetInnerHTML={{ __html: SCRIPT_INSTALACION }} />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${jakarta.variable} antialiased`}
@@ -147,6 +152,9 @@ export default function RootLayout({
           {/* Fase 7 · el escáner de pista tiene que poder ABRIR sin red. */}
           <RegistrarSW />
           {children}
+          {/* MembeGo no está en las tiendas: la app se instala desde aquí (PWA),
+              en la landing y dentro de la app. */}
+          <InstalarApp />
           <Toaster richColors position="top-center" />
         </ThemeProvider>
       </body>

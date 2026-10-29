@@ -3843,3 +3843,25 @@ ADD CONSTRAINT "push_tokens_userId_fkey"
 FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 ALTER TABLE "push_tokens" ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE "web_push_suscripciones" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "endpoint" TEXT NOT NULL,
+    "p256dh" TEXT NOT NULL,
+    "auth" TEXT NOT NULL,
+    "userAgent" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "web_push_suscripciones_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX "web_push_suscripciones_endpoint_key" ON "web_push_suscripciones"("endpoint");
+CREATE INDEX "web_push_suscripciones_userId_idx" ON "web_push_suscripciones"("userId");
+
+ALTER TABLE "web_push_suscripciones"
+ADD CONSTRAINT "web_push_suscripciones_userId_fkey"
+FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+ALTER TABLE "web_push_suscripciones" ENABLE ROW LEVEL SECURITY;
