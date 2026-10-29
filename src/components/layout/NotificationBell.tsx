@@ -21,12 +21,17 @@ import {
   ShieldAlert,
   Scale,
   TimerOff,
+  Trash2,
   Wallet,
+  X,
   XCircle,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 import {
+  eliminarNotificacion,
+  eliminarTodasNotificaciones,
   getNotificaciones,
   marcarTodasLeidas,
   marcarLeida,
@@ -83,6 +88,7 @@ export function NotificationBell({ initialCount }: { initialCount: number }) {
   const [open, setOpen] = useState(false)
   const [count, setCount] = useState(initialCount)
   const [notifs, setNotifs] = useState<Notificacion[] | null>(null)
+  const [confirmando, setConfirmando] = useState(false)
   const [, startTransition] = useTransition()
   const router = useRouter()
   const botonRef = useRef<HTMLButtonElement>(null)
@@ -101,6 +107,7 @@ export function NotificationBell({ initialCount }: { initialCount: number }) {
   }, [open])
 
   function handleOpen() {
+    setConfirmando(false)
     if (!open && notifs === null) {
       startTransition(async () => {
         const data = await getNotificaciones()
@@ -117,6 +124,27 @@ export function NotificationBell({ initialCount }: { initialCount: number }) {
       setNotifs((prev) => prev?.map((n) => ({ ...n, leida: true })) ?? null)
       setCount(0)
       // Sincroniza el resto de la app (contadores/listas) sin recargar.
+      router.refresh()
+    })
+  }
+
+  function handleDelete(notif: Notificacion) {
+    startTransition(async () => {
+      const r = await eliminarNotificacion(notif.id)
+      if (!r.ok) return
+      setNotifs((prev) => prev?.filter((n) => n.id !== notif.id) ?? null)
+      setCount(r.noLeidas)
+      router.refresh()
+    })
+  }
+
+  function handleDeleteAll() {
+    startTransition(async () => {
+      const r = await eliminarTodasNotificaciones()
+      setConfirmando(false)
+      if (!r.ok) return
+      setNotifs([])
+      setCount(0)
       router.refresh()
     })
   }
@@ -182,6 +210,25 @@ export function NotificationBell({ initialCount }: { initialCount: number }) {
                 </button>
               )}
             </div>
+            {notifs !== null && notifs.length > 0 && (
+              <div className="flex items-center justify-end gap-2 border-b border-border/40 px-4 py-2">
+                {confirmando ? (
+                  <>
+                    <span className="text-xs text-muted-foreground">¿Eliminar todas?</span>
+                    <Button type="button" variant="destructive" size="sm" onClick={handleDeleteAll}>
+                      Sí, eliminar
+                    </Button>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setConfirmando(false)}>
+                      Cancelar
+                    </Button>
+                  </>
+                ) : (
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setConfirmando(true)}>
+                    <Trash2 className="size-4" aria-hidden /> Eliminar todas
+                  </Button>
+                )}
+              </div>
+            )}
 
             <div className="max-h-[26rem] overflow-y-auto">
               {notifs === null ? (
@@ -193,11 +240,11 @@ export function NotificationBell({ initialCount }: { initialCount: number }) {
               ) : (
                 <ul>
                   {notifs.map((n) => (
-                    <li key={n.id}>
+                    <li key={n.id} className="relative">
                       <button
                         onClick={() => handleClick(n)}
                         className={cn(
-                          'w-full px-4 py-3 text-left transition hover:bg-muted/50',
+                          'w-full py-3 pl-4 pr-11 text-left transition hover:bg-muted/50',
                           !n.leida && 'bg-info/5'
                         )}
                       >
@@ -239,6 +286,16 @@ export function NotificationBell({ initialCount }: { initialCount: number }) {
                           )}
                         </div>
                       </button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-1.5 top-2 size-8 text-muted-foreground hover:text-foreground"
+                        aria-label={`Eliminar notificación: ${n.titulo}`}
+                        onClick={() => handleDelete(n)}
+                      >
+                        <X className="size-4" aria-hidden />
+                      </Button>
                     </li>
                   ))}
                 </ul>

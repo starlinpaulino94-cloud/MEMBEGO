@@ -1405,6 +1405,11 @@ model Notificacion {
   /// nada. NULL = histórico previo a la deduplicación (Postgres permite
   /// varios NULL en índice único: no se altera el pasado).
   dedupeKey String?
+  /// La persona la eliminó de su bandeja. La fila se CONSERVA: la clave de
+  /// deduplicación es lo que impide que los avisos por lote (renovaciones,
+  /// regalos, ofertas) se vuelvan a enviar; borrar la fila los reviviría.
+  /// Todas las pantallas de la persona filtran `eliminadaEn: null`.
+  eliminadaEn DateTime?
 
   @@unique([userId, dedupeKey])
   @@index([userId, leida])

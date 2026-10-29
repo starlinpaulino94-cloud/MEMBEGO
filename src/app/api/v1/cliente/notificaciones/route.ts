@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { corsHeaders, getApiClientUser, handleCorsPreflight } from '@/lib/auth/api-guard'
 import { sinEmpresa } from '@/lib/tenant'
+import { NOTIFICACIONES_VISIBLES } from '@/modules/notificaciones/visibles'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,6 +14,11 @@ const updateSchema = z.discriminatedUnion('accion', [
   z.object({
     accion: z.literal('marcarTodasLeidas'),
   }),
+])
+
+const deleteSchema = z.union([
+  z.object({ id: z.string().trim().min(1).max(128) }),
+  z.object({ todas: z.literal(true) }),
 ])
 
 export async function OPTIONS(request: Request) {
@@ -31,7 +37,7 @@ export async function GET(request: Request) {
 
   try {
     const result = await sinEmpresa('notificaciones: listar del cliente Expo', async (tx) => {
-      const where = { userId }
+      const where = { userId, ...NOTIFICACIONES_VISIBLES }
       const [notificaciones, noLeidas] = await Promise.all([
         tx.notificacion.findMany({
           where,
@@ -85,18 +91,18 @@ export async function PATCH(request: Request) {
     const noLeidas = await sinEmpresa('notificaciones: actualizar del cliente Expo', async (tx) => {
       if (body.data.accion === 'marcarLeida') {
         const updated = await tx.notificacion.updateMany({
-          where: { id: body.data.id, userId },
+          where: { id: body.data.id, userId, ...NOTIFICACIONES_VISIBLES },
           data: { leida: true },
         })
         if (updated.count === 0) return null
       } else {
         await tx.notificacion.updateMany({
-          where: { userId, leida: false },
+          where: { userId, leida: false, ...NOTIFICACIONES_VISIBLES },
           data: { leida: true },
         })
       }
 
-      return tx.notificacion.count({ where: { userId, leida: false } })
+      return tx.notificacion.count({ where: { userId, leida: false, ...NOTIFICACIONES_VISIBLES } })
     })
 
     if (noLeidas === null) {
@@ -114,6 +120,55 @@ export async function PATCH(request: Request) {
     console.error('[api/v1/cliente/notificaciones] Error actualizando notificación:', error)
     return NextResponse.json(
       { error: 'No pudimos actualizar tus notificaciones.' },
+      { status: 500, headers: corsHeaders(request) },
+    )
+  }
+}
+
+/** Eliminar de MI bandeja: una (`{ id }`) o todas (`{ todas: true }`). Se marca, no se borra. */
+export async function DELETE(request: Request) {
+  const user = await getApiClientUser(request)
+  const userId = user?.metadata.dbUserId
+  if (!user || user.metadata.role !== 'CLIENTE' || !userId) {
+    return NextResponse.json(
+      { error: 'Inicia sesión como cliente para eliminar tus notificaciones.' },
+      { status: 401, headers: corsHeaders(request) },
+    )
+  }
+
+  const body = deleteSchema.safeParse(await request.json().catch(() => null))
+  if (!body.success) {
+    return NextResponse.json(
+      { error: 'Indica qué notificación eliminar.' },
+      { status: 400, headers: corsHeaders(request) },
+    )
+  }
+
+  try {
+    const resultado = await sinEmpresa('notificaciones: eliminar de la bandeja del cliente Expo', async (tx) => {
+      const eliminadas = await tx.notificacion.updateMany({
+        where: 'id' in body.data ? { id: body.data.id, userId, ...NOTIFICACIONES_VISIBLES } : { userId, ...NOTIFICACIONES_VISIBLES },
+        data: { eliminadaEn: new Date() },
+      })
+      const noLeidas = await tx.notificacion.count({ where: { userId, leida: false, ...NOTIFICACIONES_VISIBLES } })
+      return { eliminadas: eliminadas.count, noLeidas }
+    })
+
+    if ('id' in body.data && resultado.eliminadas === 0) {
+      return NextResponse.json(
+        { error: 'No encontramos esa notificación.' },
+        { status: 404, headers: corsHeaders(request) },
+      )
+    }
+
+    return NextResponse.json(
+      { success: true, eliminadas: resultado.eliminadas, noLeidas: resultado.noLeidas },
+      { headers: corsHeaders(request) },
+    )
+  } catch (error) {
+    console.error('[api/v1/cliente/notificaciones] Error eliminando notificaciones:', error)
+    return NextResponse.json(
+      { error: 'No pudimos eliminar tus notificaciones.' },
       { status: 500, headers: corsHeaders(request) },
     )
   }

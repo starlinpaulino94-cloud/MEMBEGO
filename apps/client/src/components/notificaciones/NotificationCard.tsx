@@ -1,5 +1,5 @@
 import React from 'react'
-import { Text, View } from 'react-native'
+import { Pressable, Text, View } from 'react-native'
 import {
   Bell,
   CalendarDays,
@@ -7,6 +7,7 @@ import {
   CreditCard,
   Gift,
   Tag,
+  Trash2,
   Ticket,
 } from 'lucide-react-native'
 import { formatDateTime } from '../../lib/format'
@@ -35,9 +36,11 @@ function NotificationTypeIcon({ tipo }: { readonly tipo: string }) {
 interface NotificationCardProps {
   readonly notification: NotificacionCliente
   readonly onPress: () => void
+  /** Eliminar este aviso de la bandeja. */
+  readonly onDelete?: () => void
 }
 
-export function NotificationCard({ notification, onPress }: NotificationCardProps) {
+export function NotificationCard({ notification, onPress, onDelete }: NotificationCardProps) {
   return (
     <Card
       className={notification.leida ? 'p-4' : 'border-primary/30 bg-primary/5 p-4'}
@@ -74,7 +77,20 @@ export function NotificationCard({ notification, onPress }: NotificationCardProp
             <Text className="text-xs text-muted-foreground">
               {formatDateTime(notification.createdAt)}
             </Text>
-            <ChevronRight size={16} color={colors.surface.mutedForeground} />
+            <View className="flex-row items-center gap-1">
+              {onDelete ? (
+                <Pressable
+                  onPress={onDelete}
+                  hitSlop={8}
+                  className="min-h-9 min-w-9 items-center justify-center rounded-full"
+                  accessibilityRole="button"
+                  accessibilityLabel={'Eliminar notificación: ' + notification.titulo}
+                >
+                  <Trash2 size={16} color={colors.surface.mutedForeground} />
+                </Pressable>
+              ) : null}
+              <ChevronRight size={16} color={colors.surface.mutedForeground} />
+            </View>
           </View>
         </View>
       </View>

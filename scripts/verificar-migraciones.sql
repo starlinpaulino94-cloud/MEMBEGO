@@ -1,6 +1,6 @@
 -- =============================================================================
 -- ¿ESTÁN APLICADAS TODAS LAS MIGRACIONES DE prisma/migrations? (versión larga)
--- Generado con scripts/generar-verificar-migraciones.mjs en 33772b6: 258 migraciones, última 20261092_banners_inicio.
+-- Generado con scripts/generar-verificar-migraciones.mjs en a7adf30: 259 migraciones, última 20261093_notificaciones_eliminadas.
 -- Solo lee; no modifica nada. Es UNA sola sentencia.
 --
 -- Ejecútalo desde el archivo, no pegado (es largo y los pegados se recortan):
@@ -271,7 +271,8 @@ WITH repo(nombre, checksum) AS (VALUES
   ('20261089_cobros_antiguos_se_cierran','2e0e95190bfa78a3cafaadc77b2efa62b209b20cd1a281fa1fdb9128c60ac980'),
   ('20261090_conciliacion_pago_no_recibido','20d05ae08f956cae1cf004e75a717d3f96e00f2d70f851ce6807b6c2212a7b57'),
   ('20261091_web_push_suscripciones','11f57150f129430ec08a06ff238e9d295674b58b0b0003d2ddba6334f53afaca'),
-  ('20261092_banners_inicio','7e5583f369233a4fb5d5ac0317b203a3bd6a3912e13276b0bdafc04194d7b64b')
+  ('20261092_banners_inicio','7e5583f369233a4fb5d5ac0317b203a3bd6a3912e13276b0bdafc04194d7b64b'),
+  ('20261093_notificaciones_eliminadas','37c2ecd0739d8839bcf0cfd06d3c553e773781597939c82a8cc9762af855d587')
 ),
 hallazgos AS (
   SELECT 1 AS orden, 'FALTANTE' AS tipo, r.nombre AS migracion,
