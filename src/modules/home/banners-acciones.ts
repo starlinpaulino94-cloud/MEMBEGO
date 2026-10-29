@@ -196,6 +196,8 @@ export interface FilaDeCarruselVista {
   clave: string
   origen: OrigenBanner
   id: string
+  /** Dónde se edita el contenido de la pieza. */
+  hrefEditar: string
   titulo: string
   imagen: string | null
   precio: string | null

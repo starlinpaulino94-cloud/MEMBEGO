@@ -200,6 +200,7 @@ export function EditorInicio({
   companyName,
   territorioSugerido,
   trabajo,
+  bannerInicial = 1,
   publicada,
   media,
   promociones,
@@ -214,6 +215,8 @@ export function EditorInicio({
   companyName: string
   territorioSugerido: string
   trabajo: BorradorInicial | null
+  /** Banner (desde 1) con el que abre el editor; viene de «Editar» en la lista del carrusel. */
+  bannerInicial?: number
   publicada: { id: string; updatedAt: string; territorio: string | null } | null
   media: string[]
   promociones: OpcionEntidad[]
@@ -232,9 +235,9 @@ export function EditorInicio({
   const [segmentacion, setSegmentacion] = useState(
     trabajo?.segmentacion ?? { membresia: 'CUALQUIERA' as const, radioKm: 15, hasta: '' }
   )
-  const [revisionId, setRevisionId] = useState<string | null>(trabajo?.id ?? null)
+  const [revisionId, setRevisionId] = useState<string | null>(trabajo && trabajo.estado !== 'PUBLICADA' ? trabajo.id : null)
   const [programarPara, setProgramarPara] = useState('')
-  const [slideActual, setSlideActual] = useState(0)
+  const [slideActual, setSlideActual] = useState(Math.max(0, bannerInicial - 1))
   const [perfilPreview, setPerfilPreview] = useState<'visitante' | 'socio'>('visitante')
   const [ocupado, setOcupado] = useState(false)
   const [subiendo, setSubiendo] = useState(false)
@@ -391,6 +394,11 @@ export function EditorInicio({
 
   return (
     <div className="space-y-5">
+      {trabajo?.estado === 'PUBLICADA' ? (
+        <p className="rounded-lg bg-brand-primary-soft px-4 py-2.5 text-small text-foreground">
+          Estás viendo lo que tus clientes ven hoy. Cambia lo que quieras y pulsa «Publicar»: hasta entonces el inicio no cambia.
+        </p>
+      ) : null}
       {/* ── Territorio + estado + acciones ─────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
         <div className="flex items-center gap-3 rounded-lg bg-brand-primary-soft px-4 py-2.5">

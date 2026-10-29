@@ -2,6 +2,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { huellaDeSlide, quitarSlide } from '../src/modules/home/banner-huella'
+import { rutaDeEdicionDePieza } from '../src/modules/home/banner-hero'
 import {
   DIAS_NOVEDAD,
   MAX_CARRUSEL,
@@ -221,4 +223,48 @@ test('al publicar algo se pregunta si se destaca: promoción, producto o servici
 
 test('la pestaña Carrusel existe en el Editor de inicio', () => {
   assert.match(fuente('src/components/layout/nav-config.ts'), /href: '\/admin\/personalizacion\/carrusel', label: 'Carrusel'/)
+})
+
+// ── Banners a medida: quitar uno desde la lista ──────────────────────────────
+
+const slide = (titulo: string, id = 'p1') => ({ titulo, imagenUrl: null, ctaTexto: 'Ver', ctaDestino: { tipo: 'promocion', id } })
+
+test('quitar un banner a medida: quita solo el que la huella señala', () => {
+  const slides = [slide('A', 'p1'), slide('B', 'p2'), slide('C', 'p3')]
+  const r = quitarSlide(slides, 1, huellaDeSlide(slides[1]!))
+  assert.equal(r.ok, true)
+  if (r.ok) assert.deepEqual(r.quedan.map((s) => s.titulo), ['A', 'C'])
+})
+
+test('quitar un banner a medida: si la posición ya apunta a otro, no quita nada', () => {
+  const slides = [slide('A', 'p1'), slide('B', 'p2')]
+  const r = quitarSlide(slides, 0, huellaDeSlide(slides[1]!))
+  assert.equal(r.ok, false)
+  assert.equal(quitarSlide(slides, 7, 'x').ok, false)
+})
+
+test('quitar un banner a medida: nunca deja el hero vacío', () => {
+  const slides = [slide('A')]
+  const r = quitarSlide(slides, 0, huellaDeSlide(slides[0]!))
+  assert.equal(r.ok, false)
+  if (!r.ok) assert.match(r.error, /al menos un banner/)
+})
+
+test('la huella distingue destino, titular, botón e imagen', () => {
+  const base = slide('A')
+  const huellas = new Set([
+    huellaDeSlide(base),
+    huellaDeSlide({ ...base, titulo: 'B' }),
+    huellaDeSlide({ ...base, ctaTexto: 'Otro' }),
+    huellaDeSlide({ ...base, imagenUrl: 'https://x/y.png' }),
+    huellaDeSlide({ ...base, ctaDestino: { tipo: 'plan', id: 'p1' } }),
+  ])
+  assert.equal(huellas.size, 5)
+})
+
+test('cada pieza automática se edita donde se creó', () => {
+  assert.equal(rutaDeEdicionDePieza('PROMOCION', 'a1'), '/admin/promociones/a1/editar')
+  assert.equal(rutaDeEdicionDePieza('CATALOGO', 'a1'), '/admin/catalogo/a1')
+  assert.equal(rutaDeEdicionDePieza('OFERTA', 'a1'), '/admin/ofertas/a1')
+  assert.equal(rutaDeEdicionDePieza('PLAN', 'a1'), '/admin/planes/a1/editar')
 })
