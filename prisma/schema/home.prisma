@@ -48,6 +48,39 @@ model HomeBloque {
   @@map("home_bloques")
 }
 
+/// LOS AJUSTES DEL CARRUSEL AUTOMÁTICO DEL INICIO (aprobado 2026-10-29).
+///
+/// El carrusel se llena SOLO con lo que la empresa publica (promociones,
+/// productos y servicios, ofertas, planes), de lo más reciente a lo más viejo.
+/// Esta tabla no guarda el carrusel: guarda lo que la empresa decidió sobre
+/// una pieza concreta (fijarla, ocultarla, cambiarle la plantilla) y el color
+/// dominante de su imagen, calculado una vez. Sin fila, la pieza sale con los
+/// valores automáticos; si la pieza desaparece (se pausa, vence), la fila deja
+/// de aplicar sola: nunca hay un banner huérfano.
+model BannerInicio {
+  id         String   @id @default(cuid())
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  /// PROMOCION · CATALOGO · OFERTA · PLAN (ver `banner-formatos.ts`).
+  origenTipo String
+  origenId   String
+  /// Plantilla elegida a mano. NULL = la automática según el origen.
+  plantilla  String?
+  /// Fijado: va delante de las novedades y no caduca a los 30 días.
+  fijado     Boolean  @default(false)
+  oculto     Boolean  @default(false)
+  /// Orden entre los fijados (menor primero).
+  orden      Int      @default(0)
+  /// `#rrggbb` dominante de la imagen de la pieza, calculado al fijarla o al abrir el editor.
+  colorDominante String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([companyId, origenTipo, origenId])
+  @@index([companyId, fijado, orden])
+  @@map("banners_inicio")
+}
+
 /// Sinónimos de búsqueda por ámbito (F2): "carro"→"vehículo",
 /// "pestañas"→"cejas"… NULL en companyId = global (plataforma).
 model BusquedaSinonimo {

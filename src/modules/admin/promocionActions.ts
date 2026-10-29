@@ -20,6 +20,8 @@ export interface PromocionState {
   /** Lo que se había escrito, para no vaciar el formulario al fallar. */
   valores?: ValoresPromocion
   success?: boolean
+  /** Al CREAR: el id de la promoción nueva, para ofrecer destacarla en el inicio. */
+  promocionId?: string
 }
 
 function toBridgeData(d: {
@@ -189,7 +191,7 @@ export async function crearPromocion(
     })
 
     revalidatePromos()
-    return { success: true }
+    return { success: true, promocionId: legacy.id }
   } catch (e) {
     console.error('[promocion]', e)
     return { error: 'Ocurrió un error. Intenta de nuevo.' }

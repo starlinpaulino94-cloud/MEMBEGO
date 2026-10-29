@@ -22,6 +22,8 @@ export interface FilaDeOfertaPublica {
   discountValue: Prisma.Decimal
   currency: string
   endsAt: Date | null
+  /** Cuándo se publicó; ordena el carrusel del inicio de lo más reciente a lo más viejo. */
+  publishedAt?: Date | null
   voucherDays: number
   newCustomersOnly: boolean
   maxClaims: number
@@ -65,6 +67,8 @@ export interface OfertaPublica {
   sucursales: { id: string; nombre: string }[]
   /** ISO. `null` = sin fecha de fin. */
   endsAt: string | null
+  /** ISO de cuándo se publicó. `null` = sin dato. */
+  publicadaEn?: string | null
   voucherDays: number
   soloClientesNuevos: boolean
   /** Solo cuando quedan pocos (≤ 10): crea urgencia sin enseñar el tamaño de la oferta. */
@@ -105,6 +109,7 @@ export function aOfertaPublica(f: FilaDeOfertaPublica): OfertaPublica | null {
     empresa: { slug: f.variant.item.company.slug, name: f.variant.item.company.name },
     sucursales: f.variant.item.company.sucursales.map((x) => ({ id: x.id, nombre: x.nombre })),
     endsAt: f.endsAt ? f.endsAt.toISOString() : null,
+    publicadaEn: f.publishedAt ? f.publishedAt.toISOString() : null,
     voucherDays: f.voucherDays,
     soloClientesNuevos: f.newCustomersOnly,
     quedan: posibles <= UMBRAL_QUEDAN ? posibles : null,

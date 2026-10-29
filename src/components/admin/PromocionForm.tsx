@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { DestacarEnInicio } from '@/components/admin/DestacarEnInicio'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { crearPromocion, actualizarPromocion, type PromocionState } from '@/modules/admin/promocionActions'
@@ -142,13 +143,19 @@ export function PromocionForm({
   const [esComprable, setEsComprable] = useState(inicial.esComprable)
   const [activo, setActivo] = useState(inicial.activo)
 
+  // Al CREAR, antes de volver a la lista se pregunta si se destaca en el inicio.
+  const [destacar, setDestacar] = useState<string | null>(null)
   useEffect(() => {
     if (state.success) {
       toast.success(existing ? 'Promoción actualizada.' : 'Promoción publicada. Tus seguidores fueron notificados.')
+      if (!existing && state.promocionId) {
+        setDestacar(state.promocionId)
+        return
+      }
       router.push('/admin/promociones')
       router.refresh()
     }
-  }, [state.success, existing, router])
+  }, [state.success, state.promocionId, existing, router])
 
   // Foco al primer error: quien navega con teclado o lector de pantalla cae donde tiene que corregir.
   useEffect(() => {
@@ -193,6 +200,16 @@ export function PromocionForm({
           Cancelar
         </Button>
       </div>
+      <DestacarEnInicio
+        origen="PROMOCION"
+        id={destacar ?? ''}
+        abierto={destacar !== null}
+        alCerrar={() => {
+          setDestacar(null)
+          router.push('/admin/promociones')
+          router.refresh()
+        }}
+      />
     </form>
   )
 }

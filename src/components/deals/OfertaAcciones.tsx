@@ -8,6 +8,7 @@ import { ampliarPresupuestoOferta, archivarOferta, pausarOferta, publicarOferta,
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { DestacarEnInicio } from '@/components/admin/DestacarEnInicio'
 import { Label } from '@/components/ui/label'
 
 export interface PermisosOferta {
@@ -42,6 +43,8 @@ export function OfertaAcciones({ ofertaId, moneda, permisos, puede }: Props) {
   const [pending, start] = useTransition()
   const [extra, setExtra] = useState('')
   const [motivo, setMotivo] = useState('')
+  // Al PUBLICAR una oferta se pregunta si se destaca en el inicio.
+  const [destacar, setDestacar] = useState(false)
 
   function ejecutar(accion: () => Promise<{ ok: true } | { ok: false; error: string }>, exito: string, despues?: () => void) {
     start(async () => {
@@ -67,7 +70,7 @@ export function OfertaAcciones({ ofertaId, moneda, permisos, puede }: Props) {
         <Card>
           <CardContent className="flex flex-wrap items-center gap-3 p-4">
             {permisos.publicar && puede.publicar && (
-              <Button disabled={pending} onClick={() => ejecutar(() => publicarOferta(ofertaId), 'Oferta publicada: los clientes ya pueden obtenerla.')}>
+              <Button disabled={pending} onClick={() => ejecutar(() => publicarOferta(ofertaId), 'Oferta publicada: los clientes ya pueden obtenerla.', () => setDestacar(true))}>
                 {spinner}
                 <Rocket className="mr-2 h-4 w-4" />
                 Publicar
@@ -124,6 +127,7 @@ export function OfertaAcciones({ ofertaId, moneda, permisos, puede }: Props) {
           </CardContent>
         </Card>
       )}
+      <DestacarEnInicio origen="OFERTA" id={ofertaId} abierto={destacar} alCerrar={() => setDestacar(false)} />
     </div>
   )
 }

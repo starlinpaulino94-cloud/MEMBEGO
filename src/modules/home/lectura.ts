@@ -16,7 +16,8 @@ import { getHomePublicada } from './composicion'
 import { HeroSlide, Segmentacion, TIPOS_BLOQUE, type TipoBloque } from './esquema'
 import { admiteAudienciaHome } from './audiencia'
 import { heroPublico } from './hero-publico'
-import { combinarHeroes } from './banner-formatos'
+import { MAX_CARRUSEL, combinarHeroes } from './banner-formatos'
+import { getHeroesAutomaticos } from './novedades-auto'
 import { seleccionarNovedadesHero } from './novedades'
 import { contextoHeroPorDefecto, duracionLegible, hechosDeEmpresas, totalesVitrina } from './vitrina'
 import type {
@@ -716,13 +717,15 @@ export async function getInicioVista(
     )
     : []
 
-  const heroesPromos = await heroesPorDefecto(
-    paraTi.length > 0 ? paraTi : pool,
-    4
-  )
+  // La cola AUTOMÁTICA: lo que las empresas publican (promociones, productos y
+  // servicios, ofertas, planes), de lo más reciente a lo más viejo, con la imagen
+  // y el color de cada pieza. Si no hay nada que enseñar, el respaldo de siempre:
+  // las promociones destacadas.
+  const heroesAuto = await getHeroesAutomaticos(espacio).catch(() => [] as HeroInicio[])
+  const heroesPromos = heroesAuto.length > 0 ? [] : await heroesPorDefecto(paraTi.length > 0 ? paraTi : pool, 4)
 
-  // Los banners configurados por el negocio van primero; los automáticos rellenan.
-  const heroes = combinarHeroes(heroesPublicados, heroesPromos, 4)
+  // Los banners a medida del negocio van primero; la cola automática rellena hasta seis.
+  const heroes = combinarHeroes(heroesPublicados, [...heroesAuto, ...heroesPromos], MAX_CARRUSEL)
 
   // Tarjeta relámpago del rediseño
   const urgentes = pool

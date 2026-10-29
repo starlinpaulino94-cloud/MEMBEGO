@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { sinEmpresa } from '@/lib/tenant'
 import { tieneCapacidad } from '@/modules/capacidades/resolver'
+import { urlImagenCatalogo } from './formato'
 import {
   aDetallePublico,
   aResumenPublico,
@@ -222,6 +223,61 @@ export async function catalogoDeEmpresasRelacionadas(companyId: string, limite =
     return []
   } catch (e) {
     console.error('[catalogoDeEmpresasRelacionadas]', e)
+    return []
+  }
+}
+
+/** Una novedad del catálogo: el resumen público más lo que el carrusel del inicio necesita para ordenarla. */
+export interface NovedadDeCatalogo {
+  item: ItemPublicoResumen
+  companyId: string
+  /** Primera activación; si no hay, la creación. */
+  publicadoEn: Date
+  /** Todas las fotos del ítem (tarjeta), la portada primero. */
+  imagenes: string[]
+}
+
+/**
+ * Lo MÁS RECIENTE del catálogo público, de todas las empresas que lo publican,
+ * para el carrusel del inicio. Mismo filtro de visibilidad y misma capacidad
+ * que el resto de lecturas públicas; los ítems puente (Membego Supply) quedan
+ * fuera: tienen su propio escaparate y su propio checkout.
+ */
+export async function novedadesDeCatalogo(limite = 30): Promise<NovedadDeCatalogo[]> {
+  const tope = Math.min(Math.max(limite, 1), MAX_ITEMS_PUBLICOS)
+  try {
+    const candidatas = await sinEmpresa('marketplace: empresas con catálogo para novedades', (tx) =>
+      tx.catalogItem.findMany({
+        where: { company: EMPRESA_VISIBLE, source: 'MERCHANT', ...itemVisible(new Date()) },
+        distinct: ['companyId'],
+        select: { companyId: true },
+      })
+    )
+    const permitidas: string[] = []
+    for (const { companyId } of candidatas) if (await empresaPublicaCatalogo(companyId)) permitidas.push(companyId)
+    if (permitidas.length === 0) return []
+    const filas = await sinEmpresa('marketplace: novedades del catálogo', (tx) =>
+      tx.catalogItem.findMany({
+        where: { companyId: { in: permitidas }, company: EMPRESA_VISIBLE, source: 'MERCHANT', ...itemVisible(new Date()) },
+        include: INCLUIR,
+        orderBy: [{ publishedAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }, { id: 'asc' }],
+        take: tope,
+      })
+    )
+    const salida: NovedadDeCatalogo[] = []
+    for (const f of filas) {
+      const item = aResumenPublico(f)
+      if (!item) continue
+      salida.push({
+        item,
+        companyId: f.companyId,
+        publicadoEn: f.publishedAt ?? f.createdAt,
+        imagenes: f.images.map((i) => urlImagenCatalogo(i, 'tarjeta')).filter((u): u is string => !!u),
+      })
+    }
+    return salida
+  } catch (e) {
+    console.error('[novedadesDeCatalogo]', e)
     return []
   }
 }

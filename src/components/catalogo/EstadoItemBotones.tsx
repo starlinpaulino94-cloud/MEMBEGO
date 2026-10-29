@@ -1,11 +1,12 @@
 'use client'
 
-import { useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cambiarEstadoItemCatalogo } from '@/modules/catalog/actions'
 import { Button } from '@/components/ui/button'
+import { DestacarEnInicio } from '@/components/admin/DestacarEnInicio'
 
 type Estado = 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'ARCHIVED'
 
@@ -31,6 +32,8 @@ export function EstadoItemBotones({
 }) {
   const router = useRouter()
   const [pending, start] = useTransition()
+  // Al PUBLICAR un producto o servicio se pregunta si se destaca en el inicio.
+  const [destacar, setDestacar] = useState(false)
   if (soloLectura) return null
 
   function ir(a: Estado) {
@@ -39,6 +42,7 @@ export function EstadoItemBotones({
       if (!r.ok) toast.error(r.error)
       else {
         toast.success(ACCION[a].ok)
+        if (a === 'ACTIVE') setDestacar(true)
         router.refresh()
       }
     })
@@ -52,6 +56,7 @@ export function EstadoItemBotones({
           {ACCION[a].texto}
         </Button>
       ))}
+      <DestacarEnInicio origen="CATALOGO" id={itemId} abierto={destacar} alCerrar={() => setDestacar(false)} />
     </div>
   )
 }
