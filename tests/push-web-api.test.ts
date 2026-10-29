@@ -91,7 +91,10 @@ test('public/sw.js: trae los manejadores de Web Push y una versión de caché nu
 test('public/manifest.json: lo mínimo para que Chrome ofrezca instalar', () => {
   const manifest = JSON.parse(readFileSync(join(__dirname, '..', 'public', 'manifest.json'), 'utf8'))
   assert.equal(manifest.display, 'standalone')
-  assert.ok(manifest.start_url)
+  // Instalada, abre la app del cliente, no la portada: sin sesión el proxy lleva
+  // al login y, con otro rol, a su propio inicio.
+  assert.equal(manifest.start_url, '/cliente/inicio')
+  assert.equal(manifest.id, '/')
   assert.ok(manifest.icons.some((i: { sizes: string }) => i.sizes === '192x192'))
   assert.ok(manifest.icons.some((i: { sizes: string }) => i.sizes === '512x512'))
   assert.ok(manifest.icons.some((i: { purpose?: string }) => i.purpose === 'maskable'))

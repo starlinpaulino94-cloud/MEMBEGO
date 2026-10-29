@@ -8,6 +8,7 @@ import { HowItWorks } from '@/components/public/HowItWorks'
 import { PromotionCard } from '@/components/public/PromotionCard'
 import { getFeaturedPromotions, getPlatformStats, getCatalogoPublicoGlobal } from '@/modules/marketplace/cached'
 import { TarjetaCatalogoPublica } from '@/components/catalogo/TarjetaCatalogoPublica'
+import { AbrirAppSiEstaInstalada } from '@/components/public/AbrirAppSiEstaInstalada'
 
 export const revalidate = 600
 
@@ -26,6 +27,8 @@ export default async function HomePage() {
 
   return (
     <>
+      {/* Abierta como app instalada, la portada cede el paso a la app del cliente. */}
+      <AbrirAppSiEstaInstalada />
       <HeroSection stats={stats} />
       <ValueProps />
 

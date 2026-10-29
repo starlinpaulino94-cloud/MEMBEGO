@@ -60,8 +60,9 @@ espacios de F6 ruta por ruta.
 - **CSP:** `default-src 'self'`; `connect-src 'self'` basta porque la sesión ligera de la landing se consulta en su propio
   origen (`/api` responde en ambos); `form-action 'self'` basta porque ningún formulario de la landing envía a la app (el
   login y el registro viven en la app). No hay `frame-ancestors` ni `navigate-to` que ajustar.
-- **PWA (`public/manifest.json`):** `start_url: "/"` y `scope: "/"` son relativos al origen desde el que se instala. Instalada
-  desde `app.`, `/` lleva a `/login` (o a su espacio si hay sesión).
+- **PWA (`public/manifest.json`):** `start_url: "/cliente/inicio"` y `scope: "/"` son relativos al origen desde el que se
+  instala. Instalada desde la landing, el proxy manda esa ruta a `app.`; sin sesión, al login. La portada abierta en modo
+  standalone también cede el paso a la app (`AbrirAppSiEstaInstalada`).
 - **Cookie de sesión de Supabase:** `NEXT_PUBLIC_COOKIE_DOMAIN` ya estaba cableado en los cuatro puntos que fijan la cookie
   (`sessionCookieDomain()`), con salvaguardas para no aplicarlo en previews ni en hosts que no pertenezcan al dominio.
 
