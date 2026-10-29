@@ -3,19 +3,65 @@
   "name": "MembeGo",
   "short_name": "MembeGo",
   "description": "Plataforma inteligente para membresías digitales",
-  "start_url": "/",
+  "start_url": "/cliente/inicio",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#0f172a",
   "theme_color": "#0ea5e9",
   "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ],
   "shortcuts": [
-    { "name": "Escanear QR", "short_name": "Escanear", "url": "/empleado/scanner", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Caja", "short_name": "Caja", "url": "/empleado/caja", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }
+    {
+      "name": "Mi inicio",
+      "short_name": "Inicio",
+      "url": "/cliente/inicio",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Escanear QR",
+      "short_name": "Escanear",
+      "url": "/empleado/scanner",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Caja",
+      "short_name": "Caja",
+      "url": "/empleado/caja",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
   ]
 }

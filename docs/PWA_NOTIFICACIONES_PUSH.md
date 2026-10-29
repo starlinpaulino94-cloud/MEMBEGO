@@ -28,6 +28,11 @@ límites tiene cada plataforma.
 - `public/manifest.json` (nombre, iconos 192/512 + maskable, `display:
   standalone`) y `public/sw.js` (service worker) son los dos requisitos que
   Chrome exige para ofrecer la instalación.
+- **Instalada, abre la app, no la landing.** `start_url` es `/cliente/inicio`:
+  sin sesión el proxy lleva al login y, tras entrar, cada rol a su inicio (un
+  administrador rebota a su panel). Los teléfonos que instalaron cuando
+  arrancaba en `/` reciben el mismo trato: la portada, abierta en modo
+  standalone, se sustituye por la app (`AbrirAppSiEstaInstalada`).
 - Chrome dispara `beforeinstallprompt` **una sola vez** y puede hacerlo antes
   de que React hidrate. Un script inline en el `<head>` (`SCRIPT_INSTALACION`,
   en `src/lib/pwa/instalacion.ts`) lo captura y lo guarda; el resto de la app

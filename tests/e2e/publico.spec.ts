@@ -138,7 +138,7 @@ test.describe('Páginas de sistema', () => {
     const r = await request.get('/manifest.json')
     expect(r.status()).toBe(200)
     const m = await r.json()
-    expect(m.start_url).toBeTruthy()
+    expect(m.start_url).toBe('/cliente/inicio')
     expect(m.display).toBe('standalone')
     expect(JSON.stringify(m.shortcuts ?? [])).toContain('/empleado/scanner')
   })
