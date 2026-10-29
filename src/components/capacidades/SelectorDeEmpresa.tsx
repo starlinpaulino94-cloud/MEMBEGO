@@ -22,6 +22,7 @@ export function SelectorDeEmpresa({
   return (
     <select
       name="empresa"
+      aria-label="Empresa"
       defaultValue={seleccionada}
       onChange={(e) => e.currentTarget.form?.requestSubmit()}
       className="mt-1 block h-10 min-w-64 rounded-xl border border-input bg-background px-3 text-sm"
