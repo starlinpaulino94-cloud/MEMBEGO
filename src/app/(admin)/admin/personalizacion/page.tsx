@@ -24,7 +24,13 @@ function esTipoBloque(t: string): t is TipoBloque {
   return (TIPOS_BLOQUE as readonly string[]).includes(t)
 }
 
-export default async function AdminPersonalizacionPage() {
+export default async function AdminPersonalizacionPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const sp = await searchParams
+  const bannerPedido = Number(Array.isArray(sp.banner) ? sp.banner[0] : sp.banner)
   const user = await requireRole(ADMIN_ROLES)
   const companyId = await resolveCompanyId(user)
   if (!companyId) {
@@ -79,24 +85,30 @@ export default async function AdminPersonalizacionPage() {
   ])
 
   const [empresa, promos, planes, excursiones, catalogo] = datos
-  const cabecera = trabajo?.bloques.find((b) => b.tipo === 'CABECERA')
+  // La copia de trabajo es el borrador; si no hay, el editor abre con lo que
+  // está PUBLICADO. Antes abría en blanco: al publicar, el borrador pasa a ser la
+  // revisión publicada y la empresa dejaba de ver (y de poder editar) sus banners.
+  const origenEditor = trabajo ?? publicada
+  const cabecera = origenEditor?.bloques.find((b) => b.tipo === 'CABECERA')
   const seg = (cabecera?.config as { segmentacion?: unknown } | null)?.segmentacion as
     | { membresia?: unknown; radioKm?: unknown; hasta?: unknown }
     | undefined
 
-  const borrador: BorradorInicial | null = trabajo
-    ? {
-        id: trabajo.id,
-        estado: trabajo.estado,
-        programadaPara: trabajo.programadaPara
-          ? trabajo.programadaPara.toISOString().slice(0, 16)
+  let borrador: BorradorInicial | null = null
+  if (origenEditor) {
+    try {
+      borrador = {
+        id: origenEditor.id,
+        estado: origenEditor.estado,
+        programadaPara: origenEditor.programadaPara
+          ? origenEditor.programadaPara.toISOString().slice(0, 16)
           : null,
-        territorio: trabajo.territorio,
-        bloques: trabajo.bloques
+        territorio: origenEditor.territorio,
+        bloques: origenEditor.bloques
           .filter((b) => esTipoBloque(b.tipo))
           .map((b) => ({ tipo: b.tipo as TipoBloque, activo: b.activo })),
         slides: leerSlidesEditor(
-          trabajo.bloques.find((b) => b.tipo === 'HERO')?.config ?? { slides: [] }
+          origenEditor.bloques.find((b) => b.tipo === 'HERO')?.config ?? { slides: [] }
         ),
         segmentacion: {
           membresia: seg?.membresia === 'SIN_PLAN' ? 'SIN_PLAN' : 'CUALQUIERA',
@@ -107,7 +119,10 @@ export default async function AdminPersonalizacionPage() {
           hasta: typeof seg?.hasta === 'string' ? seg.hasta.slice(0, 16) : '',
         },
       }
-    : null
+    } catch (e) {
+      console.error('[personalizacion] No se pudo leer la composición para el editor:', e)
+    }
+  }
 
   const media = [
     ...new Set(
@@ -133,6 +148,7 @@ export default async function AdminPersonalizacionPage() {
             companyName={empresa?.name ?? 'Tu empresa'}
             territorioSugerido={empresa?.ciudad ?? ''}
             trabajo={borrador}
+            bannerInicial={Number.isInteger(bannerPedido) && bannerPedido >= 1 ? bannerPedido : 1}
             publicada={
               publicada
                 ? {

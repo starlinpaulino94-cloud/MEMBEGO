@@ -183,3 +183,20 @@ export function armarCola(
   return elegidas
 }
 
+/**
+ * Dónde se edita la pieza de origen: el carrusel solo decide cómo se ve, el
+ * contenido (precio, fotos, vigencia) se cambia donde se creó.
+ */
+export function rutaDeEdicionDePieza(origen: OrigenBanner, id: string): string {
+  const e = encodeURIComponent(id)
+  switch (origen) {
+    case 'PROMOCION':
+      return `/admin/promociones/${e}/editar`
+    case 'CATALOGO':
+      return `/admin/catalogo/${e}`
+    case 'OFERTA':
+      return `/admin/ofertas/${e}`
+    case 'PLAN':
+      return `/admin/planes/${e}/editar`
+  }
+}

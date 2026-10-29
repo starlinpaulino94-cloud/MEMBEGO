@@ -86,6 +86,26 @@ Las acciones (`banners-acciones.ts`) exigen la sección donde se crea cada pieza
 (promociones, catálogo, deals, planes) y comprueban que la pieza es pública y de
 la empresa de la sesión.
 
+## Cada empresa ve y maneja todos sus banners
+
+La pestaña **Carrusel** del editor de inicio lista los dos tipos, cada uno con
+sus acciones:
+
+- **Banners a medida** (`BannersAMedida`, `banners-medida.ts`): los publicados
+  hoy, estén o no al aire. *Editar* abre el editor en ese banner
+  (`/admin/personalizacion?banner=N`). *Quitar* (`quitarBanner`) lo saca de la
+  revisión publicada y del borrador, sin pisar otros cambios sin publicar. No se
+  puede quitar el último: el hero necesita al menos un banner (`quitarSlide`,
+  que además exige que posición y huella coincidan con lo guardado). Editar y
+  quitar piden la capacidad `HOME_BUILDER`; sin ella la lista es de solo lectura.
+- **Banners automáticos** (`CarruselLista`): *Editar* lleva a donde se creó la
+  pieza (`rutaDeEdicionDePieza`); *Visible en el inicio* la oculta del carrusel
+  sin tocar la pieza. Quitar la pieza del todo se hace en su sección (promoción,
+  catálogo, oferta, plan).
+
+El editor de inicio abre con el **borrador** y, si no hay, con lo **publicado**.
+Antes abría en blanco tras publicar y la empresa no veía sus banners activos.
+
 ## Un banner enganchado a productos y servicios
 
 El destino «Productos y servicios» (`ctaDestino.tipo = 'catalogo'`) engancha

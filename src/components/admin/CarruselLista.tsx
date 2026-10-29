@@ -1,8 +1,9 @@
 'use client'
 
 import { useTransition } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ArrowDown, ArrowUp, ImageIcon, Pin } from 'lucide-react'
+import { ArrowDown, ArrowUp, ImageIcon, Pencil, Pin } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -147,8 +148,13 @@ export function CarruselLista({ filas }: { filas: FilaDeCarruselVista[] }) {
                   onCheckedChange={(v) => ejecutar(() => ajustarPieza(f.origen, f.id, { oculto: !v }), v ? 'Visible.' : 'Oculta.')}
                   aria-label={`Mostrar ${f.titulo}`}
                 />
-                Visible
+                Visible en el inicio
               </label>
+              <Button asChild variant="outline" size="sm">
+                <Link href={f.hrefEditar} aria-label={`Editar ${f.titulo}`}>
+                  <Pencil className="size-4" aria-hidden /> Editar
+                </Link>
+              </Button>
               {f.fijado ? (
                 <span className="flex gap-1">
                   <Button

@@ -1,6 +1,6 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { conEmpresa } from '@/lib/tenant'
 import { requireSection } from '@/lib/auth/guards'
 import { resolveCompanyId } from '@/lib/auth/company-context'
@@ -9,7 +9,9 @@ import {
   ComposicionInput,
   HeroSlide,
 } from '@/modules/home/esquema'
-import { transicionPermitida, type EstadoHome } from '@/modules/home/composicion'
+import { getHomePublicada, transicionPermitida, type EstadoHome } from '@/modules/home/composicion'
+import { huellaDeSlide, quitarSlide } from '@/modules/home/banner-huella'
+import { MARKETPLACE_TAG } from '@/modules/marketplace/cached'
 import { heroPublico } from '@/modules/home/hero-publico'
 
 export interface HomeState {
@@ -262,4 +264,85 @@ export async function publicarEdicion(input: unknown, fecha?: Date): Promise<Hom
   const guardado = await guardarBorrador(input)
   if (!guardado.ok || !guardado.revisionId) return guardado
   return fecha ? programarPublicacion(guardado.revisionId, fecha) : publicarAhora(guardado.revisionId)
+}
+
+/**
+ * QUITAR UN BANNER A MEDIDA desde la lista del Carrusel.
+ *
+ * Quita la diapositiva de la revisión PUBLICADA y, si hay un borrador, también
+ * de él (si no, el siguiente «Publicar» la traería de vuelta). No toca nada
+ * más del borrador: no se pisan los cambios sin publicar. La posición y la
+ * huella deben coincidir con lo guardado (`quitarSlide`).
+ */
+export async function quitarBanner(indice: number, huella: string): Promise<HomeState> {
+  const ctx = await contexto()
+  if (!ctx) return { error: 'No autorizado.' }
+  if (!Number.isInteger(indice) || indice < 0 || typeof huella !== 'string') return { error: 'Banner no válido.' }
+  try {
+    const publicada = await getHomePublicada(ctx.companyId)
+    if (!publicada) return { error: 'No hay banners publicados que quitar.' }
+
+    const resultado = await conEmpresa(ctx.companyId, async (tx) => {
+      await tx.$queryRaw`SELECT id FROM companies WHERE id = ${ctx.companyId} FOR UPDATE`
+      const heroPub = await tx.homeBloque.findFirst({
+        where: { revisionId: publicada.id, tipo: 'HERO', revision: { companyId: ctx.companyId } },
+        select: { id: true, config: true },
+      })
+      const crudos = (heroPub?.config as { slides?: unknown[] } | null)?.slides
+      const validos = HeroSlide.array().safeParse(crudos ?? [])
+      if (!heroPub || !Array.isArray(crudos) || !validos.success || validos.data.length !== crudos.length) {
+        return { error: 'No se pudo leer el banner publicado.' } as const
+      }
+      const decision = quitarSlide(validos.data, indice, huella)
+      if (!decision.ok) return { error: decision.error } as const
+
+      await tx.homeBloque.update({
+        where: { id: heroPub.id },
+        data: { config: { ...(heroPub.config as object), slides: crudos.filter((_, i) => i !== indice) } as object },
+      })
+      await tx.homeRevision.update({ where: { id: publicada.id }, data: { updatedAt: new Date() } })
+
+      // El borrador (si lo hay) pierde el mismo banner, buscado por huella: ahí la posición puede ser otra.
+      const borrador = await tx.homeRevision.findFirst({
+        where: { companyId: ctx.companyId, estado: { in: ['BORRADOR', 'PROGRAMADA', 'PAUSADA'] }, id: { not: publicada.id } },
+        orderBy: { updatedAt: 'desc' },
+        select: { id: true },
+      })
+      if (borrador) {
+        const heroBor = await tx.homeBloque.findFirst({ where: { revisionId: borrador.id, tipo: 'HERO' }, select: { id: true, config: true } })
+        const crudosBor = (heroBor?.config as { slides?: unknown[] } | null)?.slides
+        const validosBor = HeroSlide.array().safeParse(crudosBor ?? [])
+        if (heroBor && Array.isArray(crudosBor) && validosBor.success && validosBor.data.length === crudosBor.length) {
+          const k = validosBor.data.findIndex((s) => huellaDeSlide(s) === huella)
+          if (k >= 0 && validosBor.data.length > 1) {
+            await tx.homeBloque.update({
+              where: { id: heroBor.id },
+              data: { config: { ...(heroBor.config as object), slides: crudosBor.filter((_, i) => i !== k) } as object },
+            })
+          }
+        }
+      }
+
+      await tx.auditLog.create({
+        data: {
+          companyId: ctx.companyId,
+          userId: ctx.user.metadata.dbUserId || null,
+          accion: 'COMPOSICION_GUARDADA',
+          entidadTipo: 'HomeRevision',
+          entidadId: publicada.id,
+          payload: { quitado: { titulo: validos.data[indice]?.titulo ?? '', destino: validos.data[indice]?.ctaDestino } },
+        },
+      })
+      return { ok: true } as const
+    })
+    if ('error' in resultado) return { error: resultado.error }
+    revalidateTag(MARKETPLACE_TAG, 'max')
+    revalidatePath('/admin/personalizacion')
+    revalidatePath('/admin/personalizacion/carrusel')
+    revalidatePath('/cliente/inicio')
+    return { ok: true, revisionId: publicada.id }
+  } catch (e) {
+    console.error('[home] quitarBanner:', e)
+    return { error: 'No se pudo quitar el banner.' }
+  }
 }
