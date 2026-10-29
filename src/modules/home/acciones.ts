@@ -76,7 +76,11 @@ async function validarHero(
     }
     const error = await validarDestino(companyId, s.ctaDestino)
     if (error) return error
-    if (!(await heroPublico(companyId, s))) return 'El banner debe enlazar contenido público vigente y usar imágenes de su empresa.'
+    const hero = await heroPublico(companyId, s)
+    if (!hero) return 'El banner debe enlazar contenido público vigente y usar imágenes de su empresa.'
+    if (s.formato === 'SOLO_IMAGEN' && !hero.imagen) {
+      return 'Un banner «Solo imagen» necesita una imagen: elige una o cambia el formato.'
+    }
   }
   return null
 }

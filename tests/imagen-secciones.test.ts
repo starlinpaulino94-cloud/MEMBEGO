@@ -27,6 +27,7 @@ const SECCIONES: Record<string, string[]> = {
   'src/components/superadmin/LogoUpload.tsx': ['logo'],
   'src/components/public/SolicitudEmpresaForm.tsx': ['logo', 'banner', 'promocion'],
   'src/components/cliente/AvatarUpload.tsx': ['avatar'],
+  'src/components/admin/EditorInicio.tsx': ['bannerInicio'],
 }
 
 /** Suben un archivo y NO deben recortarse: son pruebas, no imagen de marca. */

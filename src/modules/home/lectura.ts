@@ -16,6 +16,7 @@ import { getHomePublicada } from './composicion'
 import { HeroSlide, Segmentacion, TIPOS_BLOQUE, type TipoBloque } from './esquema'
 import { admiteAudienciaHome } from './audiencia'
 import { heroPublico } from './hero-publico'
+import { combinarHeroes } from './banner-formatos'
 import { seleccionarNovedadesHero } from './novedades'
 import { contextoHeroPorDefecto, duracionLegible, hechosDeEmpresas, totalesVitrina } from './vitrina'
 import type {
@@ -263,6 +264,11 @@ async function heroesPorDefecto(
       descuento,
       precio,
       etiqueta: descuento ? 'Oferta destacada' : 'Novedad destacada',
+      // Automático: no hay nadie que haya decidido el formato, así que se
+      // queda el de siempre. Quien quiera la imagen limpia configura el banner
+      // en Personalizar inicio y elige «Solo imagen».
+      formato: 'TEXTO_ENCIMA' as const,
+      mostrarPie: false,
     }
   })
 }
@@ -715,7 +721,8 @@ export async function getInicioVista(
     4
   )
 
-  const heroes = [...heroesPromos, ...heroesPublicados].slice(0, 4)
+  // Los banners configurados por el negocio van primero; los automáticos rellenan.
+  const heroes = combinarHeroes(heroesPublicados, heroesPromos, 4)
 
   // Tarjeta relámpago del rediseño
   const urgentes = pool

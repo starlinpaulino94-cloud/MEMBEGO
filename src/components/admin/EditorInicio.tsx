@@ -18,12 +18,30 @@ import {
   SlidersHorizontal,
   Smartphone,
   Trash2,
+  Upload,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { formatPrice } from '@/lib/format'
 import { fechaEditorialIso } from '@/modules/home/editor-contrato'
+import {
+  COLORES_PANEL,
+  COLORES_PANEL_INFO,
+  FORMATOS_BANNER,
+  FORMATOS_BANNER_INFO,
+  FORMATO_BANNER_NUEVO,
+  COLOR_PANEL_POR_DEFECTO,
+  formatoAdmitePie,
+  formatoRequiereTexto,
+  type ColorPanel,
+  type FormatoBanner,
+} from '@/modules/home/banner-formatos'
+import { subirImagenBanner } from '@/modules/home/imagen-banner-accion'
+import { FORMATOS } from '@/lib/imagen/formatos'
+import { useEditorDeImagen } from '@/components/imagen/useEditorDeImagen'
+import { PieBanner, TarjetaBanner, llevaPie } from '@/components/cliente/inicio/TarjetaBanner'
+import type { HeroInicio } from '@/modules/home/vista'
 import {
   archivarRevision,
   guardarBorrador,
@@ -72,6 +90,10 @@ export interface SlideEstado {
   ctaTexto: string
   ctaTipo: 'promocion' | 'empresa' | 'plan' | 'excursion'
   ctaId: string
+  /** Cómo va el texto sobre la imagen (ver `banner-formatos.ts`). */
+  formato: FormatoBanner
+  colorPanel: ColorPanel
+  mostrarPie: boolean
 }
 
 export interface OpcionEntidad {
@@ -106,6 +128,30 @@ function slideVacio(companyId: string): SlideEstado {
     ctaTexto: 'Ver oferta',
     ctaTipo: 'empresa',
     ctaId: companyId,
+    // Banner nuevo: la imagen manda; el texto solo si el negocio lo pide.
+    formato: FORMATO_BANNER_NUEVO,
+    colorPanel: COLOR_PANEL_POR_DEFECTO,
+    mostrarPie: true,
+  }
+}
+
+/** El banner del editor como lo recibe la tarjeta del cliente: la MISMA tarjeta, no una imitación. */
+function heroDeSlide(s: SlideEstado, empresa: string): HeroInicio {
+  return {
+    titulo: s.titulo || 'Titular del banner',
+    subtitulo: s.subtitulo,
+    empresa,
+    ciudad: null,
+    imagen: s.imagenUrl || null,
+    href: '#',
+    cta: s.ctaTexto || 'Ver oferta',
+    planDesde: null,
+    color: null,
+    valoracion: null,
+    etiqueta: 'Novedad destacada',
+    formato: s.formato,
+    colorPanel: s.colorPanel,
+    mostrarPie: s.mostrarPie,
   }
 }
 
@@ -184,6 +230,7 @@ export function EditorInicio({
   const [slideActual, setSlideActual] = useState(0)
   const [perfilPreview, setPerfilPreview] = useState<'visitante' | 'socio'>('visitante')
   const [ocupado, setOcupado] = useState(false)
+  const [subiendo, setSubiendo] = useState(false)
   const [mensaje, setMensaje] = useState<{ ok: boolean; texto: string } | null>(null)
 
   const opcionesSegunTipo = (tipo: SlideEstado['ctaTipo']) =>
@@ -212,6 +259,9 @@ export function EditorInicio({
                   imagenUrl: s.imagenUrl || null,
                   ctaTexto: s.ctaTexto,
                   ctaDestino: { tipo: s.ctaTipo, id: s.ctaId },
+                  formato: s.formato,
+                  colorPanel: s.colorPanel,
+                  mostrarPie: s.mostrarPie,
                 })),
               }
             : {},
@@ -262,8 +312,34 @@ export function EditorInicio({
     setSlides((prev) => prev.map((s, k) => (k === i ? { ...s, ...parche } : s)))
   }
 
+  async function subirArchivo(indice: number, archivo: File | undefined) {
+    if (!archivo) return
+    setSubiendo(true)
+    setMensaje(null)
+    try {
+      const datos = new FormData()
+      datos.set('archivo', archivo)
+      const r = await subirImagenBanner(datos)
+      if ('error' in r) setMensaje({ ok: false, texto: r.error })
+      else actualizaSlide(indice, { imagenUrl: r.url })
+    } catch (error) {
+      console.error('[home:editor] No se pudo subir la imagen:', error)
+      setMensaje({ ok: false, texto: 'No se pudo subir la imagen. Inténtalo de nuevo.' })
+    } finally {
+      setSubiendo(false)
+    }
+  }
+
   const i = Math.min(slideActual, Math.max(0, slides.length - 1))
   const slide = slides[i]
+  const requiereTexto = slide ? formatoRequiereTexto(slide.formato) : true
+
+  // La imagen del banner pasa por el editor de encuadre del sistema, al formato
+  // de SU sección (4:5): lo que se encuadra es lo que se ve en el inicio.
+  const { elegir: elegirImagen, dialogo: dialogoImagen } = useEditorDeImagen({
+    formato: FORMATOS.bannerInicio,
+    alAplicar: (archivo) => subirArchivo(i, archivo),
+  })
   const activos = bloques.filter((b) => b.activo).length
 
   /** El resumen de cada fila sale de los datos que esta pantalla ya cargó. */
@@ -562,56 +638,108 @@ export function EditorInicio({
             {slide ? (
               <div className="mt-4 grid grid-cols-1 gap-5 md:grid-cols-[280px_minmax(0,1fr)]">
                 <div>
-                  <p className="mb-1.5 text-label-md text-muted-foreground">
-                    Creatividad del Banner
-                  </p>
-                  <div className="relative aspect-video overflow-hidden rounded-lg bg-muted">
+                  <p className="mb-1.5 text-label-md text-muted-foreground">1 · Imagen del banner</p>
+                  <div className="relative aspect-[4/5] max-w-[220px] overflow-hidden rounded-lg bg-muted">
                     {slide.imagenUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={slide.imagenUrl} alt="" className="size-full object-cover" />
                     ) : (
                       <span className="flex size-full items-center justify-center px-3 text-center text-caption">
-                        Automática: usa la imagen de la entidad destino
+                        Automática: usa la imagen del destino
                       </span>
                     )}
-                    <span className="absolute bottom-2 left-2 rounded bg-foreground/80 px-2 py-0.5 text-label-sm font-semibold text-background">
-                      {companyName}
-                    </span>
                   </div>
-                  <div className="mt-2 flex items-center gap-2">
+                  <p className="mt-1.5 max-w-[220px] text-label-sm text-muted-foreground">
+                    Se encuadra a 4:5 (1080×1350) · JPG, PNG o WebP · hasta 5 MB.
+                  </p>
+                  <input
+                    id={`ed-file-${i}`}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="sr-only"
+                    onChange={(e) => {
+                      elegirImagen(e.target.files?.[0])
+                      e.target.value = ''
+                    }}
+                  />
+                  <div className="mt-2 flex max-w-[220px] flex-col gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full"
+                      disabled={subiendo || ocupado}
+                      onClick={() => document.getElementById(`ed-file-${i}`)?.click()}
+                    >
+                      <Upload className="size-4" aria-hidden /> {subiendo ? 'Subiendo…' : 'Subir imagen'}
+                    </Button>
                     <label htmlFor={`ed-img-${i}`} className="sr-only">
-                      Cambiar arte del banner
+                      O elegir una que ya tienes
                     </label>
                     <select
                       id={`ed-img-${i}`}
                       value={slide.imagenUrl}
                       onChange={(e) => actualizaSlide(i, { imagenUrl: e.target.value })}
-                      className={cn(CAMPO, 'h-9 flex-1 text-caption')}
+                      className={cn(CAMPO, 'h-9 text-caption')}
                     >
-                      <option value="">Cambiar arte · automática</option>
+                      <option value="">Automática · la del destino</option>
+                      {slide.imagenUrl && !media.includes(slide.imagenUrl) ? (
+                        <option value={slide.imagenUrl}>Imagen subida</option>
+                      ) : null}
                       {media.map((m) => (
                         <option key={m} value={m}>
                           {m.split('/').slice(-1)}
                         </option>
                       ))}
                     </select>
-                    <span className="shrink-0 rounded-lg border border-border px-2 py-1.5 text-label-sm text-muted-foreground">
-                      16:9
-                    </span>
                   </div>
                 </div>
 
                 <div className="grid content-start gap-3">
+                  <fieldset>
+                    <legend className="mb-1 text-label-md text-muted-foreground">2 · ¿Cómo va el texto?</legend>
+                    <p className="mb-2 text-label-sm text-muted-foreground">
+                      Si la imagen ya trae su texto, elige «Solo imagen»: así nada se pisa.
+                    </p>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      {FORMATOS_BANNER.map((f) => (
+                        <Button
+                          key={f}
+                          type="button"
+                          variant="outline"
+                          aria-pressed={slide.formato === f}
+                          onClick={() => actualizaSlide(i, { formato: f })}
+                          className={cn(
+                            'h-auto flex-col items-start justify-start gap-0.5 whitespace-normal p-2.5 text-left',
+                            slide.formato === f && 'border-primary ring-2 ring-primary/15'
+                          )}
+                        >
+                          <span className="block text-label-md font-bold text-foreground">
+                            {FORMATOS_BANNER_INFO[f].nombre}
+                          </span>
+                          <span className="block text-label-sm font-normal text-muted-foreground">
+                            {FORMATOS_BANNER_INFO[f].descripcion}
+                          </span>
+                        </Button>
+                      ))}
+                    </div>
+                    {slide.formato === 'SOLO_IMAGEN' && !slide.imagenUrl ? (
+                      <p className="mt-2 text-label-sm text-warning-ink">
+                        Con «Solo imagen» la tarjeta ES la imagen: sube una o elige una. Si dejas «Automática», se usa la del destino.
+                      </p>
+                    ) : null}
+                  </fieldset>
                   <div>
                     <label className="mb-1 block text-label-md text-muted-foreground" htmlFor={`ed-tit-${i}`}>
-                      Titular Comercial
+                      Titular Comercial {requiereTexto ? '' : '· no aplica con «Solo imagen»'}
                     </label>
                     <input
                       id={`ed-tit-${i}`}
                       value={slide.titulo}
                       maxLength={80}
+                      disabled={!requiereTexto}
                       onChange={(e) => actualizaSlide(i, { titulo: e.target.value })}
-                      className={CAMPO}
+                      className={cn(CAMPO, !requiereTexto && 'opacity-50')}
                     />
                   </div>
                   <div>
@@ -622,10 +750,45 @@ export function EditorInicio({
                       id={`ed-sub-${i}`}
                       value={slide.subtitulo}
                       maxLength={140}
+                      disabled={!requiereTexto}
                       onChange={(e) => actualizaSlide(i, { subtitulo: e.target.value })}
-                      className={CAMPO}
+                      className={cn(CAMPO, !requiereTexto && 'opacity-50')}
                     />
                   </div>
+                  {slide.formato === 'TITULAR_ARRIBA' ? (
+                    <fieldset>
+                      <legend className="mb-1 text-label-md text-muted-foreground">Color del panel</legend>
+                      <div className="flex gap-2">
+                        {COLORES_PANEL.map((c) => (
+                          <Button
+                            key={c}
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            aria-label={COLORES_PANEL_INFO[c].nombre}
+                            aria-pressed={slide.colorPanel === c}
+                            onClick={() => actualizaSlide(i, { colorPanel: c })}
+                            className={cn(
+                              'size-9 rounded-full',
+                              COLORES_PANEL_INFO[c].clase,
+                              slide.colorPanel === c && 'border-[3px] border-primary'
+                            )}
+                          />
+                        ))}
+                      </div>
+                    </fieldset>
+                  ) : null}
+                  {formatoAdmitePie(slide.formato) ? (
+                    <label className="flex cursor-pointer items-center gap-2 text-small text-foreground">
+                      <input
+                        type="checkbox"
+                        checked={slide.mostrarPie}
+                        onChange={(e) => actualizaSlide(i, { mostrarPie: e.target.checked })}
+                        className="size-4"
+                      />
+                      Mostrar debajo de la tarjeta el nombre del negocio y «{slide.ctaTexto || 'Ver oferta'}»
+                    </label>
+                  ) : null}
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
                       <label className="mb-1 block text-label-md text-muted-foreground" htmlFor={`ed-tipo-${i}`}>
@@ -852,25 +1015,23 @@ export function EditorInicio({
                 </div>
                 {slide ? (
                   <div className="p-3">
-                    {slide.imagenUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={slide.imagenUrl}
-                        alt=""
-                        className="aspect-video w-full rounded-lg object-cover"
-                      />
-                    ) : (
-                      <div className="flex aspect-video w-full items-center justify-center rounded-lg bg-muted px-3 text-center text-label-sm text-muted-foreground">
-                        Sin arte (usa la imagen de la entidad destino)
+                    {slide.formato === 'SOLO_IMAGEN' && !slide.imagenUrl ? (
+                      <div className="flex aspect-[4/5] w-full items-center justify-center rounded-2xl border border-dashed border-border px-4 text-center text-label-sm text-muted-foreground">
+                        Con «Solo imagen» se enseña la imagen del destino. Sube una para verla aquí.
                       </div>
+                    ) : (
+                      <>
+                        <TarjetaBanner
+                          hero={heroDeSlide(slide, companyName)}
+                          className="aspect-[4/5] w-full"
+                          sinOptimizar
+                          compacta
+                        />
+                        {llevaPie(heroDeSlide(slide, companyName)) ? (
+                          <PieBanner hero={heroDeSlide(slide, companyName)} compacta />
+                        ) : null}
+                      </>
                     )}
-                    <p className="mt-2 text-label-lg text-foreground">
-                      {slide.titulo || 'Titular del banner'}
-                    </p>
-                    {slide.subtitulo && <p className="text-caption">{slide.subtitulo}</p>}
-                    <span className="mt-2 inline-block rounded-full bg-primary px-3 py-1.5 text-label-md font-bold text-primary-foreground">
-                      {slide.ctaTexto || 'Ver oferta'}
-                    </span>
                     <div className="mt-2 flex justify-center gap-1" aria-hidden>
                       {slides.map((_, k) => (
                         <button
@@ -948,6 +1109,7 @@ export function EditorInicio({
           </section>
         </div>
       </div>
+      {dialogoImagen}
     </div>
   )
 }

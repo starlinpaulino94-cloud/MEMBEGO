@@ -29,13 +29,18 @@ const cerca = (a: number, b: number, eps = 1e-6) => assert.ok(Math.abs(a - b) <=
 
 test('cada sección tiene UN formato coherente: proporción = ancho/alto de la salida, y umbrales con sentido', () => {
   const ids = Object.keys(FORMATOS)
-  assert.deepEqual(ids.sort(), ['avatar', 'banner', 'catalogo', 'compartir', 'excursion', 'fondo', 'galeria', 'logo', 'plan', 'promocion'])
+  assert.deepEqual(ids.sort(), ['avatar', 'banner', 'bannerInicio', 'catalogo', 'compartir', 'excursion', 'fondo', 'galeria', 'logo', 'plan', 'promocion'])
   for (const f of Object.values(FORMATOS)) {
     cerca(f.aspecto, f.salida.ancho / f.salida.alto)
     assert.ok(f.minimoPx > 0 && f.minimoPx < f.recomendadoPx, f.id)
     assert.equal(f.recomendadoPx, f.salida.ancho, `${f.id}: lo recomendado es el ancho de salida`)
     assert.match(f.descripcion, new RegExp(`${f.salida.ancho}×${f.salida.alto} px`), f.id)
   }
+})
+
+test('el banner del Inicio es vertical 4:5, la proporción de la tarjeta del carrusel', () => {
+  cerca(FORMATOS.bannerInicio.aspecto, 4 / 5)
+  assert.deepEqual(FORMATOS.bannerInicio.salida, { ancho: 1080, alto: 1350 })
 })
 
 test('los formatos que ya existían conservan su proporción (nada cambia de forma sin querer)', () => {

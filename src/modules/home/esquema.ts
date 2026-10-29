@@ -1,4 +1,11 @@
 import { z } from 'zod'
+import {
+  COLORES_PANEL,
+  COLOR_PANEL_POR_DEFECTO,
+  FORMATOS_BANNER,
+  FORMATO_BANNER_POR_DEFECTO,
+  formatoRequiereTexto,
+} from './banner-formatos'
 
 /**
  * Los 7 bloques del feed, en orden canónico (contrato Stitch A05).
@@ -23,15 +30,28 @@ const DestinoCTA = z.object({
   id: z.string().min(1).max(64),
 })
 
-export const HeroSlide = z.object({
-  titulo: z.string().trim().min(1).max(80),
-  subtitulo: z.string().trim().max(140).default(''),
-  empresaId: z.string().min(1).max(64),
-  /** NULL = se usa la imagen de la entidad destino. URL manual debe ser del storage de la empresa. */
-  imagenUrl: z.string().trim().max(500).nullable().default(null),
-  ctaTexto: z.string().trim().min(1).max(40),
-  ctaDestino: DestinoCTA,
-})
+export const HeroSlide = z
+  .object({
+    /** Obligatorio salvo con «Solo imagen», donde la imagen trae el texto (ver el refine). */
+    titulo: z.string().trim().max(80).default(''),
+    subtitulo: z.string().trim().max(140).default(''),
+    empresaId: z.string().min(1).max(64),
+    /** NULL = se usa la imagen de la entidad destino. URL manual debe ser del storage de la empresa. */
+    imagenUrl: z.string().trim().max(500).nullable().default(null),
+    ctaTexto: z.string().trim().min(1).max(40),
+    ctaDestino: DestinoCTA,
+    /** Cómo va el texto sobre la imagen (ver `banner-formatos.ts`). Lo guardado sin formato era texto encima. */
+    formato: z.enum(FORMATOS_BANNER).default(FORMATO_BANNER_POR_DEFECTO),
+    /** Solo «Titular arriba»: el color del panel donde va el titular. */
+    colorPanel: z.enum(COLORES_PANEL).default(COLOR_PANEL_POR_DEFECTO),
+    /** Bajo la tarjeta: negocio y botón. No aplica a «Texto encima», que ya los lleva dentro. */
+    mostrarPie: z.boolean().default(true),
+  })
+  .superRefine((slide, ctx) => {
+    if (formatoRequiereTexto(slide.formato) && slide.titulo.length === 0) {
+      ctx.addIssue({ code: 'custom', path: ['titulo'], message: 'El titular es obligatorio salvo con «Solo imagen».' })
+    }
+  })
 
 export type HeroSlide = z.infer<typeof HeroSlide>
 

@@ -134,6 +134,17 @@ export function rutaExcursion(
 }
 
 /**
+ * Imagen de un banner del Inicio: `<companyId>/banners/<archivo>`.
+ *
+ * Bucket `promociones`, como planes y excursiones: la política solo mira el
+ * primer segmento, así que esta ruta ya está cubierta sin SQL de Storage.
+ */
+export function rutaBanner(companyId: string, archivo: string): string {
+  const empresa = exigirSegmento(companyId, 'companyId')
+  return `${empresa}/banners/${exigirSegmento(archivo, 'archivo')}`
+}
+
+/**
  * Imagen de un ítem del catálogo unificado:
  * `<companyId>/catalogo/<itemId>/<archivo>`.
  *
