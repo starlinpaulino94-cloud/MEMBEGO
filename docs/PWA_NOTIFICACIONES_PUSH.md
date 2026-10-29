@@ -10,16 +10,16 @@ límites tiene cada plataforma.
 
 ### Qué ve la persona
 
-- Al entrar en la landing o en la app aparece, a los pocos segundos, el aviso
-  **«Instala MembeGo en tu dispositivo»** (`src/components/system/InstalarApp.tsx`,
-  montado en el layout raíz).
-  - **Android y escritorio** (Chrome, Edge, Samsung Internet): el botón
-    «Instalar» abre el diálogo nativo del navegador.
-  - **iPhone / iPad en Safari**: no existe diálogo. El aviso enseña los dos
-    pasos: Compartir → «Añadir a pantalla de inicio».
+- Al entrar en la landing o en la app aparece, a los pocos segundos, un aviso
+  con un solo botón, **«Instalar MembeGo ahora»**, y sin más texto
+  (`src/components/system/InstalarApp.tsx`, montado en el layout raíz).
+  - **Android y escritorio** (Chrome, Edge, Samsung Internet): el botón abre
+    el diálogo nativo del navegador.
+  - **iPhone / iPad en Safari**: no existe diálogo. Al pulsar el botón se
+    enseñan los dos pasos: Compartir → «Añadir a pantalla de inicio».
   - En navegadores de iOS que no pueden instalar (Instagram, Facebook, Chrome
     para iOS…) no se enseña nada: no hay forma de completarlo desde ahí.
-- «Ahora no» silencia el aviso 14 días. Instalada, no vuelve a salir.
+- Cerrarlo con la X lo silencia 14 días. Instalada, no vuelve a salir.
 - `/descargar` tiene el botón **«Instalar MembeGo ahora»** (`BotonInstalar`)
   y las instrucciones manuales por si el navegador no ofrece el diálogo.
 
