@@ -66,12 +66,19 @@ export default async function AdminPersonalizacionPage() {
           orderBy: { createdAt: 'desc' },
           take: 30,
         }),
+        // Lo que un banner puede enganchar: productos y servicios ACTIVOS.
+        tx.catalogItem.findMany({
+          where: { companyId, status: 'ACTIVE' },
+          select: { id: true, name: true },
+          orderBy: [{ position: 'asc' }, { name: 'asc' }],
+          take: 100,
+        }),
       ])
-    ).catch(() => [null, [], [], []] as const),
+    ).catch(() => [null, [], [], [], []] as const),
     getCategoriesPublic().catch(() => []),
   ])
 
-  const [empresa, promos, planes, excursiones] = datos
+  const [empresa, promos, planes, excursiones, catalogo] = datos
   const cabecera = trabajo?.bloques.find((b) => b.tipo === 'CABECERA')
   const seg = (cabecera?.config as { segmentacion?: unknown } | null)?.segmentacion as
     | { membresia?: unknown; radioKm?: unknown; hasta?: unknown }
@@ -140,6 +147,7 @@ export default async function AdminPersonalizacionPage() {
             promociones={promos.map((p) => ({ id: p.id, titulo: p.titulo }))}
             planes={planes.map((p) => ({ id: p.id, titulo: p.nombre }))}
             excursiones={excursiones.map((e) => ({ id: e.id, titulo: e.nombre }))}
+            catalogo={catalogo.map((c) => ({ id: c.id, titulo: c.name }))}
             previewEmpresas={[{ name: empresa?.name ?? 'Tu empresa' }]}
             previewPlanes={planes
               .slice(0, 2)

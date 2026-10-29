@@ -130,6 +130,13 @@ export const FORMATOS = {
       { etiqueta: 'Se ve en escritorio', aspecto: 1280 / 288 },
     ],
   }),
+  /**
+   * Banner del Inicio del cliente (el carrusel «Beneficios destacados»): la
+   * tarjeta es la imagen, vertical 4:5 como las de Amazon. El negocio puede
+   * subir una imagen que ya trae su texto, así que el encuadre no debe comerse
+   * los bordes: se encuadra a la proporción exacta de la tarjeta.
+   */
+  bannerInicio: formato('bannerInicio', 'Banner del inicio', 'Vertical (4:5)', 1080, 1350, { minimoPx: 540 }),
   /** Imagen que se ve al compartir el enlace de una campaña: la proporción de las tarjetas de WhatsApp y Facebook. */
   compartir: formato('compartir', 'Imagen para compartir', 'Apaisada (1,91:1)', 1200, 630, { minimoPx: 600 }),
   /** Fondo del landing y de las campañas de marketing. */

@@ -11,6 +11,10 @@ export function leerSlidesEditor(config: unknown) {
     ctaTexto: slide.ctaTexto,
     ctaTipo: slide.ctaDestino.tipo,
     ctaId: slide.ctaDestino.id,
+    formato: slide.formato,
+    colorPanel: slide.colorPanel,
+    mostrarPie: slide.mostrarPie,
+    itemIds: slide.itemIds,
   }))
 }
 

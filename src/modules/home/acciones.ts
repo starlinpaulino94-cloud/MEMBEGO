@@ -32,9 +32,18 @@ async function contexto() {
 /** El destino del CTA existe, está publicado y es de esta empresa. */
 async function validarDestino(
   companyId: string,
-  destino: { tipo: string; id: string }
+  destino: { tipo: string; id: string },
+  itemIds: readonly string[] = []
 ): Promise<string | null> {
   return conEmpresa(companyId, async (tx) => {
+    if (destino.tipo === 'catalogo') {
+      // Todos los ítems de la colección son de esta empresa y están activos:
+      // uno pausado o ajeno no se cuela aunque el navegador lo mande.
+      const activos = await tx.catalogItem.count({ where: { id: { in: [...itemIds] }, companyId, status: 'ACTIVE' } })
+      if (itemIds.length === 0) return 'Elige al menos un producto o servicio para el banner.'
+      if (activos !== new Set(itemIds).size) return 'Un banner apunta a un producto o servicio que no existe o no está activo.'
+      return null
+    }
     if (destino.tipo === 'promocion') {
       const p = await tx.promocion.findFirst({
         where: { id: destino.id, companyId },
@@ -74,9 +83,13 @@ async function validarHero(
     if (s.empresaId !== companyId) {
       return 'El hero solo muestra contenido de esta empresa.'
     }
-    const error = await validarDestino(companyId, s.ctaDestino)
+    const error = await validarDestino(companyId, s.ctaDestino, s.itemIds)
     if (error) return error
-    if (!(await heroPublico(companyId, s))) return 'El banner debe enlazar contenido público vigente y usar imágenes de su empresa.'
+    const hero = await heroPublico(companyId, s)
+    if (!hero) return 'El banner debe enlazar contenido público vigente y usar imágenes de su empresa.'
+    if (s.formato === 'SOLO_IMAGEN' && !hero.imagen) {
+      return 'Un banner «Solo imagen» necesita una imagen: elige una o cambia el formato.'
+    }
   }
   return null
 }

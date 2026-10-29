@@ -1,3 +1,4 @@
+import type { ColorPanel, FormatoBanner } from './banner-formatos'
 import type { TipoBloque } from './esquema'
 
 /**
@@ -84,6 +85,12 @@ export interface HeroInicio {
   readonly precio?: string | null
   /** Etiqueta de la cabecera del hero («Oferta destacada», «Novedad destacada»). */
   readonly etiqueta?: string | null
+  /** Cómo va el texto sobre la imagen (ver `banner-formatos.ts`). Ausente = texto encima. */
+  readonly formato?: FormatoBanner
+  /** Solo «Titular arriba»: el color del panel del titular. */
+  readonly colorPanel?: ColorPanel
+  /** Negocio y botón bajo la tarjeta (solo imagen y titular arriba). Ausente = sí. */
+  readonly mostrarPie?: boolean
 }
 
 /** Fila de la tarjeta «Ofertas Relámpago» del rediseño violeta. */

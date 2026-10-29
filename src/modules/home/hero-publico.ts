@@ -1,6 +1,9 @@
 import { conEmpresa } from '@/lib/tenant'
-import { rutaDeExcursion, rutaDePlan, type Espacio } from '@/modules/comercio/rutas'
+import { rutaDeColeccion, rutaDeExcursion, rutaDePlan, type Espacio } from '@/modules/comercio/rutas'
+import { itemsPublicosPorIds } from '@/modules/catalog/publico'
 import { formatPrice } from '@/lib/format'
+import { getSupabaseUrl } from '@/lib/env'
+import { esImagenDeBannerPropia } from './imagen-banner'
 import type { HeroSlide } from './esquema'
 import type { HeroInicio } from './vista'
 
@@ -30,6 +33,9 @@ export async function heroPublico(companyId: string, slide: HeroSlide, espacio: 
       ciudad: empresa.ciudad, cta: slide.ctaTexto, planDesde,
       valoracion: empresa.averageRating != null ? Number(empresa.averageRating) : null,
       color: empresa.colorPrimario && /^#[0-9a-fA-F]{6}$/.test(empresa.colorPrimario) ? empresa.colorPrimario : null,
+      formato: slide.formato,
+      colorPanel: slide.colorPanel,
+      mostrarPie: slide.mostrarPie,
     }
     let href: string
     let imagen: string | null
@@ -61,6 +67,16 @@ export async function heroPublico(companyId: string, slide: HeroSlide, espacio: 
         propias.push(promo.imagenUrl, ...promo.imagenes)
         break
       }
+      case 'catalogo': {
+        // Solo los ítems que HOY son públicos: si alguno se pausó, la colección
+        // sigue con los demás; si no queda ninguno, el banner no se enseña.
+        const items = await itemsPublicosPorIds(companyId, slide.itemIds)
+        if (items.length === 0) return null
+        href = rutaDeColeccion(espacio, empresa.slug, items.map((i) => i.id), slide.titulo || null)
+        imagen = items.find((i) => i.imageUrl)?.imageUrl ?? empresa.bannerUrl ?? empresa.logoUrl
+        propias.push(...items.map((i) => i.imageUrl))
+        break
+      }
       case 'excursion': {
         const excursion = await tx.excursion.findFirst({
           where: { id: slide.ctaDestino.id, companyId, estado: 'ACTIVA' },
@@ -74,7 +90,8 @@ export async function heroPublico(companyId: string, slide: HeroSlide, espacio: 
       }
     }
     if (slide.imagenUrl) {
-      if (!propias.includes(slide.imagenUrl)) return null
+      // Una imagen que la empresa ya tiene, o una que subió para este banner.
+      if (!propias.includes(slide.imagenUrl) && !esImagenDeBannerPropia(slide.imagenUrl, companyId, getSupabaseUrl())) return null
       imagen = slide.imagenUrl
     }
     return { ...base, href, imagen }

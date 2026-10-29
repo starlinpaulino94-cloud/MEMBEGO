@@ -1,20 +1,20 @@
 import Link from 'next/link'
-import Image from 'next/image'
-import { ArrowRight, Star } from 'lucide-react'
 import type { InicioVista } from '@/modules/home/vista'
 import { RetailEmptyState } from './RetailEmptyState'
+import { PieBanner, TarjetaBanner, llevaPie } from './TarjetaBanner'
 
 /**
- * HÉROE del rediseño violeta (Stitch «amazon style», aprobado 2026-09-10).
+ * HÉROE del rediseño violeta (Stitch «amazon style», aprobado 2026-09-10) con
+ * los tres formatos de banner (aprobado 2026-10-29).
  *
- * Tarjetas altas a foto completa con velo nocturno, sello «Novedad
- * destacada», titular grande, la tarjeta interior blanca con la empresa, su
- * «desde» y su valoración, y el CTA en degradado violeta→cobalto→cian. La
- * siguiente tarjeta se ASOMA (86vw + snap) y los puntos cierran abajo.
+ * Tarjetas altas a foto completa; la siguiente se ASOMA (86vw + snap) y los
+ * puntos cierran abajo. Cómo va el texto sobre cada foto lo decide el negocio
+ * banner a banner (`TarjetaBanner`): si la imagen ya lo dice todo, no se le
+ * pone nada encima.
  *
- * Datos: los mismos heroes de siempre — slides publicados por el editor o,
- * por defecto, las promociones destacadas del marketplace. La tarjeta entera
- * es el enlace; el botón es visual.
+ * Datos: los banners configurados en Personalizar inicio van primero y las
+ * promociones destacadas rellenan. La tarjeta entera es el enlace; el botón y
+ * el pie son visuales.
  */
 export function VibeHero({
   heroes,
@@ -35,80 +35,16 @@ export function VibeHero({
 
   return (
     <section className="pt-2" aria-label="Beneficios destacados">
-      <div className="relative no-scrollbar flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 py-2">
+      <div className="relative no-scrollbar flex snap-x snap-mandatory items-start gap-3 overflow-x-auto px-4 py-2">
         {heroes.map((hero, i) => (
           <Link
             key={`${hero.href}-${i}`}
             href={hero.href}
-            className="relative block h-[380px] w-[86vw] max-w-[340px] shrink-0 snap-center overflow-hidden rounded-2xl elevation-2 outline-none focus-visible:ring-2 focus-visible:ring-vibe-violet"
+            aria-label={`${hero.titulo || hero.cta} · ${hero.empresa}`}
+            className="block w-[86vw] max-w-[340px] shrink-0 snap-center rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-vibe-violet"
           >
-            {hero.imagen ? (
-              <Image
-                src={hero.imagen}
-                alt=""
-                fill
-                sizes="(min-width: 640px) 340px, 86vw"
-                className="object-cover"
-                priority={i === 0}
-              />
-            ) : (
-              <span aria-hidden className="grad-vibe-header absolute inset-0" />
-            )}
-            <span aria-hidden className="grad-vibe-noche absolute inset-0" />
-
-            <div className="relative z-10 flex h-full flex-col justify-between p-5">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="grad-vibe inline-block rounded-full px-3 py-1 text-label-sm font-bold uppercase tracking-wider text-white shadow">
-                    {hero.etiqueta ?? 'Novedad destacada'}
-                  </span>
-                  {hero.descuento ? (
-                    <span className="rounded-full bg-amber-400 px-2.5 py-0.5 text-label-sm font-extrabold text-black shadow">
-                      {hero.descuento}
-                    </span>
-                  ) : null}
-                </div>
-                <h2 className="mt-2 font-display text-3xl md:text-4xl font-extrabold leading-tight text-white drop-shadow">
-                  {hero.titulo}
-                </h2>
-                {hero.subtitulo ? (
-                  <span className="line-clamp-2 block text-small font-medium text-vibe-celeste drop-shadow-sm">
-                    {hero.subtitulo}
-                  </span>
-                ) : null}
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-3 rounded-xl border border-vibe-borde bg-card/95 p-3 backdrop-blur shadow-sm">
-                  <div className="min-w-0">
-                    <span className="block truncate text-label-sm font-bold text-foreground">
-                      {hero.empresa}
-                    </span>
-                    {hero.precio ? (
-                      <span className="block truncate text-label-md font-extrabold text-vibe-violet">
-                        {hero.precio}
-                      </span>
-                    ) : hero.planDesde ? (
-                      <span className="block truncate text-label-sm font-bold text-vibe-ink">
-                        {hero.planDesde}
-                      </span>
-                    ) : null}
-                  </div>
-                  {hero.valoracion != null && Number.isFinite(Number(hero.valoracion)) ? (
-                    <span className="flex shrink-0 items-center gap-1 rounded-lg bg-vibe-niebla px-2 py-1">
-                      <Star className="size-3.5 fill-vibe-violet text-vibe-violet" aria-hidden />
-                      <span className="text-label-sm font-bold text-foreground tabular-nums">
-                        {Number(hero.valoracion).toFixed(1)}
-                      </span>
-                    </span>
-                  ) : null}
-                </div>
-                <span className="grad-vibe-cta flex w-full items-center justify-center gap-2 rounded-full py-3 text-label-md font-bold text-white shadow">
-                  {hero.cta}
-                  <ArrowRight className="size-4" aria-hidden />
-                </span>
-              </div>
-            </div>
+            <TarjetaBanner hero={hero} className="aspect-[4/5] w-full" prioridad={i === 0} />
+            {llevaPie(hero) ? <PieBanner hero={hero} /> : null}
           </Link>
         ))}
       </div>

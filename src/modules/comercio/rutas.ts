@@ -29,6 +29,17 @@ export function rutaDeItem(espacio: Espacio, empresaSlug: string, itemSlug: stri
   return espacio === 'app' ? `/cliente/empresas/${empresaSlug}/catalogo/${itemSlug}` : `/empresas/${empresaSlug}/catalogo/${itemSlug}`
 }
 
+/**
+ * La colección de un banner del Inicio: los productos y servicios que el
+ * negocio le enganchó (`?i=` ids, `?t=` título). La página valida los ids.
+ */
+export function rutaDeColeccion(espacio: Espacio, empresaSlug: string, itemIds: readonly string[], titulo?: string | null): string {
+  const q = new URLSearchParams()
+  q.set('i', itemIds.join(','))
+  if (titulo) q.set('t', titulo)
+  return `${rutaDeEmpresa(espacio, empresaSlug)}/coleccion?${q.toString()}`
+}
+
 /** Buscar excursiones (todas las empresas). */
 export function rutaDeBuscarExcursiones(espacio: Espacio): string {
   return espacio === 'app' ? '/cliente/excursiones' : '/excursiones'
