@@ -1,7 +1,7 @@
 import { unstable_cache } from 'next/cache'
 import type { CompanyPublic, PromotionPublic } from '@/modules/marketplace/types'
 import * as q from '@/modules/marketplace/queries'
-import { catalogoPublicoDeEmpresa, catalogoPublicoGlobal, itemCatalogoPublico, type FiltrosDescubrimiento } from '@/modules/catalog/publico'
+import { catalogoDeEmpresasRelacionadas, catalogoPublicoDeEmpresa, catalogoPublicoGlobal, itemCatalogoPublico, itemsPublicosPorIds, type FiltrosDescubrimiento } from '@/modules/catalog/publico'
 import type { MarketplaceFilters, PromotionFilters } from '@/modules/marketplace/types'
 
 /**
@@ -190,6 +190,26 @@ export async function getCatalogoPublicoDeEmpresa(companyId: string, limite = 24
     () => catalogoPublicoDeEmpresa(companyId, limite),
     ['mk-catalogo-empresa', companyId, String(limite)],
     { revalidate: 120, tags: [MARKETPLACE_TAG] }
+  )
+  return fn()
+}
+
+/** Los ítems de una colección de banner (por ids), en orden. Mismo tag que la vitrina. */
+export async function getItemsPublicosPorIds(companyId: string, ids: readonly string[]) {
+  const fn = unstable_cache(
+    () => itemsPublicosPorIds(companyId, ids),
+    ['mk-catalogo-coleccion', companyId, ids.join(',')],
+    { revalidate: 120, tags: [MARKETPLACE_TAG] }
+  )
+  return fn()
+}
+
+/** Lo que venden las empresas relacionadas con una (misma categoría de negocio). */
+export async function getCatalogoDeEmpresasRelacionadas(companyId: string, limite = 12) {
+  const fn = unstable_cache(
+    () => catalogoDeEmpresasRelacionadas(companyId, limite),
+    ['mk-catalogo-relacionadas', companyId, String(limite)],
+    { revalidate: 300, tags: [MARKETPLACE_TAG] }
   )
   return fn()
 }

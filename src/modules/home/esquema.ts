@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { MAX_ITEMS_BANNER } from './coleccion'
 import {
   COLORES_PANEL,
   COLOR_PANEL_POR_DEFECTO,
@@ -25,8 +26,13 @@ export const TIPOS_BLOQUE = [
 
 export type TipoBloque = (typeof TIPOS_BLOQUE)[number]
 
+/**
+ * `catalogo`: el banner lleva a una colección de productos y servicios de la
+ * empresa (`itemIds` del slide); `id` es el primero de ellos, para que el
+ * destino siga teniendo la misma forma que los demás.
+ */
 const DestinoCTA = z.object({
-  tipo: z.enum(['promocion', 'empresa', 'plan', 'excursion']),
+  tipo: z.enum(['promocion', 'empresa', 'plan', 'excursion', 'catalogo']),
   id: z.string().min(1).max(64),
 })
 
@@ -46,10 +52,19 @@ export const HeroSlide = z
     colorPanel: z.enum(COLORES_PANEL).default(COLOR_PANEL_POR_DEFECTO),
     /** Bajo la tarjeta: negocio y botón. No aplica a «Texto encima», que ya los lleva dentro. */
     mostrarPie: z.boolean().default(true),
+    /** Solo destino `catalogo`: los productos y servicios de la colección, en orden. */
+    itemIds: z.array(z.string().min(1).max(64)).max(MAX_ITEMS_BANNER).default([]),
   })
   .superRefine((slide, ctx) => {
     if (formatoRequiereTexto(slide.formato) && slide.titulo.length === 0) {
       ctx.addIssue({ code: 'custom', path: ['titulo'], message: 'El titular es obligatorio salvo con «Solo imagen».' })
+    }
+    if (slide.ctaDestino.tipo === 'catalogo') {
+      if (slide.itemIds.length === 0) {
+        ctx.addIssue({ code: 'custom', path: ['itemIds'], message: 'Elige al menos un producto o servicio para el banner.' })
+      } else if (slide.ctaDestino.id !== slide.itemIds[0]) {
+        ctx.addIssue({ code: 'custom', path: ['ctaDestino'], message: 'El destino del banner no coincide con su colección.' })
+      }
     }
   })
 

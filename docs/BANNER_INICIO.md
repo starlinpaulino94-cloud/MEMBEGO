@@ -36,6 +36,24 @@ el cliente.
 La vista previa del teléfono usa `TarjetaBanner`, el mismo componente que
 `VibeHero` en el inicio del cliente.
 
+## Un banner enganchado a productos y servicios
+
+El destino «Productos y servicios» (`ctaDestino.tipo = 'catalogo'`) engancha
+hasta `MAX_ITEMS_BANNER` (12) ítems ACTIVOS de la empresa (`itemIds`, en el
+orden marcado). Al tocar el banner se abre la **colección**:
+
+- `/cliente/empresas/<slug>/coleccion?i=<ids>&t=<título>` en la app, y la
+  misma ruta bajo `/empresas/…` en la landing (`rutaDeColeccion`).
+- Arriba, **los principales**: los ítems del banner, en su orden, solo los
+  que hoy son públicos. Si no queda ninguno, «no encontrado».
+- Debajo, **«También te puede interesar»**: lo que venden empresas
+  relacionadas (misma categoría de negocio; si no hay, misma ciudad; si no,
+  lo más reciente), repartido por rondas para que una sola no lo acapare
+  (`catalogoDeEmpresasRelacionadas`).
+- Los ids de la URL pasan por `parsearIdsDeColeccion` y por el mismo filtro
+  de visibilidad del marketplace: una URL retocada no enseña nada que no
+  fuera público.
+
 ## Dónde vive cada cosa
 
 | Pieza | Archivo |
@@ -47,6 +65,8 @@ La vista previa del teléfono usa `TarjetaBanner`, el mismo componente que
 | Editor del panel | `src/components/admin/EditorInicio.tsx` |
 | Subida de la imagen (autoriza antes de escribir) | `src/modules/home/imagen-banner-accion.ts` |
 | Qué URLs de imagen acepta un banner | `src/modules/home/imagen-banner.ts` y `hero-publico.ts` |
+| Colección (ids, título, carga y página) | `src/modules/home/coleccion.ts`, `coleccion-carga.ts`, `src/components/catalogo/ColeccionDeBanner.tsx` |
+| Ítems por id y empresas relacionadas | `src/modules/catalog/publico.ts` |
 
 ## Reglas que conviene no romper
 
@@ -64,4 +84,4 @@ La vista previa del teléfono usa `TarjetaBanner`, el mismo componente que
 - **«Solo imagen» sin imagen no se puede guardar**: si ni la subida ni el
   destino aportan una, el servidor lo rechaza con un mensaje claro.
 
-Las pruebas están en `tests/banner-formatos.test.ts`.
+Las pruebas están en `tests/banner-formatos.test.ts` y `tests/banner-coleccion.test.ts`.

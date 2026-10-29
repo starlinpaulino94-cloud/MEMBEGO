@@ -1,5 +1,6 @@
 import { conEmpresa } from '@/lib/tenant'
-import { rutaDeExcursion, rutaDePlan, type Espacio } from '@/modules/comercio/rutas'
+import { rutaDeColeccion, rutaDeExcursion, rutaDePlan, type Espacio } from '@/modules/comercio/rutas'
+import { itemsPublicosPorIds } from '@/modules/catalog/publico'
 import { formatPrice } from '@/lib/format'
 import { getSupabaseUrl } from '@/lib/env'
 import { esImagenDeBannerPropia } from './imagen-banner'
@@ -64,6 +65,16 @@ export async function heroPublico(companyId: string, slide: HeroSlide, espacio: 
         href = `/cliente/promociones/${promo.id}`
         imagen = promo.imagenUrl
         propias.push(promo.imagenUrl, ...promo.imagenes)
+        break
+      }
+      case 'catalogo': {
+        // Solo los ítems que HOY son públicos: si alguno se pausó, la colección
+        // sigue con los demás; si no queda ninguno, el banner no se enseña.
+        const items = await itemsPublicosPorIds(companyId, slide.itemIds)
+        if (items.length === 0) return null
+        href = rutaDeColeccion(espacio, empresa.slug, items.map((i) => i.id), slide.titulo || null)
+        imagen = items.find((i) => i.imageUrl)?.imageUrl ?? empresa.bannerUrl ?? empresa.logoUrl
+        propias.push(...items.map((i) => i.imageUrl))
         break
       }
       case 'excursion': {

@@ -129,6 +129,103 @@ export async function itemCatalogoPublico(companySlug: string, itemSlug: string)
   }
 }
 
+/**
+ * Los ítems de una COLECCIÓN (los que un banner del Inicio enganchó), en el
+ * orden pedido. Solo los de esa empresa y solo los visibles hoy: un id ajeno o
+ * de un ítem pausado simplemente no sale.
+ */
+export async function itemsPublicosPorIds(companyId: string, ids: readonly string[]): Promise<ItemPublicoResumen[]> {
+  const limpios = [...new Set(ids)].slice(0, MAX_ITEMS_PUBLICOS)
+  if (limpios.length === 0) return []
+  try {
+    if (!(await empresaPublicaCatalogo(companyId))) return []
+    const filas = await sinEmpresa('marketplace: ítems de una colección por id', (tx) =>
+      tx.catalogItem.findMany({
+        where: { id: { in: limpios }, companyId, company: EMPRESA_VISIBLE, ...itemVisible(new Date()) },
+        include: INCLUIR,
+      })
+    )
+    const porId = new Map(filas.map((f) => [f.id, f]))
+    return limpios
+      .map((id) => porId.get(id))
+      .filter((f): f is NonNullable<typeof f> => !!f)
+      .map(aResumenPublico)
+      .filter((x): x is ItemPublicoResumen => !!x)
+  } catch (e) {
+    console.error('[itemsPublicosPorIds]', e)
+    return []
+  }
+}
+
+/**
+ * Lo que venden las EMPRESAS RELACIONADAS con una: las que comparten alguna
+ * categoría de negocio (Comida, Belleza, Automotriz…), sin incluirla a ella. Si
+ * no comparte categoría con nadie, se cae a las de su misma ciudad; y si
+ * tampoco, a lo más reciente del marketplace. Siempre a través del mismo
+ * filtro de visibilidad y de la capacidad de catálogo de cada empresa.
+ */
+export async function catalogoDeEmpresasRelacionadas(companyId: string, limite = 12): Promise<ItemPublicoResumen[]> {
+  const tope = Math.min(Math.max(limite, 1), MAX_ITEMS_PUBLICOS)
+  try {
+    const empresa = await sinEmpresa('marketplace: categorías y ciudad de la empresa del banner', (tx) =>
+      tx.company.findUnique({
+        where: { id: companyId },
+        select: { ciudad: true, categories: { select: { categoryId: true } } },
+      })
+    )
+    const categorias = empresa?.categories.map((c) => c.categoryId) ?? []
+    const porAfinidad: Prisma.CompanyWhereInput[] = [
+      ...(categorias.length > 0 ? [{ categories: { some: { categoryId: { in: categorias } } } }] : []),
+      ...(empresa?.ciudad ? [{ ciudad: empresa.ciudad }] : []),
+      {},
+    ]
+    for (const afinidad of porAfinidad) {
+      const candidatas = await sinEmpresa('marketplace: empresas relacionadas con catálogo', (tx) =>
+        tx.catalogItem.findMany({
+          where: { companyId: { not: companyId }, company: { ...EMPRESA_VISIBLE, ...afinidad }, ...itemVisible(new Date()) },
+          distinct: ['companyId'],
+          select: { companyId: true },
+          take: 24,
+        })
+      )
+      const permitidas: string[] = []
+      for (const { companyId: id } of candidatas) if (await empresaPublicaCatalogo(id)) permitidas.push(id)
+      if (permitidas.length === 0) continue
+      const filas = await sinEmpresa('marketplace: catálogo de empresas relacionadas', (tx) =>
+        tx.catalogItem.findMany({
+          where: { companyId: { in: permitidas }, company: EMPRESA_VISIBLE, ...itemVisible(new Date()) },
+          include: INCLUIR,
+          orderBy: [{ publishedAt: 'desc' }, { id: 'asc' }],
+          take: tope * 2,
+        })
+      )
+      // Que no lo acapare una sola empresa: se reparte por rondas entre las relacionadas.
+      const porEmpresa = new Map<string, ItemPublicoResumen[]>()
+      for (const f of filas) {
+        const r = aResumenPublico(f)
+        if (!r) continue
+        const lista = porEmpresa.get(f.companyId) ?? []
+        lista.push(r)
+        porEmpresa.set(f.companyId, lista)
+      }
+      const salida: ItemPublicoResumen[] = []
+      const colas = [...porEmpresa.values()]
+      while (salida.length < tope && colas.some((c) => c.length > 0)) {
+        for (const cola of colas) {
+          const siguiente = cola.shift()
+          if (siguiente) salida.push(siguiente)
+          if (salida.length >= tope) break
+        }
+      }
+      if (salida.length > 0) return salida
+    }
+    return []
+  } catch (e) {
+    console.error('[catalogoDeEmpresasRelacionadas]', e)
+    return []
+  }
+}
+
 export interface FiltrosDescubrimiento {
   q?: string
   /** slug de una categoría de la empresa (se compara por slug, entre empresas). */

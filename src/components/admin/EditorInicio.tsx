@@ -38,6 +38,7 @@ import {
   type FormatoBanner,
 } from '@/modules/home/banner-formatos'
 import { subirImagenBanner } from '@/modules/home/imagen-banner-accion'
+import { MAX_ITEMS_BANNER } from '@/modules/home/coleccion'
 import { FORMATOS } from '@/lib/imagen/formatos'
 import { useEditorDeImagen } from '@/components/imagen/useEditorDeImagen'
 import { PieBanner, TarjetaBanner, llevaPie } from '@/components/cliente/inicio/TarjetaBanner'
@@ -88,8 +89,10 @@ export interface SlideEstado {
   subtitulo: string
   imagenUrl: string
   ctaTexto: string
-  ctaTipo: 'promocion' | 'empresa' | 'plan' | 'excursion'
+  ctaTipo: 'promocion' | 'empresa' | 'plan' | 'excursion' | 'catalogo'
   ctaId: string
+  /** Solo destino «Productos y servicios»: los ítems de la colección, en orden. */
+  itemIds: string[]
   /** Cómo va el texto sobre la imagen (ver `banner-formatos.ts`). */
   formato: FormatoBanner
   colorPanel: ColorPanel
@@ -128,6 +131,7 @@ function slideVacio(companyId: string): SlideEstado {
     ctaTexto: 'Ver oferta',
     ctaTipo: 'empresa',
     ctaId: companyId,
+    itemIds: [],
     // Banner nuevo: la imagen manda; el texto solo si el negocio lo pide.
     formato: FORMATO_BANNER_NUEVO,
     colorPanel: COLOR_PANEL_POR_DEFECTO,
@@ -201,6 +205,7 @@ export function EditorInicio({
   promociones,
   planes,
   excursiones,
+  catalogo,
   previewEmpresas,
   previewPlanes,
   previewCategorias,
@@ -214,6 +219,8 @@ export function EditorInicio({
   promociones: OpcionEntidad[]
   planes: OpcionEntidad[]
   excursiones: OpcionEntidad[]
+  /** Productos y servicios ACTIVOS de la empresa: lo que un banner puede enganchar. */
+  catalogo: OpcionEntidad[]
   previewEmpresas: { name: string }[]
   previewPlanes: { nombre: string; precio: number }[]
   previewCategorias: string[]
@@ -240,7 +247,9 @@ export function EditorInicio({
         ? planes
         : tipo === 'excursion'
           ? excursiones
-          : [{ id: companyId, titulo: companyName }]
+          : tipo === 'catalogo'
+            ? catalogo
+            : [{ id: companyId, titulo: companyName }]
 
   function armarEntrada() {
     return {
@@ -258,7 +267,9 @@ export function EditorInicio({
                   empresaId: companyId,
                   imagenUrl: s.imagenUrl || null,
                   ctaTexto: s.ctaTexto,
-                  ctaDestino: { tipo: s.ctaTipo, id: s.ctaId },
+                  // Con «Productos y servicios» el destino es el primero de la colección.
+                  ctaDestino: { tipo: s.ctaTipo, id: s.ctaTipo === 'catalogo' ? (s.itemIds[0] ?? '') : s.ctaId },
+                  itemIds: s.ctaTipo === 'catalogo' ? s.itemIds : [],
                   formato: s.formato,
                   colorPanel: s.colorPanel,
                   mostrarPie: s.mostrarPie,
@@ -797,21 +808,21 @@ export function EditorInicio({
                       <select
                         id={`ed-tipo-${i}`}
                         value={slide.ctaTipo}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          const tipo = e.target.value as SlideEstado['ctaTipo']
                           actualizaSlide(i, {
-                            ctaTipo: e.target.value as SlideEstado['ctaTipo'],
-                            ctaId:
-                              e.target.value === 'empresa'
-                                ? companyId
-                                : (opcionesSegunTipo(e.target.value as SlideEstado['ctaTipo'])[0]?.id ?? ''),
+                            ctaTipo: tipo,
+                            ctaId: tipo === 'empresa' ? companyId : (opcionesSegunTipo(tipo)[0]?.id ?? ''),
+                            itemIds: tipo === 'catalogo' ? slide.itemIds : [],
                           })
-                        }
+                        }}
                         className={CAMPO}
                       >
                         <option value="promocion">Promoción</option>
                         <option value="empresa">Empresa</option>
                         <option value="plan">Plan</option>
                         <option value="excursion">Excursión</option>
+                        <option value="catalogo">Productos y servicios</option>
                       </select>
                     </div>
                     <div>
@@ -827,7 +838,53 @@ export function EditorInicio({
                       />
                     </div>
                   </div>
-                  {slide.ctaTipo !== 'empresa' && (
+                  {slide.ctaTipo === 'catalogo' && (
+                    <fieldset>
+                      <legend className="mb-1 text-label-md text-muted-foreground">
+                        Productos y servicios del banner · {slide.itemIds.length} de {MAX_ITEMS_BANNER}
+                      </legend>
+                      <p className="mb-2 text-label-sm text-muted-foreground">
+                        Al tocar el banner se abre un catálogo con estos como principales y, debajo, lo que venden
+                        negocios relacionados. El orden en que los marques es el orden en que salen.
+                      </p>
+                      {catalogo.length === 0 ? (
+                        <p className="text-label-sm text-warning-ink">
+                          No tienes productos ni servicios activos. Publica alguno en Catálogo y vuelve aquí.
+                        </p>
+                      ) : (
+                        <ul className="max-h-56 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
+                          {catalogo.map((o) => {
+                            const marcado = slide.itemIds.includes(o.id)
+                            const lleno = !marcado && slide.itemIds.length >= MAX_ITEMS_BANNER
+                            return (
+                              <li key={o.id}>
+                                <label className={cn('flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-small hover:bg-muted', lleno && 'cursor-not-allowed opacity-50')}>
+                                  <input
+                                    type="checkbox"
+                                    className="size-4"
+                                    checked={marcado}
+                                    disabled={lleno}
+                                    onChange={(e) =>
+                                      actualizaSlide(i, {
+                                        itemIds: e.target.checked
+                                          ? [...slide.itemIds, o.id]
+                                          : slide.itemIds.filter((id) => id !== o.id),
+                                      })
+                                    }
+                                  />
+                                  <span className="min-w-0 flex-1 truncate">{o.titulo}</span>
+                                  {marcado ? (
+                                    <span className="text-label-sm tabular-nums text-muted-foreground">#{slide.itemIds.indexOf(o.id) + 1}</span>
+                                  ) : null}
+                                </label>
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      )}
+                    </fieldset>
+                  )}
+                  {slide.ctaTipo !== 'empresa' && slide.ctaTipo !== 'catalogo' && (
                     <div>
                       <label className="mb-1 block text-label-md text-muted-foreground" htmlFor={`ed-dest-${i}`}>
                         Elemento destino
