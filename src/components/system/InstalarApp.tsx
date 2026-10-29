@@ -82,77 +82,49 @@ export function InstalarApp() {
       className="theme-landing fixed inset-x-0 bottom-0 z-toast px-3 pb-[calc(env(safe-area-inset-bottom,0px)+0.75rem)] sm:bottom-4 sm:left-auto sm:right-4 sm:max-w-sm sm:px-0 sm:pb-0"
       data-testid="aviso-instalar"
     >
-      <div className="rounded-2xl border border-border bg-card p-4 text-foreground shadow-xl">
-        <div className="flex items-start gap-3">
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-            <Image src="/icon-192.png" alt="" width={36} height={36} className="rounded-lg" />
+      <div className="rounded-2xl border border-border bg-card p-3 text-foreground shadow-xl">
+        <div className="flex items-center gap-3">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+            <Image src="/icon-192.png" alt="" width={32} height={32} className="rounded-lg" />
           </span>
-          <div className="min-w-0 flex-1">
-            <p className="font-semibold leading-tight">Instala MembeGo en tu dispositivo</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Gratis y sin tienda: queda como una app en tu pantalla de inicio, con tus QR y avisos a un toque.
-            </p>
-          </div>
+          <button
+            type="button"
+            onClick={instalable ? instalar : () => setGuiaAbierta(true)}
+            className="inline-flex min-w-0 flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-sm hover:opacity-90"
+          >
+            <Download className="h-4 w-4 shrink-0" aria-hidden />
+            Instalar MembeGo ahora
+          </button>
           <button
             type="button"
             onClick={cerrar}
-            aria-label="Ahora no"
-            className="-mr-1 -mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+            aria-label="Cerrar"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             <X className="h-4 w-4" aria-hidden />
           </button>
         </div>
 
-        {instalable ? (
-          <div className="mt-3 flex gap-2">
-            <button
-              type="button"
-              onClick={instalar}
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm hover:opacity-90"
-            >
-              <Download className="h-4 w-4" aria-hidden />
-              Instalar
-            </button>
-            <button
-              type="button"
-              onClick={cerrar}
-              className="rounded-xl px-4 py-2.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              Ahora no
-            </button>
-          </div>
-        ) : (
-          <div className="mt-3">
-            {guiaAbierta ? (
-              <ol className="space-y-2 rounded-xl bg-muted/50 p-3 text-sm">
-                <li className="flex items-center gap-2">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <Share className="h-4 w-4" aria-hidden />
-                  </span>
-                  <span>
-                    En Safari, toca <strong>Compartir</strong> (el cuadrado con la flecha).
-                  </span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <PlusSquare className="h-4 w-4" aria-hidden />
-                  </span>
-                  <span>
-                    Elige <strong>Añadir a pantalla de inicio</strong> y confirma.
-                  </span>
-                </li>
-              </ol>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setGuiaAbierta(true)}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm hover:opacity-90"
-              >
-                <Download className="h-4 w-4" aria-hidden />
-                Ver cómo instalar
-              </button>
-            )}
-          </div>
+        {/* iPhone / iPad: no hay diálogo nativo; al pulsar el botón se enseñan los dos pasos. */}
+        {!instalable && guiaAbierta && (
+          <ol className="mt-3 space-y-2 rounded-xl bg-muted/50 p-3 text-sm">
+            <li className="flex items-center gap-2">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Share className="h-4 w-4" aria-hidden />
+              </span>
+              <span>
+                En Safari, toca <strong>Compartir</strong> (el cuadrado con la flecha).
+              </span>
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <PlusSquare className="h-4 w-4" aria-hidden />
+              </span>
+              <span>
+                Elige <strong>Añadir a pantalla de inicio</strong> y confirma.
+              </span>
+            </li>
+          </ol>
         )}
       </div>
     </div>
