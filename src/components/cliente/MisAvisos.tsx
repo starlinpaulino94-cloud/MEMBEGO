@@ -1,6 +1,13 @@
+'use client'
+
+import { useState, useTransition } from 'react'
 import Link from 'next/link'
-import { AlertCircle, BadgeCheck, Bell, Gift, Info, XCircle } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { AlertCircle, BadgeCheck, Bell, Gift, Info, Trash2, X, XCircle } from 'lucide-react'
+import { toast } from 'sonner'
 import type { NotifTipo } from '@prisma/client'
+import { Button } from '@/components/ui/button'
+import { eliminarNotificacion, eliminarTodasNotificaciones } from '@/modules/notificaciones/actions'
 
 /**
  * LOS AVISOS DE LA PERSONA, en su propia pantalla.
@@ -69,29 +76,79 @@ function cuando(d: Date): string {
 }
 
 export function MisAvisos({ avisos }: { avisos: AvisoPropio[] }) {
-  if (avisos.length === 0) return null
-  const sinLeer = avisos.filter((a) => !a.leida).length
+  const router = useRouter()
+  const [pendiente, empezar] = useTransition()
+  // Lo ya eliminado desaparece al instante; el servidor lo confirma y `refresh` lo asienta.
+  const [quitados, setQuitados] = useState<ReadonlySet<string>>(new Set())
+  const [confirmando, setConfirmando] = useState(false)
+
+  const visibles = avisos.filter((a) => !quitados.has(a.id))
+  if (visibles.length === 0) return null
+  const sinLeer = visibles.filter((a) => !a.leida).length
+
+  function eliminar(id: string) {
+    empezar(async () => {
+      const r = await eliminarNotificacion(id)
+      if (!r.ok) {
+        toast.error('No se pudo eliminar el aviso. Inténtalo de nuevo.')
+        return
+      }
+      setQuitados((prev) => new Set(prev).add(id))
+      router.refresh()
+    })
+  }
+
+  function eliminarTodos() {
+    empezar(async () => {
+      const r = await eliminarTodasNotificaciones()
+      setConfirmando(false)
+      if (!r.ok) {
+        toast.error('No se pudieron eliminar tus avisos. Inténtalo de nuevo.')
+        return
+      }
+      setQuitados(new Set(avisos.map((a) => a.id)))
+      toast.success('Avisos eliminados.')
+      router.refresh()
+    })
+  }
 
   return (
     <section className="mb-6" aria-labelledby="titulo-mis-avisos" data-testid="mis-avisos">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <h2 id="titulo-mis-avisos" className="text-label-lg font-semibold text-foreground">
-          Tus avisos
-        </h2>
-        {sinLeer > 0 && (
-          <span className="rounded-full bg-destructive px-2 py-0.5 text-[12px] font-bold leading-none text-white" data-testid="mis-avisos-sin-leer">
-            {sinLeer} sin leer
-          </span>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <h2 id="titulo-mis-avisos" className="text-label-lg font-semibold text-foreground">
+            Tus avisos
+          </h2>
+          {sinLeer > 0 && (
+            <span className="rounded-full bg-destructive px-2 py-0.5 text-[12px] font-bold leading-none text-white" data-testid="mis-avisos-sin-leer">
+              {sinLeer} sin leer
+            </span>
+          )}
+        </div>
+        {confirmando ? (
+          <div className="flex items-center gap-2" role="group" aria-label="Confirmar eliminar todos los avisos">
+            <span className="text-small text-muted-foreground">¿Eliminar todos?</span>
+            <Button type="button" variant="destructive" size="sm" disabled={pendiente} onClick={eliminarTodos} data-testid="mis-avisos-confirmar-todos">
+              Sí, eliminar
+            </Button>
+            <Button type="button" variant="ghost" size="sm" disabled={pendiente} onClick={() => setConfirmando(false)}>
+              Cancelar
+            </Button>
+          </div>
+        ) : (
+          <Button type="button" variant="ghost" size="sm" disabled={pendiente} onClick={() => setConfirmando(true)} data-testid="mis-avisos-eliminar-todos">
+            <Trash2 className="size-4" aria-hidden /> Eliminar todos
+          </Button>
         )}
       </div>
 
       <ul className="divide-y divide-border/40 overflow-hidden rounded-xl border border-border/60 bg-card">
-        {avisos.map((a) => {
+        {visibles.map((a) => {
           const { icon: Icon, cls } = ICONO[a.tipo] ?? POR_DEFECTO
           // Un aviso sin destino no se envuelve en un enlace: un enlace que no
           // lleva a ningún sitio es peor que ningún enlace.
           const cuerpo = (
-            <div className="flex items-start gap-3 px-4 py-3">
+            <div className="flex items-start gap-3 py-3 pl-4 pr-12">
               <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${cls}`}>
                 <Icon className="h-4 w-4" aria-hidden />
               </span>
@@ -107,7 +164,7 @@ export function MisAvisos({ avisos }: { avisos: AvisoPropio[] }) {
             </div>
           )
           return (
-            <li key={a.id} className={a.leida ? undefined : 'bg-info/5'} data-testid={`aviso-${a.id}`}>
+            <li key={a.id} className={`relative ${a.leida ? '' : 'bg-info/5'}`} data-testid={`aviso-${a.id}`}>
               {a.href ? (
                 <Link href={a.href} className="block transition hover:bg-muted/50">
                   {cuerpo}
@@ -115,6 +172,17 @@ export function MisAvisos({ avisos }: { avisos: AvisoPropio[] }) {
               ) : (
                 cuerpo
               )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-2 top-2 size-8 text-muted-foreground hover:text-foreground"
+                aria-label={`Eliminar aviso: ${a.titulo}`}
+                disabled={pendiente}
+                onClick={() => eliminar(a.id)}
+              >
+                <X className="size-4" aria-hidden />
+              </Button>
             </li>
           )
         })}

@@ -8,11 +8,14 @@ import {
   Bell,
   CheckCheck,
   ShieldCheck,
+  Trash2,
 } from 'lucide-react-native'
 import { useAuth } from '../src/lib/auth-context'
 import { goBackOr } from '../src/lib/navigation'
 import { resolveNotificationHref } from '../src/lib/notificacion-navegacion'
 import {
+  useEliminarNotificacion,
+  useEliminarTodasNotificaciones,
   useMarcarNotificacionLeida,
   useMarcarTodasNotificacionesLeidas,
   useNotificaciones,
@@ -44,6 +47,9 @@ function NotificacionesScreenContent() {
   )
   const markOne = useMarcarNotificacionLeida(userId)
   const markAll = useMarcarTodasNotificacionesLeidas(userId)
+  const removeOne = useEliminarNotificacion(userId)
+  const removeAll = useEliminarTodasNotificaciones(userId)
+  const [confirmingRemoveAll, setConfirmingRemoveAll] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const noLeidas = data?.noLeidas ?? 0
   const notificationCount = data?.notificaciones.length ?? 0
@@ -68,6 +74,21 @@ function NotificacionesScreenContent() {
     setActionError(null)
     markAll.mutate(undefined, {
       onError: () => setActionError('No pudimos actualizar las notificaciones. Intenta de nuevo.'),
+    })
+  }
+
+  function removeNotification(id: string) {
+    setActionError(null)
+    removeOne.mutate(id, {
+      onError: () => setActionError('No pudimos eliminar la notificación. Intenta de nuevo.'),
+    })
+  }
+
+  function removeAllNotifications() {
+    setActionError(null)
+    setConfirmingRemoveAll(false)
+    removeAll.mutate(undefined, {
+      onError: () => setActionError('No pudimos eliminar las notificaciones. Intenta de nuevo.'),
     })
   }
 
@@ -123,22 +144,58 @@ function NotificacionesScreenContent() {
             </Button>
           ) : null}
 
-          {noLeidas > 0 ? (
-            <View className="flex-row flex-wrap items-center justify-between gap-2">
-              <Text className="text-sm text-muted-foreground">
-                {notificationCount === 1
-                  ? '1 notificación'
-                  : notificationCount + ' notificaciones'}
-              </Text>
-              <Button
-                variant="outline"
-                size="sm"
-                loading={markAll.isPending}
-                onPress={markAllAsRead}
-                icon={<CheckCheck size={16} color={colors.primary.DEFAULT} />}
-              >
-                Marcar todas leídas
-              </Button>
+          {notificationCount > 0 ? (
+            <View className="gap-2">
+              <View className="flex-row flex-wrap items-center justify-between gap-2">
+                <Text className="text-sm text-muted-foreground">
+                  {notificationCount === 1
+                    ? '1 notificación'
+                    : notificationCount + ' notificaciones'}
+                </Text>
+                <View className="flex-row flex-wrap items-center gap-2">
+                  {noLeidas > 0 ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      loading={markAll.isPending}
+                      onPress={markAllAsRead}
+                      icon={<CheckCheck size={16} color={colors.primary.DEFAULT} />}
+                    >
+                      Marcar todas leídas
+                    </Button>
+                  ) : null}
+                  {confirmingRemoveAll ? null : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onPress={() => setConfirmingRemoveAll(true)}
+                      icon={<Trash2 size={16} color={colors.primary.DEFAULT} />}
+                    >
+                      Eliminar todas
+                    </Button>
+                  )}
+                </View>
+              </View>
+              {confirmingRemoveAll ? (
+                <View className="gap-2 rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3">
+                  <Text className="text-sm text-foreground">
+                    ¿Eliminar todas tus notificaciones? No se puede deshacer.
+                  </Text>
+                  <View className="flex-row flex-wrap gap-2">
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      loading={removeAll.isPending}
+                      onPress={removeAllNotifications}
+                    >
+                      Sí, eliminar todas
+                    </Button>
+                    <Button variant="outline" size="sm" onPress={() => setConfirmingRemoveAll(false)}>
+                      Cancelar
+                    </Button>
+                  </View>
+                </View>
+              ) : null}
             </View>
           ) : null}
 
@@ -202,6 +259,7 @@ function NotificacionesScreenContent() {
                   onPress={() =>
                     openNotification(notification.id, notification.leida, notification.href)
                   }
+                  onDelete={() => removeNotification(notification.id)}
                 />
               ))}
             </View>

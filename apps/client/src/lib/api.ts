@@ -786,6 +786,12 @@ export interface ActualizarNotificacionResponse {
   readonly noLeidas: number
 }
 
+export interface EliminarNotificacionesResponse {
+  readonly success: true
+  readonly eliminadas: number
+  readonly noLeidas: number
+}
+
 export interface CrearCitaBody {
   fecha: string
   hora: string
@@ -1379,6 +1385,16 @@ export const api = {
     fetchBff<ActualizarNotificacionResponse>('/api/v1/cliente/notificaciones', {
       method: 'PATCH',
       body: JSON.stringify({ accion: 'marcarTodasLeidas' }),
+    }),
+  eliminarNotificacion: (id: string) =>
+    fetchBff<EliminarNotificacionesResponse>('/api/v1/cliente/notificaciones', {
+      method: 'DELETE',
+      body: JSON.stringify({ id }),
+    }),
+  eliminarTodasNotificaciones: () =>
+    fetchBff<EliminarNotificacionesResponse>('/api/v1/cliente/notificaciones', {
+      method: 'DELETE',
+      body: JSON.stringify({ todas: true }),
     }),
   registrarPushToken: (token: string, platform: 'ANDROID' | 'IOS') =>
     postJson<{ success: true }>('/api/v1/cliente/notificaciones/push-token', { token, platform }),

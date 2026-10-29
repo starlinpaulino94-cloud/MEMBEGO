@@ -3890,3 +3890,5 @@ ADD CONSTRAINT "banners_inicio_companyId_fkey"
 FOREIGN KEY ("companyId") REFERENCES "companies"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 ALTER TABLE "banners_inicio" ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE "notificaciones" ADD COLUMN "eliminadaEn" TIMESTAMP(3);

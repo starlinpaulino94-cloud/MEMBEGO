@@ -85,3 +85,54 @@ export function useMarcarTodasNotificacionesLeidas(userId: string | null) {
     onSettled: () => queryClient.invalidateQueries({ queryKey }),
   })
 }
+
+export function useEliminarNotificacion(userId: string | null) {
+  const queryClient = useQueryClient()
+  const queryKey = notificacionesQueryKey(userId)
+
+  return useMutation({
+    mutationFn: (id: string) => api.eliminarNotificacion(id),
+    onMutate: async (id): Promise<MutationContext> => {
+      await queryClient.cancelQueries({ queryKey })
+      const previous = queryClient.getQueryData<NotificacionesResponse>(queryKey)
+      if (previous) {
+        const item = previous.notificaciones.find((notification) => notification.id === id)
+        queryClient.setQueryData<NotificacionesResponse>(queryKey, {
+          notificaciones: previous.notificaciones.filter((notification) => notification.id !== id),
+          noLeidas: item && !item.leida ? Math.max(0, previous.noLeidas - 1) : previous.noLeidas,
+        })
+      }
+      return { previous }
+    },
+    onError: (_error, _id, context) => {
+      if (context?.previous) queryClient.setQueryData(queryKey, context.previous)
+    },
+    onSuccess: (result) => {
+      queryClient.setQueryData<NotificacionesResponse>(queryKey, (current) =>
+        current ? { ...current, noLeidas: result.noLeidas } : current,
+      )
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey }),
+  })
+}
+
+export function useEliminarTodasNotificaciones(userId: string | null) {
+  const queryClient = useQueryClient()
+  const queryKey = notificacionesQueryKey(userId)
+
+  return useMutation({
+    mutationFn: () => api.eliminarTodasNotificaciones(),
+    onMutate: async (): Promise<MutationContext> => {
+      await queryClient.cancelQueries({ queryKey })
+      const previous = queryClient.getQueryData<NotificacionesResponse>(queryKey)
+      if (previous) {
+        queryClient.setQueryData<NotificacionesResponse>(queryKey, { notificaciones: [], noLeidas: 0 })
+      }
+      return { previous }
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previous) queryClient.setQueryData(queryKey, context.previous)
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey }),
+  })
+}

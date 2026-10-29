@@ -1,5 +1,6 @@
 import { requireRole } from '@/lib/auth/guards'
 import { sinEmpresa } from '@/lib/tenant'
+import { NOTIFICACIONES_VISIBLES } from '@/modules/notificaciones/visibles'
 import { getNovedadesInicio } from '@/modules/social/queries'
 import { FeedNovedades } from '@/components/cliente/FeedNovedades'
 import { MisAvisos, type AvisoPropio } from '@/components/cliente/MisAvisos'
@@ -48,7 +49,7 @@ export default async function NovedadesPage() {
     id
       ? sinEmpresa('cliente: sus avisos (cross-tenant)', (tx) =>
           tx.notificacion.findMany({
-            where: { userId: id },
+            where: { userId: id, ...NOTIFICACIONES_VISIBLES },
             orderBy: { createdAt: 'desc' },
             take: 20,
             select: { id: true, tipo: true, titulo: true, mensaje: true, href: true, leida: true, createdAt: true },

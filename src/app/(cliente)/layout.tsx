@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { NOTIFICACIONES_VISIBLES } from '@/modules/notificaciones/visibles'
 import Image from 'next/image'
 import { headers } from 'next/headers'
 import { Inter } from 'next/font/google'
@@ -67,7 +68,7 @@ export default async function ClienteLayout({
     // aplicación no se cae por un badge.
     user.metadata.dbUserId
       ? sinEmpresa('cliente: avisos sin leer (cross-tenant)', (tx) =>
-          tx.notificacion.count({ where: { userId: user.metadata.dbUserId, leida: false } })
+          tx.notificacion.count({ where: { userId: user.metadata.dbUserId, leida: false, ...NOTIFICACIONES_VISIBLES } })
         ).catch(() => 0)
       : Promise.resolve(0),
   ])
