@@ -78,9 +78,15 @@ export function BotonComoSeHace() {
                   aria-current={activo?.id === t.id ? 'true' : undefined}
                   className="flex w-full items-center gap-3 rounded-xl p-2 text-left transition-colors duration-fast hover:bg-muted aria-[current=true]:bg-muted"
                 >
-                  <span className="relative block w-24 shrink-0 overflow-hidden rounded-md bg-muted">
+                  <span className="relative block w-24 shrink-0 overflow-hidden rounded-lg bg-muted">
                     {/* eslint-disable-next-line @next/next/no-img-element -- cartel externo de Storage */}
-                    <img src={urlCartel(t.id)} alt="" className="aspect-video w-full object-cover" loading="lazy" />
+                    <img
+                      src={urlCartel(t.id)}
+                      alt=""
+                      className="aspect-video w-full object-cover"
+                      loading="lazy"
+                      onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
+                    />
                     <PlayCircle className="absolute inset-0 m-auto size-6 text-white opacity-90 drop-shadow" aria-hidden />
                   </span>
                   <span className="min-w-0 flex-1">

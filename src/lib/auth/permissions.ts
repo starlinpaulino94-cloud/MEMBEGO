@@ -186,7 +186,7 @@ const RESTRICTED_ACCESS: Partial<Record<AppRole, AdminSection[]>> = {
    * LA BODEGA (INV-5e). Mueve existencias y nada más: la sección de inventario, sin panel de inicio —que muestra dinero— ni catálogo.
    * Qué funciones de inventario NO trae de serie lo dice `FUNCIONES_NEGADAS_POR_ROL`.
    */
-  BODEGA: ['inventario', 'tutoriales'],
+  BODEGA: ['inventario'],
   /**
    * EL MOSTRADOR. Lo que hace falta para cobrar, registrar una visita y
    * atender a quien está delante: el cliente, su membresía, el cobro, el
