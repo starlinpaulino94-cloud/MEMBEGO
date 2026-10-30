@@ -100,7 +100,13 @@ test('CustomerShell: header, ubicación, pestañas y dock', () => {
   const src = leer('src/components/layout/CustomerShell.tsx')
   assert.match(src, /action="\/cliente\/buscar"/)
   assert.match(src, /href="\/cliente\/cerca"/)
-  assert.match(src, /href="\/cliente\/perfil"/)
+  // El círculo de perfil SALIÓ de la cabecera (2026-10-30): solo quedan buscador,
+  // campana y carrito. El perfil sigue alcanzable desde «Cuenta» en el dock.
+  assert.doesNotMatch(src, /href="\/cliente\/perfil"/, 'el avatar volvió a la cabecera: sobra, «Cuenta» ya está en el dock')
+  assert.ok(
+    DESTINOS_CLIENTE.some((d) => d.href === '/cliente/perfil'),
+    'Cuenta desapareció del dock y tampoco está en la cabecera: no hay forma de llegar al perfil'
+  )
   // El atajo al escáner SALIÓ de la cabecera con el rediseño del Inicio, y no
   // se perdió: «Mi QR» es uno de los destinos del dock, que se alcanza desde
   // cualquier pantalla. Lo que hay que vigilar es eso —que siga alcanzable—, no

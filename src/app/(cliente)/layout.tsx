@@ -77,7 +77,6 @@ export default async function ClienteLayout({
   return (
     <div className={`${inter.variable} retail min-h-screen bg-background text-foreground`}>
       <CustomerShell
-        iniciales={(user.email || '?').trim().slice(0, 1).toUpperCase()}
         email={user.email}
         dbUserId={user.metadata.dbUserId}
         role={user.metadata.role}
