@@ -54,7 +54,7 @@ const pestanasDe = (ctx: ContextoNav, label: string) => entradas(ctx).find((i) =
 
 // ── De 45 a 24 ───────────────────────────────────────────────────────────────
 
-// (+1 con Tutoriales, que vive en Principal para que lo vea cualquier rol.)
+// (+1 con Tutoriales, que cierra el menú en Ajustes y lo ve cualquier rol.)
 test('el administrador con todo encendido ve 25 entradas; el catálogo de destinos sigue completo', () => {
   assert.equal(entradas(de('ADMINISTRADOR')).length, 25)
   // Los 45 destinos de antes siguen ofrecidos: ninguno desapareció, pasaron a ser pestañas.
@@ -85,7 +85,7 @@ test('los ocho grupos del hub conservan su orden y el panel arranca por el Resum
 test('Supervisor ve nueve entradas, y sin Comprobantes en Pagos', () => {
   const ctx = de('SUPERVISOR', { capacidades: COMERCIO })
   assert.deepEqual(etiquetas(ctx), [
-    'Resumen', 'Tutoriales', 'Canjes y QR', 'Citas', 'Pagos', 'Clientes', 'Fidelización', 'Reportes', 'Actividad',
+    'Resumen', 'Canjes y QR', 'Citas', 'Pagos', 'Clientes', 'Fidelización', 'Reportes', 'Actividad', 'Tutoriales',
   ])
   assert.deepEqual(pestanasDe(ctx, 'Pagos'), ['Por validar', 'Movimientos', 'Conciliación'])
   assert.deepEqual(pestanasDe(ctx, 'Clientes'), ['Directorio', 'Membresías', 'En riesgo'])
@@ -95,7 +95,7 @@ test('Supervisor ve nueve entradas, y sin Comprobantes en Pagos', () => {
 test('Marketing ve siete entradas, con Clientes reducido a En riesgo y Segmentos', () => {
   const ctx = de('MARKETING', { capacidades: COMERCIO })
   assert.deepEqual(etiquetas(ctx), [
-    'Resumen', 'Tutoriales', 'Beneficios y regalos', 'Clientes', 'Comunicaciones', 'Publicaciones', 'Reportes',
+    'Resumen', 'Beneficios y regalos', 'Clientes', 'Comunicaciones', 'Publicaciones', 'Reportes', 'Tutoriales',
   ])
   assert.deepEqual(pestanasDe(ctx, 'Clientes'), ['En riesgo', 'Segmentos'])
   assert.deepEqual(pestanasDe(ctx, 'Reportes'), ['Retención', 'Audiencia', 'Origen'])

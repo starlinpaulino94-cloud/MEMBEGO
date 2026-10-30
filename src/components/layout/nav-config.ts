@@ -1051,9 +1051,7 @@ function modulo(def: {
 const HUB_PRINCIPAL: NavGroup = {
   id: 'principal',
   label: 'Principal',
-  // Tutoriales va aquí y no en Ajustes: es ayuda, la necesita cualquier rol, y un grupo «Ajustes» con esa sola entrada
-  // para Marketing o Supervisión se leería como algo roto.
-  items: deAdmin('/admin/dashboard', '/admin/tutoriales'),
+  items: deAdmin('/admin/dashboard'),
 }
 
 const HUB_EXPERIENCIA: NavGroup = {
@@ -1285,6 +1283,9 @@ const HUB_AJUSTES: NavGroup = {
       ],
     }),
     ...deAdmin('/admin/integraciones', '/admin/supply'),
+    // Tutoriales cierra el menú, a petición del dueño del producto: es ayuda y va al final, entre lo último. Lo ve
+    // cualquier rol, así que para Marketing o Supervisión «Ajustes» se pinta con esta sola entrada.
+    ...deAdmin('/admin/tutoriales'),
   ],
 }
 
