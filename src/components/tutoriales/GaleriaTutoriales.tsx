@@ -117,11 +117,18 @@ export function TarjetaTutorial({ tutorial, onAbrir }: { tutorial: Tutorial; onA
     >
       <span className="relative block aspect-video w-full bg-muted">
         {/* eslint-disable-next-line @next/next/no-img-element -- cartel externo de Storage, sin optimizar */}
-        <img src={urlCartel(tutorial.id)} alt="" className="size-full object-cover" loading="lazy" />
+        {/* Sin cartel (el archivo no está en Storage) se oculta la imagen rota y queda el fondo con el icono. */}
+        <img
+          src={urlCartel(tutorial.id)}
+          alt=""
+          className="size-full object-cover"
+          loading="lazy"
+          onError={(e) => { e.currentTarget.style.visibility = 'hidden' }}
+        />
         <span className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors duration-fast group-hover:bg-black/20">
           <PlayCircle className="size-10 text-white opacity-80 drop-shadow transition-opacity group-hover:opacity-100" aria-hidden />
         </span>
-        <span className="absolute bottom-2 right-2 rounded-md bg-black/70 px-1.5 py-0.5 text-[11px] font-medium text-white">
+        <span className="absolute bottom-2 right-2 rounded-lg bg-black/70 px-1.5 py-0.5 text-xs font-medium text-white">
           {duracionLegible(tutorial.duracionS)}
         </span>
       </span>

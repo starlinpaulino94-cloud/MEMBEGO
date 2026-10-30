@@ -208,15 +208,19 @@ test('cada rol de empresa ve el hub con sus ocho grupos', () => {
  * encoger un menú es también quitarle a alguien algo que usaba, aquí queda
  * exactamente qué le queda a cada uno.
  */
-test('el mostrador ve cuatro grupos, y marketing no está entre ellos', () => {
+test('el mostrador ve cuatro grupos de trabajo más Ajustes con solo Tutoriales, y marketing no está entre ellos', () => {
   const ctx = { role: 'CAJERO' as AppRole, scope: 'COMPANY' as const, capacidades: ['CITAS', 'SEGUIMIENTO', 'RULETA', 'EXCURSIONES'] as CapacidadNav[] }
   const espacios = visibleWorkspaces(ctx)
-  assert.deepEqual(visibleGroups(espacios[0]!, ctx).map((g) => g.id), [
+  const grupos = visibleGroups(espacios[0]!, ctx)
+  assert.deepEqual(grupos.map((g) => g.id), [
     'principal',
     'comercio',
     'operaciones',
     'clientes',
+    'ajustes',
   ])
+  // Ajustes aparece solo por Tutoriales (ayuda, para cualquier rol): ninguna configuración de la empresa.
+  assert.deepEqual(grupos.find((g) => g.id === 'ajustes')!.items.map((i) => i.href), ['/admin/tutoriales'])
 })
 
 test('la operación ve su hub sin la configuración de experiencia', () => {
