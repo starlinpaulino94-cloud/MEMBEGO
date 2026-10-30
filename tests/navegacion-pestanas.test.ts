@@ -54,8 +54,9 @@ const pestanasDe = (ctx: ContextoNav, label: string) => entradas(ctx).find((i) =
 
 // ── De 45 a 24 ───────────────────────────────────────────────────────────────
 
-test('el administrador con todo encendido ve 24 entradas; el catálogo de destinos sigue completo', () => {
-  assert.equal(entradas(de('ADMINISTRADOR')).length, 24)
+// (+1 con Tutoriales, que cierra el menú en Ajustes y lo ve cualquier rol.)
+test('el administrador con todo encendido ve 25 entradas; el catálogo de destinos sigue completo', () => {
+  assert.equal(entradas(de('ADMINISTRADOR')).length, 25)
   // Los 45 destinos de antes siguen ofrecidos: ninguno desapareció, pasaron a ser pestañas.
   assert.ok(ENLACES_ADMIN.length >= 44, `el catálogo de destinos encogió: ${ENLACES_ADMIN.length}`)
   const ofrecidas = new Set(rutasOfrecidas(de('ADMINISTRADOR')))
@@ -63,8 +64,8 @@ test('el administrador con todo encendido ve 24 entradas; el catálogo de destin
   assert.deepEqual(perdidas, [], 'Destinos que existían y el menú ya no ofrece:\n  ' + perdidas.join('\n  '))
 })
 
-test('una empresa que no es proveedora de Membego ve 23; sin comercio de Membego, menos', () => {
-  assert.equal(entradas(de('ADMINISTRADOR', { capacidades: COMERCIO })).length, 23)
+test('una empresa que no es proveedora de Membego ve 24; sin comercio de Membego, menos', () => {
+  assert.equal(entradas(de('ADMINISTRADOR', { capacidades: COMERCIO })).length, 24)
   // Sin ninguna capacidad: no hay Citas, Catálogo, Pedidos, Parques y Tours, Prospectos, Publicaciones, Caja ni Entregas.
   const sinNada = etiquetas(de('ADMINISTRADOR', { capacidades: [] }))
   for (const fuera of ['Citas', 'Catálogo', 'Pedidos Membego', 'Parques y Tours', 'Prospectos', 'Publicaciones', 'Caja', 'Entregas Membego']) {
@@ -81,20 +82,20 @@ test('los ocho grupos del hub conservan su orden y el panel arranca por el Resum
 
 // ── Qué ve cada rol (03 · C.3) ───────────────────────────────────────────────
 
-test('Supervisor ve ocho entradas, y sin Comprobantes en Pagos', () => {
+test('Supervisor ve nueve entradas, y sin Comprobantes en Pagos', () => {
   const ctx = de('SUPERVISOR', { capacidades: COMERCIO })
   assert.deepEqual(etiquetas(ctx), [
-    'Resumen', 'Canjes y QR', 'Citas', 'Pagos', 'Clientes', 'Fidelización', 'Reportes', 'Actividad',
+    'Resumen', 'Canjes y QR', 'Citas', 'Pagos', 'Clientes', 'Fidelización', 'Reportes', 'Actividad', 'Tutoriales',
   ])
   assert.deepEqual(pestanasDe(ctx, 'Pagos'), ['Por validar', 'Movimientos', 'Conciliación'])
   assert.deepEqual(pestanasDe(ctx, 'Clientes'), ['Directorio', 'Membresías', 'En riesgo'])
   assert.deepEqual(pestanasDe(ctx, 'Fidelización'), ['Seguimiento'])
 })
 
-test('Marketing ve seis entradas, con Clientes reducido a En riesgo y Segmentos', () => {
+test('Marketing ve siete entradas, con Clientes reducido a En riesgo y Segmentos', () => {
   const ctx = de('MARKETING', { capacidades: COMERCIO })
   assert.deepEqual(etiquetas(ctx), [
-    'Resumen', 'Beneficios y regalos', 'Clientes', 'Comunicaciones', 'Publicaciones', 'Reportes',
+    'Resumen', 'Beneficios y regalos', 'Clientes', 'Comunicaciones', 'Publicaciones', 'Reportes', 'Tutoriales',
   ])
   assert.deepEqual(pestanasDe(ctx, 'Clientes'), ['En riesgo', 'Segmentos'])
   assert.deepEqual(pestanasDe(ctx, 'Reportes'), ['Retención', 'Audiencia', 'Origen'])

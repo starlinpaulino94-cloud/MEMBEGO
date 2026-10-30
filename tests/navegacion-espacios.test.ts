@@ -186,15 +186,16 @@ test('un rol acotado solo ve sus secciones', () => {
 })
 
 test('un grupo sin ni un módulo visible no se pinta', () => {
-  // A Marketing no le corresponde ninguna sección del dominio «Empresa», así
-  // que el grupo Ajustes no debe salir en su menú. Antes esto ocultaba un
-  // espacio entero del riel; con una sola columna, oculta el grupo — que es la
-  // misma regla: un encabezado sin nada debajo se lee como algo roto.
+  // A Marketing no le corresponde ninguna sección del dominio «Empresa»: de
+  // Ajustes solo le queda Tutoriales (ayuda, para cualquier rol), que cierra el
+  // menú a propósito. Si un día Tutoriales se mueve, el grupo tiene que
+  // desaparecer entero: un encabezado sin nada debajo se lee como algo roto.
   const empresa = workspacesForRole('MARKETING')[0]!
-  const grupos = visibleGroups(empresa, { role: 'MARKETING' }).map((g) => g.id)
-  assert.ok(!grupos.includes('ajustes'))
+  const grupos = visibleGroups(empresa, { role: 'MARKETING' })
+  const ajustes = grupos.find((g) => g.id === 'ajustes')
+  assert.deepEqual(ajustes?.items.map((i) => i.href), ['/admin/tutoriales'])
   assert.ok(grupos.length > 0, 'Marketing sí ve sus propios grupos.')
-  for (const g of visibleGroups(empresa, { role: 'MARKETING' })) {
+  for (const g of grupos) {
     assert.ok(g.items.length > 0, `El grupo ${g.id} se pinta vacío.`)
   }
 })

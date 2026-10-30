@@ -59,6 +59,7 @@ import {
   Wallet,
   WalletCards,
   Zap,
+  GraduationCap,
   type LucideIcon,
 } from 'lucide-react'
 import { ADMIN_ROLES, FULL_ADMIN_ROLES, type AppRole } from '@/types'
@@ -633,6 +634,13 @@ const G_ORGANIZACION: NavGroup = {
       icon: Building2,
       description: 'Sedes y puntos de operación.',
       keywords: ['sucursales', 'locales', 'tiendas', 'branches'],
+    },
+    {
+      href: '/admin/tutoriales',
+      label: 'Tutoriales',
+      icon: GraduationCap,
+      description: 'Cómo se hace cada cosa en el panel, en videos cortos.',
+      keywords: ['tutoriales', 'ayuda', 'videos', 'como se hace', 'aprender', 'guia'],
     },
   ],
 }
@@ -1275,6 +1283,9 @@ const HUB_AJUSTES: NavGroup = {
       ],
     }),
     ...deAdmin('/admin/integraciones', '/admin/supply'),
+    // Tutoriales cierra el menú, a petición del dueño del producto: es ayuda y va al final, entre lo último. Lo ve
+    // cualquier rol, así que para Marketing o Supervisión «Ajustes» se pinta con esta sola entrada.
+    ...deAdmin('/admin/tutoriales'),
   ],
 }
 

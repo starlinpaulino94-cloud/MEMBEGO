@@ -1,0 +1,1749 @@
+[
+ {
+  "id": "panel-menu",
+  "titulo": "Conocer el panel y su menú",
+  "modulo": "Resumen",
+  "rutas": [
+   "/admin/dashboard"
+  ],
+  "palabras": [
+   "empezar",
+   "barra lateral",
+   "práctica",
+   "bloques"
+  ],
+  "duracionS": 37,
+  "texto": "Fíjate en la barra lateral: está ordenada por bloques. Principal, App del cliente, Comercio, Operaciones, Clientes, Marketing, Analítica y Ajustes. Y arriba, la empresa activa. Si tu cuenta maneja varios negocios, desde ahí cambias de uno a otro. Cada entrada abre sus propias pestañas, y así el menú se mantiene corto. ¿Ves esta franja amarilla? Es el aviso de práctica. Cuando una empresa es de práctica, Membego te lo recuerda en pantalla para que nadie confunda la práctica con una operación real. En este recorrido todo es información ficticia."
+ },
+ {
+  "id": "resumen-hoy",
+  "titulo": "Qué requiere acción hoy",
+  "modulo": "Resumen",
+  "rutas": [
+   "/admin/dashboard"
+  ],
+  "palabras": [
+   "pagos por validar",
+   "vencen",
+   "citas de hoy"
+  ],
+  "duracionS": 20,
+  "texto": "Empezamos por el Resumen: lo que necesita tu atención hoy, y cómo va el mes. Primero, Hoy, requiere acción: los pagos por validar, las membresías que vencen en siete días, y los canjes y las citas de hoy. Cada tarjeta trae su enlace: Ir a Pagos, Ver en riesgo, Ir al escáner."
+ },
+ {
+  "id": "resumen-mes",
+  "titulo": "Cómo va el mes: ingresos, membresías y canjes",
+  "modulo": "Resumen",
+  "rutas": [
+   "/admin/dashboard"
+  ],
+  "palabras": [
+   "gráfica",
+   "clientes nuevos"
+  ],
+  "duracionS": 18,
+  "texto": "Después, Este mes: los ingresos, comparados con el mes anterior; las membresías activas, con cuántas vencen en siete días; los canjes del mes; y los clientes nuevos. Y debajo, una gráfica con los canjes de los últimos catorce días, que también puedes ver como tabla."
+ },
+ {
+  "id": "resumen-comercio",
+  "titulo": "El Comercio Membego en el Resumen",
+  "modulo": "Resumen",
+  "rutas": [
+   "/admin/dashboard"
+  ],
+  "palabras": [
+   "pedidos",
+   "stock bajo",
+   "ofertas activas"
+  ],
+  "duracionS": 21,
+  "texto": "Más abajo está el Comercio Membego, que sigue el camino completo: catálogo, inventario, ofertas y pedidos. Ves los pedidos nuevos y los que van en curso, las ventas Membego del mes, el catálogo publicado, el stock bajo, las ofertas activas y el valor del inventario. Cada tarjeta te lleva a su pantalla."
+ },
+ {
+  "id": "editor-inicio",
+  "titulo": "Conocer el Editor de inicio",
+  "modulo": "Editor de inicio",
+  "rutas": [
+   "/admin/personalizacion"
+  ],
+  "palabras": [
+   "app del cliente",
+   "vista previa",
+   "bloques"
+  ],
+  "duracionS": 22,
+  "texto": "Pasamos a App del cliente, que tiene una sola entrada: el Editor de inicio. Aquí decides cómo se ve tu negocio en la app de tus clientes. A la derecha, la vista previa, tal como la verá tu cliente en el teléfono, y a la izquierda los bloques que forman esa pantalla. Tú decides qué se muestra y en qué orden."
+ },
+ {
+  "id": "editor-bloque",
+  "titulo": "Mover o apagar un bloque del inicio",
+  "modulo": "Editor de inicio",
+  "rutas": [
+   "/admin/personalizacion"
+  ],
+  "palabras": [
+   "subir",
+   "bajar",
+   "ordenar"
+  ],
+  "duracionS": 19,
+  "texto": "Si seleccionas un bloque, ves sus controles: puedes subirlo, bajarlo o apagarlo. Antes de publicar nada, revisa la vista previa y confirma que los textos y las imágenes correspondan a tu negocio. Aquí solo estamos mirando; no vamos a publicar cambios."
+ },
+ {
+  "id": "editor-publicar",
+  "titulo": "Guardar, programar, publicar o pausar el inicio",
+  "modulo": "Editor de inicio",
+  "rutas": [
+   "/admin/personalizacion"
+  ],
+  "palabras": [
+   "borrador",
+   "programar"
+  ],
+  "duracionS": 19,
+  "texto": "Y arriba están las acciones clave. Guardar borrador conserva lo que preparaste. Programar lo publica en la fecha y la hora que elijas. Publicar en la app lo hace visible para tus clientes. Y Pausar retira la composición publicada cuando necesites quitarla."
+ },
+ {
+  "id": "editor-carrusel",
+  "titulo": "Administrar el carrusel de banners",
+  "modulo": "Editor de inicio",
+  "rutas": [
+   "/admin/personalizacion/carrusel",
+   "/admin/personalizacion"
+  ],
+  "palabras": [
+   "banner",
+   "hero",
+   "no se muestra"
+  ],
+  "duracionS": 24,
+  "texto": "La pestaña Carrusel reúne todos los banners del inicio de tu negocio: los que armaste tú, con tu imagen y tu texto, que siempre van primero, y los que se crean solos con lo que publicas, como promociones y planes. Desde aquí los editas, los quitas, o decides cuáles van primero. Y si un banner dice «No se muestra», es porque su destino o su imagen ya no están disponibles."
+ },
+ {
+  "id": "sinonimos",
+  "titulo": "Añadir sinónimos de búsqueda",
+  "modulo": "Editor de inicio",
+  "rutas": [
+   "/admin/sinonimos"
+  ],
+  "palabras": [
+   "buscador",
+   "car wash",
+   "lavado"
+  ],
+  "duracionS": 30,
+  "texto": "Ahora, los sinónimos de búsqueda. Imagina que un cliente busca «car wash», pero tú lo llamas «lavado». Con los sinónimos, Membego entiende que hablan de lo mismo, y lo encuentra igual. Escribes lo que buscan, escribes lo que quieres que encuentre, y añades. Aquí lo estamos probando con «lavado de carro» y «car wash», pero sin guardar. Un consejo: usa solo términos que representen de verdad tu negocio, y no prometas lo que no ofreces."
+ },
+ {
+  "id": "catalogo",
+  "titulo": "Conocer el catálogo y sus filtros",
+  "modulo": "Catálogo",
+  "rutas": [
+   "/admin/catalogo"
+  ],
+  "palabras": [
+   "productos",
+   "servicios",
+   "tipos"
+  ],
+  "duracionS": 25,
+  "texto": "Entramos a Comercio, y empezamos por el Catálogo. Tiene dos pestañas: Productos y servicios, e Inventario. En la primera vive todo lo que vendes, con sus precios, variantes, existencias y ofertas. Filtras por estado, y por tipo: producto físico, servicio, paquete, membresía, voucher, producto digital o tarjeta de regalo."
+ },
+ {
+  "id": "catalogo-crear",
+  "titulo": "Crear un producto o servicio",
+  "modulo": "Catálogo",
+  "rutas": [
+   "/admin/catalogo"
+  ],
+  "palabras": [
+   "nuevo",
+   "precio",
+   "variantes"
+  ],
+  "duracionS": 21,
+  "texto": "Crear un artículo es sencillo. Das clic en nuevo producto o servicio, y completas lo básico: nombre, descripción y precio. Después puedes añadir fotos, categorías y variantes; una variante es una opción concreta, como un tamaño o una modalidad. Aquí no lo vamos a guardar, solo recorremos el formulario."
+ },
+ {
+  "id": "catalogo-ficha",
+  "titulo": "La ficha de un producto",
+  "modulo": "Catálogo",
+  "rutas": [
+   "/admin/catalogo"
+  ],
+  "palabras": [
+   "existencias",
+   "ofertas",
+   "fuente de todo"
+  ],
+  "duracionS": 24,
+  "texto": "Y esta es la ficha de un producto ya preparado: sus variantes, sus existencias, sus ofertas, sus pedidos y cómo se ve en el marketplace. Antes de publicar, revisa nombre, precio, variantes, descripción e imágenes. El catálogo es la fuente de todo: de aquí salen el inventario y las ofertas que vamos a ver enseguida."
+ },
+ {
+  "id": "inventario-existencias",
+  "titulo": "Ver existencias y stock bajo",
+  "modulo": "Inventario",
+  "rutas": [
+   "/admin/inventario"
+  ],
+  "palabras": [
+   "sucursal",
+   "alerta"
+  ],
+  "duracionS": 16,
+  "texto": "La segunda pestaña es Inventario. Aquí ves las existencias por producto, variante y sucursal. Fíjate en este aromatizante: tiene pocas unidades en la sucursal de Higüey, y el sistema ya nos lo avisa como stock bajo."
+ },
+ {
+  "id": "inventario-variante",
+  "titulo": "La ficha de una variante",
+  "modulo": "Inventario",
+  "rutas": [
+   "/admin/inventario"
+  ],
+  "palabras": [
+   "cuánto hay",
+   "sucursal"
+  ],
+  "duracionS": 12,
+  "texto": "Al entrar a una variante vemos su ficha: cuánto hay en cada sucursal, qué está apartado por pedidos, y su historial de movimientos. Y desde ahí se administran las acciones de inventario que permita tu rol."
+ },
+ {
+  "id": "inventario-movimientos",
+  "titulo": "Movimientos y kardex",
+  "modulo": "Inventario",
+  "rutas": [
+   "/admin/inventario/movimientos",
+   "/admin/inventario"
+  ],
+  "palabras": [
+   "entradas",
+   "salidas",
+   "ajustes"
+  ],
+  "duracionS": 10,
+  "texto": "En Movimientos y kardex queda el rastro de todo: entradas, salidas y ajustes. Así sabes qué cambió, cuándo, y quién lo hizo."
+ },
+ {
+  "id": "inventario-entradas",
+  "titulo": "Registrar entradas y compras",
+  "modulo": "Inventario",
+  "rutas": [
+   "/admin/inventario/entradas",
+   "/admin/inventario/compras",
+   "/admin/inventario"
+  ],
+  "palabras": [
+   "mercancía",
+   "orden de compra"
+  ],
+  "duracionS": 11,
+  "texto": "Las entradas documentan cuándo llega la mercancía. Y las compras te permiten seguir las órdenes a tus proveedores: qué pediste, cuánto, y cómo va la recepción."
+ },
+ {
+  "id": "inventario-conteos",
+  "titulo": "Hacer un conteo físico",
+  "modulo": "Inventario",
+  "rutas": [
+   "/admin/inventario/conteos",
+   "/admin/inventario"
+  ],
+  "palabras": [
+   "almacén",
+   "diferencias"
+  ],
+  "duracionS": 13,
+  "texto": "¿Quieres comprobar que lo que dice el sistema es lo que hay en el almacén? Para eso están los conteos. Preparas la sesión, capturas lo que cuentas, y revisas las diferencias antes de confirmar cualquier ajuste."
+ },
+ {
+  "id": "inventario-transferencias",
+  "titulo": "Transferir productos entre sucursales",
+  "modulo": "Inventario",
+  "rutas": [
+   "/admin/inventario/transferencias",
+   "/admin/inventario"
+  ],
+  "palabras": [
+   "mover",
+   "traslado"
+  ],
+  "duracionS": 13,
+  "texto": "Las transferencias mueven productos entre sucursales. Mira esta: va de Centro a Plaza Higüey, y está en camino. Revisas origen, destino, artículos y estado antes de completarla."
+ },
+ {
+  "id": "inventario-reposicion",
+  "titulo": "Saber qué reponer",
+  "modulo": "Inventario",
+  "rutas": [
+   "/admin/inventario/reposicion",
+   "/admin/inventario"
+  ],
+  "palabras": [
+   "comprar",
+   "mínimo",
+   "borrador de orden"
+  ],
+  "duracionS": 15,
+  "texto": "La reposición te dice qué tienes que comprar. Compara lo que hay con lo que quieres tener, descuenta lo que ya pediste, y te lo agrupa por proveedor. Crear el borrador no pide nada: lo revisas, y lo pides cuando estés listo."
+ },
+ {
+  "id": "inventario-reservas",
+  "titulo": "Reservas por pedidos en curso",
+  "modulo": "Inventario",
+  "rutas": [
+   "/admin/inventario/reservas",
+   "/admin/inventario"
+  ],
+  "palabras": [
+   "apartado"
+  ],
+  "duracionS": 11,
+  "texto": "Las reservas son las cantidades apartadas por pedidos que todavía no terminan. Por eso a veces el stock disponible es menor que el total: lo apartado ya tiene dueño."
+ },
+ {
+  "id": "inventario-importar",
+  "titulo": "Importar existencias desde un archivo",
+  "modulo": "Inventario",
+  "rutas": [
+   "/admin/inventario/importar",
+   "/admin/inventario"
+  ],
+  "palabras": [
+   "CSV",
+   "carga masiva"
+  ],
+  "duracionS": 12,
+  "texto": "¿Tienes muchos productos que cargar? La importación te deja subir existencias desde un archivo. Descargas la plantilla, revisas las columnas, y validas todo antes de cargarlo."
+ },
+ {
+  "id": "inventario-proveedores-kits",
+  "titulo": "Proveedores y kits",
+  "modulo": "Inventario",
+  "rutas": [
+   "/admin/inventario/proveedores",
+   "/admin/inventario/kits",
+   "/admin/inventario"
+  ],
+  "palabras": [
+   "componentes",
+   "a quién le compras"
+  ],
+  "duracionS": 12,
+  "texto": "Y aquí, los proveedores y los kits. Los proveedores organizan a quién le compras. Los kits agrupan varios artículos en uno, para cuando tu negocio vende combos."
+ },
+ {
+  "id": "inventario-valor",
+  "titulo": "El valor del inventario",
+  "modulo": "Inventario",
+  "rutas": [
+   "/admin/inventario/valor",
+   "/admin/inventario"
+  ],
+  "palabras": [
+   "costo",
+   "económico"
+  ],
+  "duracionS": 10,
+  "texto": "El valor del inventario te da la lectura económica de lo que tienes en existencias. Ojo: según el rol, este acceso puede estar restringido."
+ },
+ {
+  "id": "inventario-reportes",
+  "titulo": "Reportes de inventario: kardex, margen y más",
+  "modulo": "Inventario",
+  "rutas": [
+   "/admin/inventario/reportes",
+   "/admin/inventario"
+  ],
+  "palabras": [
+   "rotación",
+   "mermas",
+   "vencimiento"
+  ],
+  "duracionS": 40,
+  "texto": "Y llegamos a los reportes, que responden preguntas distintas. El kardex: qué se movió. El margen: qué deja ganancia. Las mermas: qué se perdió. Y la rotación, los números de serie, los artículos sin ventas y los vencimientos te dicen qué rota, qué lleva serie, qué no se vende y qué está por vencer. Abramos un par de ellos. En cada uno puedes filtrar por período o por artículo, y si la pantalla ofrece exportación, descargas el resultado para tu análisis interno. Eso sí, cuida esa información, y compártela solo con quien corresponde."
+ },
+ {
+  "id": "inventario-cuidado",
+  "titulo": "Cuidado con ajustes y recepciones",
+  "modulo": "Inventario",
+  "rutas": [
+   "/admin/inventario"
+  ],
+  "palabras": [
+   "consejo",
+   "existencias"
+  ],
+  "duracionS": 16,
+  "texto": "Un último consejo: un ajuste o una recepción puede cambiar tus existencias. En una operación real, antes de confirmar, revisa bien el producto, la variante, la cantidad y la sucursal."
+ },
+ {
+  "id": "pedidos-atender",
+  "titulo": "Atender un pedido Membego",
+  "modulo": "Pedidos Membego",
+  "rutas": [
+   "/admin/pedidos-membego"
+  ],
+  "palabras": [
+   "marketplace",
+   "aceptar",
+   "cancelar",
+   "listo"
+  ],
+  "duracionS": 32,
+  "texto": "Ahora, Pedidos Membego. Aquí llegan los pedidos que vienen del marketplace. Abrimos uno: ves lo que el cliente pidió, el estado en que va, las cantidades, y lo necesario para atenderlo. Según el estado y tus permisos, tu equipo puede aceptar el pedido, ajustar el monto, marcarlo listo, o cancelarlo. Aquí solo señalamos las acciones; no vamos a completar nada. Membego controla cada transición y deja constancia."
+ },
+ {
+  "id": "pedidos-qr",
+  "titulo": "Entregar un pedido con su código QR",
+  "modulo": "Pedidos Membego",
+  "rutas": [
+   "/admin/pedidos-membego"
+  ],
+  "palabras": [
+   "retiro",
+   "escanear"
+  ],
+  "duracionS": 16,
+  "texto": "Cuando el pedido queda listo, aparece el código QR con el que el cliente lo recoge. Al confirmar la entrega, el pedido se cierra y se actualizan los registros. Y ojo: un QR real nunca se muestra en una grabación pública; este es de práctica."
+ },
+ {
+  "id": "pedidos-cuenta",
+  "titulo": "Mi cuenta Membego: saldo, límite y comisiones",
+  "modulo": "Pedidos Membego",
+  "rutas": [
+   "/admin/facturacion-membego",
+   "/admin/pedidos-membego"
+  ],
+  "palabras": [
+   "debes",
+   "crédito",
+   "CPA"
+  ],
+  "duracionS": 25,
+  "texto": "Pedidos Membego tiene dos pestañas más. Mi cuenta es tu relación financiera con la plataforma por los pedidos que Membego te trajo: cuánto debes, tu límite de crédito y cómo se te cobra. Abajo está el desglose: cada movimiento, qué comisión generó y cómo se llegó al saldo. Para cifras contractuales, la referencia válida es el estado de cuenta y el acuerdo que aplique."
+ },
+ {
+  "id": "pedidos-resultados",
+  "titulo": "Resultados Membego",
+  "modulo": "Pedidos Membego",
+  "rutas": [
+   "/admin/resultados-membego",
+   "/admin/pedidos-membego"
+  ],
+  "palabras": [
+   "clientes nuevos",
+   "atribución"
+  ],
+  "duracionS": 21,
+  "texto": "Y en Resultados Membego ves lo que la plataforma te produjo: clientes nuevos, pedidos y ventas atribuidas al canal de Membego, y cuánto te costó. Estas métricas aparecen cuando hay operaciones atribuidas. Y ojo: si la pantalla dice que algo todavía no se mide, no lo tomes como una cifra."
+ },
+ {
+  "id": "beneficios",
+  "titulo": "Conocer Beneficios y regalos",
+  "modulo": "Beneficios y regalos",
+  "rutas": [
+   "/admin/ofertas",
+   "/admin/promociones",
+   "/admin/deals"
+  ],
+  "palabras": [
+   "promociones",
+   "relámpago",
+   "VIP",
+   "crear beneficio"
+  ],
+  "duracionS": 17,
+  "texto": "Beneficios y regalos reúne en un solo lugar todo lo que ofreces a tus clientes. Arriba eliges una pestaña para ver cada tipo: Promociones, Relámpago, Regalos VIP y Sobre producto. Y hay un solo botón para crear: Crear beneficio."
+ },
+ {
+  "id": "beneficios-promociones",
+  "titulo": "Promociones públicas",
+  "modulo": "Beneficios y regalos",
+  "rutas": [
+   "/admin/ofertas",
+   "/admin/promociones"
+  ],
+  "palabras": [
+   "vigencia",
+   "activar"
+  ],
+  "duracionS": 14,
+  "texto": "En Promociones ves las públicas, las más recientes primero, con su estado y hasta cuándo valen. Son beneficios visibles para todos tus clientes. Revisa las condiciones, la vigencia y la publicación antes de activarlas."
+ },
+ {
+  "id": "beneficios-relampago",
+  "titulo": "Ofertas relámpago",
+  "modulo": "Beneficios y regalos",
+  "rutas": [
+   "/admin/ofertas"
+  ],
+  "palabras": [
+   "banner",
+   "ventana de tiempo"
+  ],
+  "duracionS": 13,
+  "texto": "Las ofertas relámpago, o banners, tienen ventana de tiempo y se muestran con énfasis en el inicio de tus clientes. Antes de publicar, verifica el texto, el período y la vista previa."
+ },
+ {
+  "id": "beneficios-vip",
+  "titulo": "Regalos VIP",
+  "modulo": "Beneficios y regalos",
+  "rutas": [
+   "/admin/ofertas"
+  ],
+  "palabras": [
+   "lista cerrada",
+   "privado"
+  ],
+  "duracionS": 9,
+  "texto": "Los regalos VIP son beneficios privados para una lista cerrada. Confirma bien a quiénes van dirigidos y qué recibe cada persona."
+ },
+ {
+  "id": "beneficios-producto",
+  "titulo": "Descuentos sobre un producto",
+  "modulo": "Beneficios y regalos",
+  "rutas": [
+   "/admin/ofertas",
+   "/admin/deals"
+  ],
+  "palabras": [
+   "marketplace",
+   "código del pedido"
+  ],
+  "duracionS": 12,
+  "texto": "La pestaña Sobre producto es para los descuentos sobre un producto o servicio de tu catálogo. El cliente los descubre en el marketplace, los obtiene, y los canjea con el código de su pedido."
+ },
+ {
+  "id": "beneficios-crear",
+  "titulo": "Crear una oferta",
+  "modulo": "Beneficios y regalos",
+  "rutas": [
+   "/admin/ofertas",
+   "/admin/deals",
+   "/admin/promociones"
+  ],
+  "palabras": [
+   "descuento",
+   "presupuesto",
+   "detalle",
+   "crear promoción"
+  ],
+  "duracionS": 32,
+  "texto": "Crear una oferta es así: eliges el artículo, defines el descuento, y fijas un presupuesto máximo, o sea, hasta cuánto estás dispuesto a pagar por cada canje. Empieza como borrador, y la revisas antes de publicarla. En el detalle ves el estado, el presupuesto, quién la ha obtenido y las acciones disponibles. El estado te dice si va en borrador, publicada o pausada. Y cuando el presupuesto se agota, la oferta se pausa sola. Así controlas tu gasto promocional."
+ },
+ {
+  "id": "beneficios-plantillas",
+  "titulo": "Usar plantillas de beneficios",
+  "modulo": "Beneficios y regalos",
+  "rutas": [
+   "/admin/ofertas"
+  ],
+  "palabras": [
+   "base",
+   "acelerar"
+  ],
+  "duracionS": 8,
+  "texto": "Y las plantillas te aceleran el trabajo: eliges una base, y revisas sus datos antes de guardar."
+ },
+ {
+  "id": "beneficios-mecanicas",
+  "titulo": "No mezclar las mecánicas",
+  "modulo": "Beneficios y regalos",
+  "rutas": [
+   "/admin/ofertas"
+  ],
+  "palabras": [
+   "advertencia"
+  ],
+  "duracionS": 13,
+  "texto": "Una advertencia importante: estas mecánicas no son intercambiables con una oferta sobre el catálogo. Antes de crear, decide si el beneficio aplica a un producto concreto, o si es una promoción independiente."
+ },
+ {
+  "id": "planes",
+  "titulo": "Conocer tus planes",
+  "modulo": "Planes",
+  "rutas": [
+   "/admin/planes"
+  ],
+  "palabras": [
+   "membresía",
+   "precio",
+   "usos",
+   "vigencia"
+  ],
+  "duracionS": 17,
+  "texto": "Pasemos a Planes. Aquí defines lo que vendes como membresía: precio, usos y beneficios. Fíjate en estos tres, Silver, Gold y Platinum. Cuando una persona compra un plan, nace una membresía, que luego administras desde Clientes."
+ },
+ {
+  "id": "planes-bienvenida",
+  "titulo": "Beneficio de bienvenida y compartir planes",
+  "modulo": "Planes",
+  "rutas": [
+   "/admin/planes"
+  ],
+  "palabras": [
+   "descuento",
+   "primer pago"
+  ],
+  "duracionS": 17,
+  "texto": "Arriba de la lista está el beneficio de bienvenida: un descuento para clientes nuevos en su primer pago de membresía, que financia tu empresa y se aplica una sola vez por cliente. Eliges si es un porcentaje o un monto fijo. Y también hay un botón para compartir tus planes."
+ },
+ {
+  "id": "planes-crear",
+  "titulo": "Crear un plan o partir de una plantilla",
+  "modulo": "Planes",
+  "rutas": [
+   "/admin/planes",
+   "/admin/planes/plantillas"
+  ],
+  "palabras": [
+   "nuevo plan"
+  ],
+  "duracionS": 11,
+  "texto": "Puedes crear un plan desde cero, o partir de una plantilla. La plantilla se copia, así que ajustas el precio y los beneficios sin tocar el modelo original."
+ },
+ {
+  "id": "planes-editar",
+  "titulo": "Editar un plan",
+  "modulo": "Planes",
+  "rutas": [
+   "/admin/planes"
+  ],
+  "palabras": [
+   "nuevas ventas",
+   "cambio"
+  ],
+  "duracionS": 16,
+  "texto": "Y al editar, revisa a quiénes aplicará el cambio: a las nuevas ventas, no a las membresías ya compradas. Los ajustes a clientes existentes se hacen desde la ficha de cada cliente. Aquí solo mostramos los campos, sin guardar."
+ },
+ {
+  "id": "tours",
+  "titulo": "Conocer Parques y Tours",
+  "modulo": "Parques y Tours",
+  "rutas": [
+   "/admin/excursiones"
+  ],
+  "palabras": [
+   "excursiones",
+   "módulo"
+  ],
+  "duracionS": 20,
+  "texto": "¿Y si tu negocio son las excursiones? Membego tiene un módulo hecho para ti: Parques y Tours. Aquí manejas el catálogo de actividades, las reservas, los vendedores, los cupos, las comisiones y las liquidaciones. Ojo: este módulo aparece solo en negocios que operan excursiones."
+ },
+ {
+  "id": "tours-catalogo",
+  "titulo": "Catálogo de actividades",
+  "modulo": "Parques y Tours",
+  "rutas": [
+   "/admin/excursiones/catalogo",
+   "/admin/excursiones"
+  ],
+  "palabras": [
+   "experiencias",
+   "fichas"
+  ],
+  "duracionS": 7,
+  "texto": "El catálogo: tus actividades, sus fichas, y la creación de nuevas experiencias."
+ },
+ {
+  "id": "tours-reservas",
+  "titulo": "Reservas",
+  "modulo": "Parques y Tours",
+  "rutas": [
+   "/admin/excursiones/reservas",
+   "/admin/excursiones"
+  ],
+  "palabras": [
+   "detalle",
+   "gestionar"
+  ],
+  "duracionS": 11,
+  "texto": "Las reservas: las consultas y las gestionas, y en cada detalle ves la información operativa. Mira, hasta tienes el QR de embarque."
+ },
+ {
+  "id": "tours-checkin",
+  "titulo": "Check-in de una reserva",
+  "modulo": "Parques y Tours",
+  "rutas": [
+   "/admin/excursiones/check-in",
+   "/admin/excursiones"
+  ],
+  "palabras": [
+   "asistencia"
+  ],
+  "duracionS": 6,
+  "texto": "El check-in valida la asistencia de la reserva, para que tengas control de quién sube."
+ },
+ {
+  "id": "tours-vendedores",
+  "titulo": "Vendedores y promotores",
+  "modulo": "Parques y Tours",
+  "rutas": [
+   "/admin/excursiones/vendedores",
+   "/admin/excursiones"
+  ],
+  "palabras": [
+   "actividad"
+  ],
+  "duracionS": 10,
+  "texto": "Los vendedores: administras a tus promotores y revisas la actividad de cada uno desde su ficha."
+ },
+ {
+  "id": "tours-comisiones",
+  "titulo": "Comisiones y sus reglas",
+  "modulo": "Parques y Tours",
+  "rutas": [
+   "/admin/excursiones/comisiones",
+   "/admin/excursiones"
+  ],
+  "palabras": [
+   "calcular"
+  ],
+  "duracionS": 8,
+  "texto": "Las comisiones y sus reglas: cómo se calcula cada comisión y qué regla aplica a cada operación."
+ },
+ {
+  "id": "tours-metas",
+  "titulo": "Metas comerciales",
+  "modulo": "Parques y Tours",
+  "rutas": [
+   "/admin/excursiones/metas",
+   "/admin/excursiones"
+  ],
+  "palabras": [
+   "objetivos",
+   "avance"
+  ],
+  "duracionS": 5,
+  "texto": "Las metas: tus objetivos comerciales y cómo va el avance."
+ },
+ {
+  "id": "tours-liquidaciones",
+  "titulo": "Liquidaciones a vendedores",
+  "modulo": "Parques y Tours",
+  "rutas": [
+   "/admin/excursiones/liquidaciones",
+   "/admin/excursiones"
+  ],
+  "palabras": [
+   "pago"
+  ],
+  "duracionS": 6,
+  "texto": "Las liquidaciones: lo que se le paga a cada vendedor, con el detalle de cada una."
+ },
+ {
+  "id": "tours-reportes-configuracion",
+  "titulo": "Reportes y configuración del módulo",
+  "modulo": "Parques y Tours",
+  "rutas": [
+   "/admin/excursiones/reportes",
+   "/admin/excursiones/configuracion",
+   "/admin/excursiones"
+  ],
+  "palabras": [
+   "parámetros",
+   "rendimiento"
+  ],
+  "duracionS": 23,
+  "texto": "Los reportes: el rendimiento operativo y comercial de todo el módulo. Y la configuración: los parámetros propios de tu negocio de excursiones. Como ves, las opciones dependen de cómo esté configurada tu empresa y del acceso de cada usuario. Si tu negocio no opera tours, este módulo simplemente no aparece."
+ },
+ {
+  "id": "canjes-qr",
+  "titulo": "Escanear un QR en el mostrador",
+  "modulo": "Canjes y QR",
+  "rutas": [
+   "/admin/scanner"
+  ],
+  "palabras": [
+   "cámara",
+   "lector",
+   "validar",
+   "canje"
+  ],
+  "duracionS": 35,
+  "texto": "Entramos a Operaciones, y empezamos por Canjes y QR. Aquí validas los beneficios o las membresías que presenta el cliente. Puedes usar la cámara, o un lector físico, que es lo más rápido en el mostrador. Y abajo ves las visitas de hoy. Probemos con un código de práctica. Antes de confirmar, Membego te muestra el resumen: el cliente, sus beneficios, sus últimas visitas y la sucursal. Una validación exitosa registra el canje y actualiza los saldos. Y recuerda: nunca escaneamos ni mostramos códigos de personas reales."
+ },
+ {
+  "id": "citas-agenda",
+  "titulo": "Ver la agenda de citas",
+  "modulo": "Citas",
+  "rutas": [
+   "/admin/citas"
+  ],
+  "palabras": [
+   "hoy",
+   "próximas",
+   "filtros"
+  ],
+  "duracionS": 16,
+  "texto": "En Citas está toda tu agenda: las próximas, las de hoy, las de los próximos siete días y las pasadas. Cada una con su estado: por confirmar, confirmada, completada, cancelada o no asistió."
+ },
+ {
+  "id": "citas-confirmar",
+  "titulo": "Confirmar, completar o cancelar una cita",
+  "modulo": "Citas",
+  "rutas": [
+   "/admin/citas"
+  ],
+  "palabras": [
+   "cliente",
+   "servicio"
+  ],
+  "duracionS": 12,
+  "texto": "Aquí tenemos una cita de práctica, con los datos del cliente y el servicio. Y según el estado y tus permisos, puedes marcarla como completada, como no asistió, o cancelarla."
+ },
+ {
+  "id": "citas-configurar",
+  "titulo": "Configurar la agenda",
+  "modulo": "Citas",
+  "rutas": [
+   "/admin/citas/configuracion",
+   "/admin/citas"
+  ],
+  "palabras": [
+   "horario",
+   "capacidad"
+  ],
+  "duracionS": 14,
+  "texto": "Y en la configuración de la agenda defines tu horario semanal, la capacidad por turno y por día, y las reglas de reserva. Ojo: estos cambios aplican de inmediato, así que revísalos antes de guardar."
+ },
+ {
+  "id": "pagos-validar",
+  "titulo": "Validar un pago por transferencia",
+  "modulo": "Pagos",
+  "rutas": [
+   "/admin/pagos"
+  ],
+  "palabras": [
+   "aprobar",
+   "rechazar",
+   "comprobante",
+   "colas"
+  ],
+  "duracionS": 38,
+  "texto": "Pagos es tu centro de validación de cobros. Arriba tiene cuatro pestañas: Por validar, Movimientos, Comprobantes y Conciliación. Y en Por validar, cinco colas: en sucursal, transferencias, compras, cambios de plan y pagos sin completar. Entremos a transferencias: aquí hay un pago por validar, con su plan, su monto y la nota del cliente. Fíjate en cómo se muestra cada pago: con su estado y la referencia necesaria para atenderlo, y nunca con números completos de tarjeta ni datos secretos. El comprobante asociado lo encuentras después en Comprobantes."
+ },
+ {
+  "id": "pagos-movimientos",
+  "titulo": "Movimientos",
+  "modulo": "Pagos",
+  "rutas": [
+   "/admin/registros",
+   "/admin/pagos"
+  ],
+  "palabras": [
+   "importes"
+  ],
+  "duracionS": 6,
+  "texto": "En Movimientos ves los movimientos operativos asentados en el sistema, con sus importes."
+ },
+ {
+  "id": "pagos-comprobantes",
+  "titulo": "Comprobantes: historial e impresión",
+  "modulo": "Pagos",
+  "rutas": [
+   "/admin/facturas",
+   "/admin/pagos"
+  ],
+  "palabras": [
+   "ticket",
+   "rollo térmico",
+   "carta",
+   "A4",
+   "imprimir"
+  ],
+  "duracionS": 26,
+  "texto": "Los Comprobantes guardan el historial de ventas y entregas registradas. Localizas el documento, abres su vista previa y, si lo necesitas, lo reimprimes. Puedes elegir el formato: rollo térmico, carta o A4. Un comprobante lleva identificadores propios de la operación; por eso, en este video usamos ejemplos ficticios, sin datos de pago ni información personal innecesaria."
+ },
+ {
+  "id": "pagos-conciliacion",
+  "titulo": "Conciliación de cobros",
+  "modulo": "Pagos",
+  "rutas": [
+   "/admin/conciliacion",
+   "/admin/pagos"
+  ],
+  "palabras": [
+   "cuadrar",
+   "caja",
+   "transacciones"
+  ],
+  "duracionS": 27,
+  "texto": "La Conciliación cruza tus membresías, tus transacciones y tu caja en el período que ves aquí. Su misión: encontrar diferencias antes de que se conviertan en un problema. Mira este caso: un cobro de membresía que no aparece en el libro de transacciones. Cada caso trae su contexto y una acción sugerida. Primero revisa la evidencia y el período; después aplica solo la corrección que el caso justifica."
+ },
+ {
+  "id": "caja-abrir",
+  "titulo": "Abrir la caja",
+  "modulo": "Caja",
+  "rutas": [
+   "/empleado/caja"
+  ],
+  "palabras": [
+   "efectivo inicial",
+   "turno",
+   "cuadre"
+  ],
+  "duracionS": 13,
+  "texto": "Caja es el punto de cobro de cada sucursal. Eliges la sucursal, indicas el efectivo inicial y, si quieres, el turno, y abres la caja para empezar a cobrar. Abajo tienes tu cuadre del día."
+ },
+ {
+  "id": "clientes-directorio",
+  "titulo": "Directorio y ficha del cliente",
+  "modulo": "Clientes",
+  "rutas": [
+   "/admin/clientes"
+  ],
+  "palabras": [
+   "buscar",
+   "exportar",
+   "QR"
+  ],
+  "duracionS": 30,
+  "texto": "Pasamos a Clientes. El Directorio reúne a todos los clientes de tu empresa. Aquí filtramos por membresía vigente, y buscamos a Andrés por su nombre. Ojo: no confundas esta ficha con la identidad global de la persona en Membego. Abrimos su ficha: ahí está su relación con tu negocio, su actividad y sus membresías. El acceso a los datos personales depende del rol; por eso, en el video usamos perfiles sintéticos."
+ },
+ {
+  "id": "clientes-notas",
+  "titulo": "Dejar notas internas",
+  "modulo": "Clientes",
+  "rutas": [
+   "/admin/clientes"
+  ],
+  "palabras": [
+   "equipo"
+  ],
+  "duracionS": 10,
+  "texto": "También puedes dejar notas internas para el equipo. Escríbelas con respeto y con información útil, y nunca pongas contraseñas ni datos sensibles que no hagan falta."
+ },
+ {
+  "id": "clientes-membresias",
+  "titulo": "Membresías de tus clientes",
+  "modulo": "Clientes",
+  "rutas": [
+   "/admin/membresias",
+   "/admin/clientes"
+  ],
+  "palabras": [
+   "plan",
+   "estado",
+   "vencimiento"
+  ],
+  "duracionS": 12,
+  "texto": "En Membresías ves todas las que han comprado tus clientes: su plan, su estado, cuándo empezaron y cuándo vencen. Y puedes filtrar para encontrar justo lo que buscas."
+ },
+ {
+  "id": "clientes-cambio-plan",
+  "titulo": "Cambiar de plan o corregir una membresía",
+  "modulo": "Clientes",
+  "rutas": [
+   "/admin/membresias"
+  ],
+  "palabras": [
+   "renovar",
+   "desactivar"
+  ],
+  "duracionS": 15,
+  "texto": "Cuando necesitas corregir un caso, desde aquí abres el cambio de plan, o el ajuste. Todo queda documentado, con trazabilidad. En una operación real, verifica al cliente, el plan, el importe y el motivo antes de confirmar."
+ },
+ {
+  "id": "clientes-renovacion",
+  "titulo": "Consultar el comprobante de una renovación",
+  "modulo": "Clientes",
+  "rutas": [
+   "/admin/clientes"
+  ],
+  "palabras": [
+   "comprobante"
+  ],
+  "duracionS": 7,
+  "texto": "Y en la ficha del cliente puedes consultar el comprobante de una renovación, con su registro asociado."
+ },
+ {
+  "id": "clientes-riesgo",
+  "titulo": "Clientes en riesgo",
+  "modulo": "Clientes",
+  "rutas": [
+   "/admin/riesgo",
+   "/admin/clientes"
+  ],
+  "palabras": [
+   "no volver",
+   "señales",
+   "retención"
+  ],
+  "duracionS": 15,
+  "texto": "En riesgo te muestra clientes que, según las señales disponibles, podrían necesitar atención. Fíjate: aquí vemos quién lleva más de quince días sin venir. El propósito es cuidar la relación con el cliente, no etiquetar a nadie para siempre."
+ },
+ {
+  "id": "clientes-segmentos",
+  "titulo": "Crear un segmento",
+  "modulo": "Clientes",
+  "rutas": [
+   "/admin/audiencia/segmentos",
+   "/admin/clientes"
+  ],
+  "palabras": [
+   "condiciones",
+   "audiencia"
+  ],
+  "duracionS": 27,
+  "texto": "Los segmentos agrupan clientes con condiciones en común, para analizarlos o para campañas. Aquí tenemos uno ya creado: nuevos clientes de octubre. Para crear uno, le das un nombre claro y armas las condiciones con criterios reales: la fecha de registro, la ciudad, la membresía, el comportamiento. Y recuerda: antes de enviarle un mensaje a un segmento, revisa muy bien el mensaje."
+ },
+ {
+  "id": "prospectos",
+  "titulo": "El embudo de prospectos",
+  "modulo": "Prospectos",
+  "rutas": [
+   "/admin/crm"
+  ],
+  "palabras": [
+   "CRM",
+   "leads",
+   "canales"
+  ],
+  "duracionS": 13,
+  "texto": "Ahora, el CRM. Prospectos organiza a las personas que mostraron interés y todavía no son clientes. Ayuda al equipo a darles seguimiento, desde el primer contacto hasta el resultado."
+ },
+ {
+  "id": "prospectos-ficha",
+  "titulo": "La ficha de un prospecto",
+  "modulo": "Prospectos",
+  "rutas": [
+   "/admin/crm/leads",
+   "/admin/crm"
+  ],
+  "palabras": [
+   "etapa",
+   "origen"
+  ],
+  "duracionS": 12,
+  "texto": "Abrimos la ficha de un prospecto: su canal de origen, la conversación, su estado comercial y sus notas. Mantén esto al día, para que cualquier compañero pueda retomar la atención."
+ },
+ {
+  "id": "prospectos-conversaciones",
+  "titulo": "Conversaciones",
+  "modulo": "Prospectos",
+  "rutas": [
+   "/admin/crm/conversaciones",
+   "/admin/crm"
+  ],
+  "palabras": [
+   "WhatsApp",
+   "mensajes"
+  ],
+  "duracionS": 9,
+  "texto": "Conversaciones reúne los mensajes de los canales que tengas conectados. Desde el hilo, tu equipo lee y responde, según sus permisos."
+ },
+ {
+  "id": "prospectos-seguimientos",
+  "titulo": "Seguimientos",
+  "modulo": "Prospectos",
+  "rutas": [
+   "/admin/crm/seguimientos",
+   "/admin/crm"
+  ],
+  "palabras": [
+   "llamada",
+   "próximo contacto"
+  ],
+  "duracionS": 10,
+  "texto": "Seguimientos organiza el próximo contacto: una llamada, una visita, un mensaje. Así ningún prospecto se queda sin su siguiente paso."
+ },
+ {
+  "id": "prospectos-metricas",
+  "titulo": "Métricas del CRM",
+  "modulo": "Prospectos",
+  "rutas": [
+   "/admin/crm/metricas",
+   "/admin/crm"
+  ],
+  "palabras": [
+   "conversión"
+  ],
+  "duracionS": 11,
+  "texto": "Las métricas del CRM se calculan con tus prospectos y conversaciones: el origen, las conversiones y los tiempos de respuesta, cuando hay datos suficientes."
+ },
+ {
+  "id": "prospectos-configuracion",
+  "titulo": "Configurar el CRM",
+  "modulo": "Prospectos",
+  "rutas": [
+   "/admin/crm/configuracion",
+   "/admin/crm"
+  ],
+  "palabras": [
+   "etapas",
+   "pipeline",
+   "campos"
+  ],
+  "duracionS": 16,
+  "texto": "Y en la configuración ajustas las etapas del pipeline, los campos y las respuestas automáticas. Con la respuesta automática ten cuidado: que el mensaje represente bien a tu negocio, y que no prometa nada que tu equipo no pueda cumplir."
+ },
+ {
+  "id": "soporte-tickets",
+  "titulo": "Atender los tickets de soporte",
+  "modulo": "Soporte",
+  "rutas": [
+   "/admin/tickets"
+  ],
+  "palabras": [
+   "casos",
+   "historial"
+  ],
+  "duracionS": 11,
+  "texto": "Los tickets son los casos de soporte de tu empresa. Cada uno conserva su hilo y su estado, para que la atención continúe ordenada. Aquí abrimos uno de práctica."
+ },
+ {
+  "id": "soporte-comunicacion",
+  "titulo": "Comunicación y soporte",
+  "modulo": "Soporte",
+  "rutas": [
+   "/admin/comunicacion",
+   "/admin/tickets"
+  ],
+  "palabras": [
+   "contacto",
+   "centro de ayuda"
+  ],
+  "duracionS": 11,
+  "texto": "Y Comunicación y soporte reúne tus datos de contacto y el centro de ayuda que le muestras a tus clientes. Lo que aparece depende de los canales disponibles."
+ },
+ {
+  "id": "comunicaciones-notificaciones",
+  "titulo": "Enviar una notificación",
+  "modulo": "Comunicaciones",
+  "rutas": [
+   "/admin/notificaciones"
+  ],
+  "palabras": [
+   "aviso",
+   "segmento",
+   "push"
+  ],
+  "duracionS": 25,
+  "texto": "Llegamos a Marketing, y empezamos por Comunicaciones. Reúne cuatro pestañas: Notificaciones, Automatizaciones, Campañas segmentadas y Campañas. Las Notificaciones te dejan enviar avisos a tus clientes: eliges el segmento destinatario, escribes el título y el mensaje, y lo envías. Antes de enviar, revisa bien el contenido y a quién va dirigido."
+ },
+ {
+  "id": "comunicaciones-automatizaciones",
+  "titulo": "Automatizaciones y plantillas",
+  "modulo": "Comunicaciones",
+  "rutas": [
+   "/admin/automatizaciones",
+   "/admin/notificaciones"
+  ],
+  "palabras": [
+   "reglas",
+   "cumpleaños",
+   "por vencer"
+  ],
+  "duracionS": 28,
+  "texto": "Las automatizaciones son reglas que se ejecutan solas cuando se cumple una condición. Mira todo lo que ya viene preparado en las plantillas: cumpleaños, membresía por vencer, cliente inactivo. Una plantilla es un punto de partida. Antes de activarla, comprueba el disparador, la acción y a quién podría afectar. Una automatización activa trabaja sin que nadie pulse un botón; por eso, pruébala primero en demostración."
+ },
+ {
+  "id": "comunicaciones-segmentadas",
+  "titulo": "Campañas segmentadas",
+  "modulo": "Comunicaciones",
+  "rutas": [
+   "/admin/audiencia/campanas",
+   "/admin/notificaciones"
+  ],
+  "palabras": [
+   "segmentos"
+  ],
+  "duracionS": 6,
+  "texto": "Las campañas segmentadas usan los segmentos que creaste para llegar solo a quien corresponde."
+ },
+ {
+  "id": "comunicaciones-campanas",
+  "titulo": "Crear una campaña",
+  "modulo": "Comunicaciones",
+  "rutas": [
+   "/admin/campanas",
+   "/admin/notificaciones"
+  ],
+  "palabras": [
+   "iniciativa",
+   "rendimiento"
+  ],
+  "duracionS": 18,
+  "texto": "Y las campañas agrupan promociones y publicaciones bajo una misma iniciativa, para que veas su rendimiento en conjunto. Para crear una, le pones nombre y organizas los contenidos relacionados. Antes de publicar o programar, revisa cada pieza y la audiencia prevista."
+ },
+ {
+  "id": "publicaciones",
+  "titulo": "Publicar noticias y eventos",
+  "modulo": "Publicaciones",
+  "rutas": [
+   "/admin/publicaciones"
+  ],
+  "palabras": [
+   "contenido",
+   "novedad"
+  ],
+  "duracionS": 13,
+  "texto": "En Publicaciones manejas el contenido de tu negocio: noticias, eventos y beneficios que se muestran en tu perfil. Creas una pieza, revisas su texto y su imagen, y decides cuándo publicarla."
+ },
+ {
+  "id": "fidelizacion",
+  "titulo": "Conocer Fidelización",
+  "modulo": "Fidelización",
+  "rutas": [
+   "/admin/invitaciones",
+   "/admin/gamificacion",
+   "/admin/regalos",
+   "/admin/crecimiento",
+   "/admin/seguimiento",
+   "/admin/referidos"
+  ],
+  "palabras": [
+   "volver",
+   "traer",
+   "pestañas"
+  ],
+  "duracionS": 13,
+  "texto": "Fidelización reúne todo lo que hace que tus clientes vuelvan y traigan a otros, en seis pestañas: Invita y Gana, Ruleta, Regalos, Recompensas, Seguimiento y Rendimiento."
+ },
+ {
+  "id": "fidelizacion-invita",
+  "titulo": "Invita y Gana: campañas y reglas",
+  "modulo": "Fidelización",
+  "rutas": [
+   "/admin/invitaciones"
+  ],
+  "palabras": [
+   "referidos",
+   "recomendación"
+  ],
+  "duracionS": 22,
+  "texto": "Invita y Gana es la recomendación entre clientes. Aquí ves tus campañas, cuántas personas participan y cuántos premios se han reclamado. Al crear o editar una regla, verifica quién invita, qué evento la activa y qué recompensa se entrega. Y recuerda: los cambios futuros no alteran las recompensas que ya se entregaron."
+ },
+ {
+  "id": "fidelizacion-ruleta",
+  "titulo": "La Ruleta de premios",
+  "modulo": "Fidelización",
+  "rutas": [
+   "/admin/gamificacion"
+  ],
+  "palabras": [
+   "puntos",
+   "giros",
+   "juego"
+  ],
+  "duracionS": 25,
+  "texto": "La Ruleta convierte los puntos en juego. Tus clientes giran, y tú configuras los premios y su probabilidad. Aquí vemos los premios ya cargados. Los giros consumen puntos según la regla que ves aquí, y los puntos se obtienen con las acciones que indique el sistema. Antes de habilitar un premio, revisa su disponibilidad y su costo. No prometas premios que tu negocio no tenga preparados."
+ },
+ {
+  "id": "fidelizacion-regalos",
+  "titulo": "Regalos entre clientes",
+  "modulo": "Fidelización",
+  "rutas": [
+   "/admin/regalos"
+  ],
+  "palabras": [
+   "P2P",
+   "persona a persona",
+   "privacidad"
+  ],
+  "duracionS": 19,
+  "texto": "Los Regalos P2P, o sea, de persona a persona, muestran los beneficios que un cliente le transfirió a otro: su estado, y cómo va la entrega y el uso. Y para proteger a tus clientes, en un video público nunca mostramos datos reales de quien envía o recibe el regalo."
+ },
+ {
+  "id": "fidelizacion-recompensas",
+  "titulo": "Reglas de recompensa",
+  "modulo": "Fidelización",
+  "rutas": [
+   "/admin/crecimiento"
+  ],
+  "palabras": [
+   "atraer",
+   "retener",
+   "pausar"
+  ],
+  "duracionS": 24,
+  "texto": "Recompensas reúne las reglas de recompensa para atraer y retener clientes. Puedes crear, editar o pausar reglas sin borrar el historial. Antes de guardar una regla, confirma el evento, el destinatario, el tipo de recompensa y cuándo aplica. Una regla pausada deja de premiar de ahí en adelante, pero conserva todo su registro."
+ },
+ {
+  "id": "fidelizacion-seguimiento",
+  "titulo": "Seguimiento de recompensas y beneficios",
+  "modulo": "Fidelización",
+  "rutas": [
+   "/admin/seguimiento"
+  ],
+  "palabras": [
+   "pendientes",
+   "vacío"
+  ],
+  "duracionS": 22,
+  "texto": "Seguimiento te ayuda a controlar las recompensas y los beneficios pendientes: quién ya los usó, quién no, y a quién contactar. Y desde aquí tienes un reporte imprimible para consulta operativa. Y si tu empresa no tiene datos en el período, ver esto vacío no es un error: significa que todavía no se han generado registros."
+ },
+ {
+  "id": "fidelizacion-rendimiento",
+  "titulo": "Rendimiento del programa de referidos",
+  "modulo": "Fidelización",
+  "rutas": [
+   "/admin/referidos"
+  ],
+  "palabras": [
+   "embudo",
+   "conversión"
+  ],
+  "duracionS": 17,
+  "texto": "Y Rendimiento muestra cómo va el programa de referidos: el embudo, desde los enlaces generados hasta el referido válido, la conversión, los ingresos por referido y las recompensas entregadas. Cada etapa sale de eventos reales registrados."
+ },
+ {
+  "id": "reportes",
+  "titulo": "Reportes: rango, comparación y exportación",
+  "modulo": "Reportes",
+  "rutas": [
+   "/admin/reportes"
+  ],
+  "palabras": [
+   "CSV",
+   "Excel",
+   "PDF",
+   "resumen ejecutivo"
+  ],
+  "duracionS": 42,
+  "texto": "Entramos a Analítica. Reportes es un centro con siete pestañas: Resumen, Finanzas, Membresías, Operación, Retención, Audiencia y Origen. Arriba eliges el rango, comparas contra el período anterior, y te llevas el resultado en CSV, en Excel, o lo guardas en PDF. El Resumen ejecutivo trae las cinco cifras que dicen cómo va el negocio, y cada una abre el reporte que la explica. Y debajo, las categorías: finanzas y cobros, membresías, clientes, operación y canje, promociones, códigos y regalos, crecimiento, citas y asistencia, y actividad."
+ },
+ {
+  "id": "reportes-comparar",
+  "titulo": "Antes de comparar cifras",
+  "modulo": "Reportes",
+  "rutas": [
+   "/admin/reportes"
+  ],
+  "palabras": [
+   "período",
+   "filtros"
+  ],
+  "duracionS": 18,
+  "texto": "Un consejo antes de comparar cifras: confirma el período y los filtros aplicados. Y cuando descargues un reporte, guárdalo y compártelo solo con personas autorizadas."
+ },
+ {
+  "id": "reportes-retencion",
+  "titulo": "Retención",
+  "modulo": "Reportes",
+  "rutas": [
+   "/admin/retencion",
+   "/admin/reportes"
+  ],
+  "palabras": [
+   "permanencia",
+   "recurrencia"
+  ],
+  "duracionS": 15,
+  "texto": "Y Retención te deja ver la permanencia y la recurrencia en el tiempo: cuánto hace que no vienen, cuántos renuevan, y cuánto servicio pagado queda sin usar. Lee siempre el período antes de comparar resultados."
+ },
+ {
+  "id": "reportes-audiencia",
+  "titulo": "Audiencia",
+  "modulo": "Reportes",
+  "rutas": [
+   "/admin/audiencia",
+   "/admin/reportes"
+  ],
+  "palabras": [
+   "seguidores",
+   "promociones"
+  ],
+  "duracionS": 20,
+  "texto": "En Audiencia revisas tus seguidores y el rendimiento de tus promociones en el marketplace: las vistas, las veces que se compartieron y las guardadas. Los resultados dependen de tus publicaciones y de lo que Membego mide hoy. Si una métrica todavía no se captura, lo decimos así, sin inventar una cifra."
+ },
+ {
+  "id": "reportes-origen",
+  "titulo": "Origen de clientes",
+  "modulo": "Reportes",
+  "rutas": [
+   "/admin/adquisicion",
+   "/admin/reportes"
+  ],
+  "palabras": [
+   "canal",
+   "adquisición"
+  ],
+  "duracionS": 23,
+  "texto": "Origen de clientes te cuenta por qué canal llegó cada persona: enlaces de promoción, invitaciones, redes y más. Siempre que ese dato se haya registrado. Esta lectura sirve para comparar canales en el período y decidir tus próximas acciones. Y si no hay registros, la solución es compartir enlaces y generar actividad, para que aparezcan datos."
+ },
+ {
+  "id": "actividad",
+  "titulo": "La bitácora de actividad",
+  "modulo": "Actividad",
+  "rutas": [
+   "/admin/actividad"
+  ],
+  "palabras": [
+   "registro",
+   "quién hizo qué",
+   "exportar"
+  ],
+  "duracionS": 24,
+  "texto": "Actividad registra todo lo que pasa en tu negocio, con la fecha y la hora exacta de cada acción. Filtras por tipo de acción, y con Exportar CSV te llevas el registro. Esa bitácora te ayuda a entender qué pasó, cuándo, y quién lo hizo. Eso sí, no reemplaza la revisión de cada módulo ni los permisos que protegen la información."
+ },
+ {
+  "id": "empresa-perfil",
+  "titulo": "El perfil público de tu empresa",
+  "modulo": "Empresa",
+  "rutas": [
+   "/admin/perfil"
+  ],
+  "palabras": [
+   "logo",
+   "banner",
+   "descripción"
+  ],
+  "duracionS": 31,
+  "texto": "Llegamos a Ajustes, y empezamos por Empresa, con dos pestañas: Perfil público y Cobros. El Perfil público es la información que la gente consulta sobre tu negocio: su ficha, su descripción, el logo, el banner y los datos visibles que habilites. Revisa que el nombre, la descripción, la ubicación y el contacto estén correctos. Y recuerda que el estado de disponibilidad en el marketplace controla tu presencia pública."
+ },
+ {
+  "id": "empresa-cobros",
+  "titulo": "Configurar las formas de cobro",
+  "modulo": "Empresa",
+  "rutas": [
+   "/admin/metodos-pago",
+   "/admin/perfil"
+  ],
+  "palabras": [
+   "transferencia",
+   "tarjeta",
+   "efectivo",
+   "credenciales"
+  ],
+  "duracionS": 27,
+  "texto": "La pestaña Cobros es donde configuras las formas de pago que acepta tu empresa: transferencia bancaria, tarjeta, efectivo en caja y tarjeta en caja. Cada método trae las instrucciones que verán tus clientes al enviar su comprobante, y puedes agregar uno nuevo. Importante: las credenciales de las pasarelas son información sensible. Por eso no las mostramos, ni guardamos cambios en producción durante una grabación."
+ },
+ {
+  "id": "sucursales",
+  "titulo": "Registrar y editar sucursales",
+  "modulo": "Sucursales",
+  "rutas": [
+   "/admin/sucursales"
+  ],
+  "palabras": [
+   "dirección",
+   "horario"
+  ],
+  "duracionS": 24,
+  "texto": "En Sucursales registras tus puntos de operación. Cada ficha tiene su dirección y sus datos operativos. Aquí están las dos de este negocio, y vemos cómo se crea o se edita una. Antes de añadir o editar una sucursal, valida el nombre, la ubicación y el estado. Estas sucursales también se usan en inventario, citas y entregas, cuando esos módulos están activos."
+ },
+ {
+  "id": "equipo-invitar",
+  "titulo": "Invitar a alguien al equipo",
+  "modulo": "Equipo",
+  "rutas": [
+   "/admin/empleados"
+  ],
+  "palabras": [
+   "correo",
+   "acceso manual",
+   "exportar"
+  ],
+  "duracionS": 15,
+  "texto": "En Equipo administras quién entra al panel de tu empresa, con dos pestañas: Personas y Acceso. Puedes invitar a alguien por correo, para que elija su propia contraseña, o crear un acceso manual, y exportar la lista."
+ },
+ {
+  "id": "equipo-permisos",
+  "titulo": "Permisos de un empleado",
+  "modulo": "Equipo",
+  "rutas": [
+   "/admin/empleados"
+  ],
+  "palabras": [
+   "rol",
+   "módulos"
+  ],
+  "duracionS": 13,
+  "texto": "Abrimos el perfil de un empleado y su pantalla de permisos. El rol es el punto de partida, y los permisos por sección te dejan conceder o retirar módulos a cada persona."
+ },
+ {
+  "id": "equipo-accesos",
+  "titulo": "Qué ve cada quien",
+  "modulo": "Equipo",
+  "rutas": [
+   "/admin/empleados/accesos",
+   "/admin/empleados"
+  ],
+  "palabras": [
+   "resumen de accesos"
+  ],
+  "duracionS": 14,
+  "texto": "Y con el resumen de accesos, el «qué ve cada quien», compruebas que cada persona vea lo que le corresponde. Da solo lo necesario, y revisa los accesos cuando alguien cambie de función o salga del equipo."
+ },
+ {
+  "id": "entregas",
+  "titulo": "Conocer Entregas Membego",
+  "modulo": "Entregas Membego",
+  "rutas": [
+   "/admin/supply"
+  ],
+  "palabras": [
+   "proveedor",
+   "portal"
+  ],
+  "duracionS": 14,
+  "texto": "Y si tu negocio también le vende servicios a Membego, existe el portal de proveedor: Entregas Membego. Aquí vemos el de un spa de ejemplo. Es para negocios que entregan a los clientes beneficios que Membego compró."
+ },
+ {
+  "id": "entregas-productos",
+  "titulo": "Productos de Membego",
+  "modulo": "Entregas Membego",
+  "rutas": [
+   "/admin/supply/inventario",
+   "/admin/supply"
+  ],
+  "palabras": [
+   "unidades",
+   "derechos",
+   "vencimientos"
+  ],
+  "duracionS": 8,
+  "texto": "Productos de Membego: las unidades, los derechos, la capacidad y los vencimientos del acuerdo."
+ },
+ {
+  "id": "entregas-escanear",
+  "titulo": "Escanear un QR y registrar la entrega",
+  "modulo": "Entregas Membego",
+  "rutas": [
+   "/admin/supply/escaner",
+   "/admin/supply"
+  ],
+  "palabras": [
+   "validar"
+  ],
+  "duracionS": 5,
+  "texto": "Escanear QR: validas un beneficio y registras la entrega."
+ },
+ {
+  "id": "entregas-canjes",
+  "titulo": "Historial de canjes",
+  "modulo": "Entregas Membego",
+  "rutas": [
+   "/admin/supply/canjes",
+   "/admin/supply"
+  ],
+  "palabras": [
+   "quién recibió qué"
+  ],
+  "duracionS": 6,
+  "texto": "Canjes: el historial de entregas, quién recibió qué, dónde y cuándo."
+ },
+ {
+  "id": "entregas-ventas",
+  "titulo": "Ventas adicionales",
+  "modulo": "Entregas Membego",
+  "rutas": [
+   "/admin/supply/ventas-adicionales",
+   "/admin/supply"
+  ],
+  "palabras": [
+   "además del beneficio"
+  ],
+  "duracionS": 10,
+  "texto": "Ventas adicionales: lo que el cliente compra además del beneficio, con la comisión que se calcula sobre esos extras."
+ },
+ {
+  "id": "entregas-incidencias",
+  "titulo": "Incidencias de entrega",
+  "modulo": "Entregas Membego",
+  "rutas": [
+   "/admin/supply/incidencias",
+   "/admin/supply"
+  ],
+  "palabras": [
+   "problemas"
+  ],
+  "duracionS": 5,
+  "texto": "Incidencias: los problemas de entrega, para darles seguimiento."
+ },
+ {
+  "id": "entregas-liquidaciones",
+  "titulo": "Liquidaciones de Membego",
+  "modulo": "Entregas Membego",
+  "rutas": [
+   "/admin/supply/liquidaciones",
+   "/admin/supply"
+  ],
+  "palabras": [
+   "te debe",
+   "pagó"
+  ],
+  "duracionS": 6,
+  "texto": "Liquidaciones: lo que Membego te debe, o ya te pagó, por lo entregado."
+ },
+ {
+  "id": "entregas-personal",
+  "titulo": "Personal del proveedor",
+  "modulo": "Entregas Membego",
+  "rutas": [
+   "/admin/supply/personal",
+   "/admin/supply"
+  ],
+  "palabras": [
+   "accesos"
+  ],
+  "duracionS": 6,
+  "texto": "Personal: los accesos y las funciones de tu equipo de proveedor."
+ },
+ {
+  "id": "entregas-configuracion",
+  "titulo": "Configuración del portal",
+  "modulo": "Entregas Membego",
+  "rutas": [
+   "/admin/supply/configuracion",
+   "/admin/supply"
+  ],
+  "palabras": [
+   "contrato",
+   "prueba del escáner"
+  ],
+  "duracionS": 8,
+  "texto": "Configuración: tu contrato, la prueba del escáner y la lista de preparación del portal."
+ },
+ {
+  "id": "entregas-ser-empresa",
+  "titulo": "Ser también empresa Membego",
+  "modulo": "Entregas Membego",
+  "rutas": [
+   "/admin/supply/solicitud-merchant",
+   "/admin/supply"
+  ],
+  "palabras": [
+   "solicitud",
+   "privacidad"
+  ],
+  "duracionS": 14,
+  "texto": "Y por último, la solicitud para operar también como comercio en la plataforma. El proveedor ve solo lo necesario para cumplir la entrega: nunca descarga documentos personales de clientes de otros negocios."
+ },
+ {
+  "id": "carwash",
+  "titulo": "Conocer la app de Car Wash",
+  "modulo": "Car Wash",
+  "rutas": [
+   "/admin/app/carwash"
+  ],
+  "palabras": [
+   "app de negocio"
+  ],
+  "duracionS": 15,
+  "texto": "Y para terminar, la app de negocio para car wash. Algunas empresas tienen una aplicación pensada para su oficio, con su propio menú. La disponibilidad de cada pantalla depende de la configuración del negocio y de los permisos."
+ },
+ {
+  "id": "carwash-catalogo",
+  "titulo": "Catálogo y vehículos",
+  "modulo": "Car Wash",
+  "rutas": [
+   "/admin/app/carwash/catalogo",
+   "/admin/app/carwash/vehiculos",
+   "/admin/app/carwash"
+  ],
+  "palabras": [
+   "tarifa",
+   "tipo de vehículo"
+  ],
+  "duracionS": 8,
+  "texto": "Catálogo y vehículos: los servicios, con su tarifa según el tipo de vehículo, y los vehículos de tus clientes."
+ },
+ {
+  "id": "carwash-inventario",
+  "titulo": "Inventario, compras y activos",
+  "modulo": "Car Wash",
+  "rutas": [
+   "/admin/app/carwash/inventario",
+   "/admin/app/carwash/compras",
+   "/admin/app/carwash/activos",
+   "/admin/app/carwash"
+  ],
+  "palabras": [
+   "consumibles",
+   "equipos"
+  ],
+  "duracionS": 8,
+  "texto": "Inventario y compras: los consumibles, las órdenes de compra y los equipos con su mantenimiento."
+ },
+ {
+  "id": "carwash-cola",
+  "titulo": "La cola de vehículos",
+  "modulo": "Car Wash",
+  "rutas": [
+   "/admin/app/carwash/cola",
+   "/admin/app/carwash"
+  ],
+  "palabras": [
+   "en espera",
+   "en servicio",
+   "listos"
+  ],
+  "duracionS": 7,
+  "texto": "La cola: los vehículos en espera, en servicio y listos, en vivo."
+ },
+ {
+  "id": "carwash-turnos",
+  "titulo": "Turnos",
+  "modulo": "Car Wash",
+  "rutas": [
+   "/admin/app/carwash/turnos",
+   "/admin/app/carwash"
+  ],
+  "palabras": [
+   "personal"
+  ],
+  "duracionS": 5,
+  "texto": "Los turnos: cómo se organiza el trabajo y el personal."
+ },
+ {
+  "id": "carwash-clientes",
+  "titulo": "Clientes y cuentas de flota",
+  "modulo": "Car Wash",
+  "rutas": [
+   "/admin/app/carwash/clientes",
+   "/admin/app/carwash/cuentas",
+   "/admin/app/carwash"
+  ],
+  "palabras": [
+   "corporativas"
+  ],
+  "duracionS": 7,
+  "texto": "Clientes y cuentas: la ficha operativa del cliente y las cuentas de flotas que pagan a crédito."
+ },
+ {
+  "id": "carwash-evidencias",
+  "titulo": "Evidencias: fotos de antes y después",
+  "modulo": "Car Wash",
+  "rutas": [
+   "/admin/app/carwash/evidencias",
+   "/admin/app/carwash"
+  ],
+  "palabras": [
+   "daños"
+  ],
+  "duracionS": 7,
+  "texto": "Las evidencias: fotos de antes y después, y de daños, cuando el flujo las usa."
+ },
+ {
+  "id": "carwash-incidencias",
+  "titulo": "Incidencias operativas",
+  "modulo": "Car Wash",
+  "rutas": [
+   "/admin/app/carwash/incidencias",
+   "/admin/app/carwash"
+  ],
+  "palabras": [
+   "seguimiento"
+  ],
+  "duracionS": 6,
+  "texto": "Las incidencias: los problemas operativos que necesitan seguimiento."
+ },
+ {
+  "id": "carwash-comisiones",
+  "titulo": "Comisiones y reportes",
+  "modulo": "Car Wash",
+  "rutas": [
+   "/admin/app/carwash/comisiones",
+   "/admin/app/carwash/reportes",
+   "/admin/app/carwash"
+  ],
+  "palabras": [
+   "liquidaciones",
+   "resultados"
+  ],
+  "duracionS": 13,
+  "texto": "Y las comisiones y reportes: los resultados y las liquidaciones del negocio. Recuerda: lo que ves depende de la configuración del negocio y de los permisos de cada usuario."
+ }
+]

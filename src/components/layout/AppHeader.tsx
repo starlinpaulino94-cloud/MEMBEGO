@@ -20,6 +20,7 @@ import { CommandPalette } from '@/components/layout/CommandPalette'
 import { MenuUsuario } from '@/components/layout/MenuUsuario'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { CompanySwitcher, type CompanyOption } from '@/components/cliente/CompanySwitcher'
+import { BotonComoSeHace } from '@/components/tutoriales/BotonComoSeHace'
 
 /**
  * LA CABECERA.
@@ -431,9 +432,9 @@ export function AppHeader({
             <span className="sr-only lg:hidden">Canje rápido</span>
           </Link>
         )}
-        {((sistemasExternos ?? []).length > 0 || puedeCanjear) && (
-          <span aria-hidden className="mx-1.5 hidden h-6 w-px bg-border sm:block" />
-        )}
+        {/* Los tutoriales de la pantalla actual. Para todos los roles: son videos públicos, sin datos de la empresa. */}
+        <BotonComoSeHace />
+        <span aria-hidden className="mx-1.5 hidden h-6 w-px bg-border sm:block" />
         {companies && <CompanySwitcher companies={companies} />}
         {/* El tema en el móvil no cabe: queda en escritorio, donde sobra sitio. */}
         <span className="hidden sm:contents">
