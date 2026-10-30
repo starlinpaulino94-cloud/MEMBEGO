@@ -59,6 +59,7 @@ import {
   Wallet,
   WalletCards,
   Zap,
+  GraduationCap,
   type LucideIcon,
 } from 'lucide-react'
 import { ADMIN_ROLES, FULL_ADMIN_ROLES, type AppRole } from '@/types'
@@ -634,6 +635,13 @@ const G_ORGANIZACION: NavGroup = {
       description: 'Sedes y puntos de operación.',
       keywords: ['sucursales', 'locales', 'tiendas', 'branches'],
     },
+    {
+      href: '/admin/tutoriales',
+      label: 'Tutoriales',
+      icon: GraduationCap,
+      description: 'Cómo se hace cada cosa en el panel, en videos cortos.',
+      keywords: ['tutoriales', 'ayuda', 'videos', 'como se hace', 'aprender', 'guia'],
+    },
   ],
 }
 
@@ -1043,7 +1051,9 @@ function modulo(def: {
 const HUB_PRINCIPAL: NavGroup = {
   id: 'principal',
   label: 'Principal',
-  items: deAdmin('/admin/dashboard'),
+  // Tutoriales va aquí y no en Ajustes: es ayuda, la necesita cualquier rol, y un grupo «Ajustes» con esa sola entrada
+  // para Marketing o Supervisión se leería como algo roto.
+  items: deAdmin('/admin/dashboard', '/admin/tutoriales'),
 }
 
 const HUB_EXPERIENCIA: NavGroup = {

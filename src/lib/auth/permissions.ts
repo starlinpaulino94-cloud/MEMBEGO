@@ -141,6 +141,9 @@ export const ADMIN_SECTIONS = [
   // cuesta. SOLO LECTURA y cuelga de la capacidad de los pedidos. Fuera de los roles acotados: incluye
   // lo que la empresa le paga a Membego.
   'resultados-membego',
+  // Tutoriales en video (`/admin/tutoriales`): cómo se hace cada cosa en el panel, en clips cortos. No hay datos de
+  // la empresa detrás, así que entra en TODOS los roles acotados: quien tiene una pantalla puede aprender a usarla.
+  'tutoriales',
 ] as const
 
 // Tipo derivado de la lista: una sola fuente de verdad (evita drift).
@@ -175,15 +178,15 @@ export type AdminSection = (typeof ADMIN_SECTIONS)[number]
 const RESTRICTED_ACCESS: Partial<Record<AppRole, AdminSection[]>> = {
   // 'riesgo' entra en los dos: Marketing lo necesita para saber a quién
   // dirigir una campaña de retención, y Supervisión para repartir las llamadas.
-  MARKETING: ['dashboard', 'ofertas', 'promociones', 'publicaciones', 'campanas', 'marketing', 'audiencia', 'adquisicion', 'notificaciones', 'automatizaciones', 'riesgo', 'retencion'],
+  MARKETING: ['dashboard', 'ofertas', 'promociones', 'publicaciones', 'campanas', 'marketing', 'audiencia', 'adquisicion', 'notificaciones', 'automatizaciones', 'riesgo', 'retencion', 'tutoriales'],
   // Sin 'aplicaciones': el módulo se retiró a propósito (los genéricos —QR,
   // citas, seguimiento— volvieron al menú lateral como secciones propias).
-  SUPERVISOR: ['dashboard', 'reportes', 'seguimiento', 'registros', 'actividad', 'clientes', 'membresias', 'pagos', 'scanner', 'citas', 'app', 'riesgo', 'retencion', 'conciliacion'],
+  SUPERVISOR: ['dashboard', 'reportes', 'seguimiento', 'registros', 'actividad', 'clientes', 'membresias', 'pagos', 'scanner', 'citas', 'app', 'riesgo', 'retencion', 'conciliacion', 'tutoriales'],
   /**
    * LA BODEGA (INV-5e). Mueve existencias y nada más: la sección de inventario, sin panel de inicio —que muestra dinero— ni catálogo.
    * Qué funciones de inventario NO trae de serie lo dice `FUNCIONES_NEGADAS_POR_ROL`.
    */
-  BODEGA: ['inventario'],
+  BODEGA: ['inventario', 'tutoriales'],
   /**
    * EL MOSTRADOR. Lo que hace falta para cobrar, registrar una visita y
    * atender a quien está delante: el cliente, su membresía, el cobro, el
@@ -197,7 +200,7 @@ const RESTRICTED_ACCESS: Partial<Record<AppRole, AdminSection[]>> = {
   // cajero que sí entregue regalos lo recibe desde su pantalla de Permisos.
   // 'pedidos-membego' entra: el pedido del marketplace se recoge en el mostrador
   // (aceptar, marcar listo, registrar el pago) y es el cajero quien lo atiende.
-  CAJERO: ['dashboard', 'clientes', 'membresias', 'pagos', 'facturas', 'citas', 'scanner', 'ofertas', 'registros', 'conciliacion', 'pedidos-membego'],
+  CAJERO: ['dashboard', 'clientes', 'membresias', 'pagos', 'facturas', 'citas', 'scanner', 'ofertas', 'registros', 'conciliacion', 'pedidos-membego', 'tutoriales'],
   /**
    * LA OPERACIÓN. Todo lo del mostrador más lo que hace falta para dirigirla:
    * los reportes, la bitácora, el seguimiento, el equipo y las sucursales.
@@ -217,6 +220,7 @@ const RESTRICTED_ACCESS: Partial<Record<AppRole, AdminSection[]>> = {
     // Comercio: quien dirige la operación gestiona lo que se vende, lo que hay
     // en cada sucursal, los pedidos que llegan y las ofertas sobre el catálogo.
     'catalogo', 'inventario', 'pedidos-membego', 'deals',
+    'tutoriales',
   ],
 }
 

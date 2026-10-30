@@ -201,6 +201,9 @@ const nextConfig: NextConfig = {
               "worker-src 'self' blob:",
               "style-src 'self' 'unsafe-inline' https://*.gtp-seglan.com",
               `img-src 'self' data: https: blob: ${process.env.NEXT_PUBLIC_SUPABASE_URL || ''}`,
+              // Los tutoriales en video (<video src>) se sirven desde el bucket público `tutoriales` de Storage. Sin
+              // media-src la CSP cae a default-src ('self') y el navegador bloquea el video. Solo nuestro Supabase, exacto.
+              `media-src 'self' blob: ${process.env.NEXT_PUBLIC_SUPABASE_URL || ''}`,
               "font-src 'self' data: https://*.gtp-seglan.com",
               // api.github.com se eliminó: no se usa en la app.
               // graph.facebook.com y www.facebook.com: el SDK de Meta consulta
