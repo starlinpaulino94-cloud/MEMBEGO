@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { IconoCarrito } from '@/components/checkout/IconoCarrito'
-import { Search, MapPin, ChevronDown, User, Bell, Mic } from 'lucide-react'
+import { Search, MapPin, ChevronDown, Bell, Mic } from 'lucide-react'
 import { BottomNav } from '@/components/layout/BottomNav'
 import { TabsEscritorio } from '@/components/layout/TabsEscritorio'
 import { BannerDemo } from '@/components/system/BannerDemo'
@@ -11,13 +11,12 @@ import { ExcursionCarritoWrapper } from '@/components/excursiones/ExcursionCarri
 /**
  * Carcasa retail del cliente (contrato Stitch S01–S04).
  *
- * Cabecera en degradado con buscador + escáner + avatar, barra contextual de
+ * Cabecera en degradado con buscador + campana + carrito, barra contextual de
  * ubicación, columna de contenido y dock inferior de 4 destinos fijos. En
  * escritorio los mismos 4 destinos se presentan como fila de pestañas; el
  * vocabulario y el orden no cambian entre dispositivos ni empresas.
  */
 export function CustomerShell({
-  iniciales,
   email,
   dbUserId,
   role,
@@ -27,7 +26,6 @@ export function CustomerShell({
   avisosSinLeer = 0,
   children,
 }: {
-  iniciales: string
   email: string
   dbUserId: string
   role: string
@@ -48,7 +46,8 @@ export function CustomerShell({
     // encabezado necesita leerlo para contar las excursiones junto con los productos.
     <ExcursionCarritoWrapper>
       {/* Cabecera del rediseño violeta (Stitch «amazon style»): buscador en
-          píldora blanca, campana (→ novedades) y avatar sobre el degradado;
+          píldora blanca, campana (→ novedades) y carrito sobre el degradado;
+          el perfil se alcanza desde «Cuenta» en el dock, no hay avatar aquí;
           debajo, la píldora oscura de ubicación. El micrófono es decorativo
           (el diseño lo trae; dictar no existe todavía).
 
@@ -79,7 +78,7 @@ export function CustomerShell({
                 autoComplete="off"
                 placeholder="Buscar beneficios, membresías…"
                 // La píldora del buscador es BLANCA en los dos temas —va sobre
-                // el degradado de marca, como la campana y el avatar—, así que
+                // el degradado de marca, como la campana y el carrito—, así que
                 // su texto tiene que ser fijo también. Con `text-foreground` el
                 // tema oscuro lo pintaba claro sobre blanco: invisible.
                 className="h-full w-full min-w-0 bg-transparent px-2 text-sm text-vibe-deep outline-none placeholder:text-vibe-deep/60"
@@ -115,17 +114,6 @@ export function CustomerShell({
               )}
             </Link>
             <IconoCarrito />
-            <Link
-              href="/cliente/perfil"
-              aria-label="Mi cuenta"
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white bg-white font-semibold text-vibe-deep outline-none shadow-sm transition-colors duration-fast hover:bg-vibe-niebla focus-visible:ring-2 focus-visible:ring-white active:scale-95"
-            >
-              {iniciales ? (
-                <span aria-hidden>{iniciales}</span>
-              ) : (
-                <User className="h-5 w-5" aria-hidden />
-              )}
-            </Link>
           </div>
           <Link
             href="/cliente/cerca"
